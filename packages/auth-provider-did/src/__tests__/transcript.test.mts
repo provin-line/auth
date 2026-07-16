@@ -134,6 +134,13 @@ describe("parseLoginTranscript", () => {
 		expect(() => parseLoginTranscript(payload)).not.toThrow();
 	});
 
+	it("rejects a timestamp with a non-UTC offset instead of Z", () => {
+		// Otherwise well-formed ISO 8601, but the pattern requires a literal
+		// Z/z — a numeric UTC offset like +09:00 must still be rejected.
+		const payload = validPayload({ timestamp: "2026-07-16T12:00:00+09:00" });
+		expectTranscriptError(() => parseLoginTranscript(payload), "timestamp");
+	});
+
 	it("tolerates unknown extra members (additionalProperties: true)", () => {
 		const payload = validPayload({ extra_field: "anything", another: 42 });
 		expect(() => parseLoginTranscript(payload)).not.toThrow();
@@ -229,6 +236,15 @@ describe("validateOwnerLogin", () => {
 		const input: ValidateOwnerLoginInput = {
 			...base,
 			selected: { ...base.selected, id: "did:dplaax:u:alice#key-2" },
+		};
+		expectTranscriptError(() => validateOwnerLogin(input), "verification_method");
+	});
+
+	it("rejects OWNER login when the JWS carried no kid (headerKid undefined) — fail closed", () => {
+		const base = baseInput();
+		const input: ValidateOwnerLoginInput = {
+			...base,
+			parsedMessage: { ...base.parsedMessage, headerKid: undefined },
 		};
 		expectTranscriptError(() => validateOwnerLogin(input), "verification_method");
 	});
