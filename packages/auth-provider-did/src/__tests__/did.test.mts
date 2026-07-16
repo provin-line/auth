@@ -24,6 +24,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createDidGrant } from "../did.mjs";
 import type { NonceStore } from "../nonceStore.mjs";
+import { ResolutionRejectedError } from "../resolver/errors.mjs";
 import type {
 	DidDocument,
 	DidDocumentResolver,
@@ -224,10 +225,18 @@ describe("createDidGrant", () => {
 			expect("error" in result && result.error).toBe("invalid_grant");
 		});
 
-		it("returns 400 when resolver fails (DID not found)", async () => {
+		it("returns 400 invalid_grant when resolver rejects the DID (DID not found)", async () => {
+			// Task 9 (rule auth.resolve.failure-mapping): a `ResolutionRejectedError`
+			// is the FAILED half of the two-class resolver taxonomy — definitively
+			// unresolvable, not a transient outage — so it maps to 400
+			// `invalid_grant`, not the pre-Task-9 flat `invalid_request`. See
+			// `did.tokenClaims.test.mts` for the 503-vs-400 split this pins.
 			const resolver: DidDocumentResolver = {
 				async resolve(d: string): Promise<ResolutionResult> {
-					throw new Error(`DID not found: ${d}`);
+					throw new ResolutionRejectedError(
+						"did-not-found",
+						`DID not found: ${d}`,
+					);
 				},
 			};
 			const handler = createDidGrant(mockDeps, { resolver });
@@ -239,8 +248,10 @@ describe("createDidGrant", () => {
 			const { result } = await handler.handle(wrappedCtx);
 
 			expect(result.status).toBe(400);
-			expect("error" in result && result.error).toBe("invalid_request");
-			expect("errorDescription" in result && result.errorDescription).toContain("DID not found");
+			expect("error" in result && result.error).toBe("invalid_grant");
+			expect("errorDescription" in result && result.errorDescription).toContain(
+				"DID not found",
+			);
 		});
 	});
 

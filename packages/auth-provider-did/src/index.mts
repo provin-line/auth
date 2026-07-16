@@ -13,7 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export { createDidGrant, type DidGrantOptions } from "./did.mjs";
+export {
+	AUTHZ_SCOPE_AT_ISSUANCE,
+	createDidGrant,
+	type DidGrantOptions,
+} from "./did.mjs";
 export { type DidModuleOptions, didConfigSchema, oauthDidModule } from "./module.mjs";
 export { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
 export { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/errors.mjs";

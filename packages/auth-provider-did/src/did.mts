@@ -22,7 +22,9 @@ import {
 	generateTokenResponse,
 } from "@o3co/auth-provider-core";
 import { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
+import { ResolutionUnavailableError } from "./resolver/errors.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
+import { selectVerificationMethod } from "./resolver/selectMethod.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
 import type { AuthContractId } from "./transcript.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
@@ -34,6 +36,85 @@ export interface DidGrantOptions {
 	resolver: DidDocumentResolver;
 	verifierRegistry?: VerifierRegistry;
 	nonceStore?: NonceStore;
+}
+
+/**
+ * The P0-mint authorization scope — the ONLY scope value this handler ever
+ * issues (rule `auth.token.signed-claims`). The spec taxonomy also defines
+ * `CURRENT_AUTHORIZATION_AT_REQUEST@1` for a later, non-P0 minting mode;
+ * this package does not mint it.
+ */
+export const AUTHZ_SCOPE_AT_ISSUANCE =
+	"AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1";
+
+/**
+ * The bound inputs to a single authorization decision, assembled exactly
+ * once per request (rule `auth.resolve.single-input-binding`) so every
+ * token claim below traces back to one coherent snapshot instead of being
+ * re-derived piecemeal at mint time.
+ *
+ * P0 lifecycle refs are the registry snapshot digest + retrieval instant —
+ * a documented projection until a real lifecycle service exists.
+ */
+interface EvaluationInput {
+	/** `resolution.digest` — `"sha256:<64hex>"`, prefixed (see `keyDigest` below for the bare-hex counterpart). */
+	documentDigest: string;
+	/** Selected method id, from the `extractVerificationKey` result's `.id`. */
+	methodId: string;
+	/**
+	 * sha256 hex over the canonical JSON of the selected verification
+	 * method — a P0 projection (`JSON.stringify`, NOT full JCS canonical
+	 * form). Bare lowercase hex with NO `sha256:` prefix — contrast
+	 * `documentDigest` above, which keeps the prefix it arrives with from
+	 * `resolution.digest`.
+	 */
+	keyDigest: string;
+	/** LEGACY path (the only path this handler runs today) => `"legacy"`. */
+	relationship: "authentication" | "legacy";
+	/** `resolution.snapshotRef`. */
+	lifecycleStateRef: string;
+	/** `resolution.retrievedAt`. */
+	lifecycleFreshnessRef: string;
+}
+
+/**
+ * SHA-256 hex digest of a UTF-8 string via Web Crypto (`crypto.subtle`) —
+ * the same primitive `verifiers/ed25519Prehash.mts` uses for its message
+ * hash, no extra hashing dependency. Returns bare lowercase hex with NO
+ * `sha256:` prefix; callers that need the prefixed form (matching
+ * `ResolutionResult.digest`) add it themselves.
+ */
+async function sha256Hex(input: string): Promise<string> {
+	const bytes = new TextEncoder().encode(input);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+	return Array.from(new Uint8Array(hashBuffer))
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
+}
+
+/**
+ * Rule `auth.resolve.failure-mapping`: maps a caught resolve/select
+ * failure to its HTTP outcome. `ResolutionUnavailableError` means the
+ * registry could not be reached, or is reachable but failing transiently —
+ * the DID itself may still be valid, so this is INDETERMINATE and maps to
+ * 503 (a client can retry). Everything else this handler can catch here —
+ * `ResolutionRejectedError`, `MethodSelectionError`, `TranscriptError` (the
+ * last not yet reachable on the LEGACY-only path this handler runs today;
+ * folded into the mapping now so a future OWNER-path caller gets it for
+ * free), or any other unclassified error — is FAILED and maps to 400
+ * `invalid_grant`. Neither outcome mints a token: callers return the
+ * mapped result immediately.
+ */
+function mapResolutionFailure(
+	err: unknown,
+):
+	| { status: 503; error: "temporarily_unavailable"; errorDescription: string }
+	| { status: 400; error: "invalid_grant"; errorDescription: string } {
+	const errorDescription = err instanceof Error ? err.message : String(err);
+	if (err instanceof ResolutionUnavailableError) {
+		return { status: 503, error: "temporarily_unavailable", errorDescription };
+	}
+	return { status: 400, error: "invalid_grant", errorDescription };
 }
 
 export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions): GrantHandler => {
@@ -177,35 +258,38 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				};
 			}
 
-			// 2. Resolve DID Document
+			// 2. Resolve DID Document. Failure mapping (rule
+			// auth.resolve.failure-mapping): `ResolutionUnavailableError` (the
+			// registry is unreachable/failing transiently — INDETERMINATE) maps
+			// to 503; everything else (`ResolutionRejectedError` or any other
+			// resolve-time error) is FAILED and maps to 400 `invalid_grant`.
 			let resolution: Awaited<ReturnType<typeof resolver.resolve>>;
 			try {
 				resolution = await resolver.resolve(did);
 			} catch (err) {
-				return {
-					result: {
-						status: 400,
-						error: "invalid_request",
-						errorDescription: err instanceof Error ? err.message : "DID resolution failed",
-					},
-				};
+				return { result: mapResolutionFailure(err) };
 			}
 			// `resolution` stays in scope beyond this block — Task 9 consumes
 			// the canonical bytes / digest / snapshot refs it carries.
 			const didDocument = resolution.document;
 
-			// 3. Extract verification key from DID Document
+			// 3. Extract verification key from DID Document. `selected` is
+			// computed alongside `resolvedKey` for Task 9's `keyDigest`:
+			// `extractVerificationKey` (the LEGACY delegate) already calls
+			// `selectVerificationMethod` internally but only surfaces the
+			// extracted key material (`ExtractedKey`), not the full
+			// `VerificationMethod` object `keyDigest` needs to canonicalize.
+			// The second call is deterministic and pure (no I/O) with the same
+			// (doc, did) inputs as the first, so it succeeds/fails in lockstep
+			// with it — the shared catch below applies the same failure
+			// mapping (`MethodSelectionError` → 400 `invalid_grant`) to both.
 			let resolvedKey: Awaited<ReturnType<typeof extractVerificationKey>>;
+			let selected: ReturnType<typeof selectVerificationMethod>;
 			try {
 				resolvedKey = await extractVerificationKey(didDocument, did);
+				selected = selectVerificationMethod(didDocument, { did });
 			} catch (err) {
-				return {
-					result: {
-						status: 400,
-						error: "invalid_request",
-						errorDescription: err instanceof Error ? err.message : "key extraction failed",
-					},
-				};
+				return { result: mapResolutionFailure(err) };
 			}
 
 			// 4. Detect algorithm from request body and validate it is allowed
@@ -323,13 +407,37 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				}
 			}
 
-			// 10. Generate token
+			// 10. Assemble the single EvaluationInput this decision is bound to
+			// (rule auth.resolve.single-input-binding) — every token claim below
+			// reads from this one object rather than being re-derived piecemeal.
+			const input: EvaluationInput = {
+				documentDigest: resolution.digest,
+				methodId: resolvedKey.id,
+				keyDigest: await sha256Hex(JSON.stringify(selected.method)),
+				// The only path this handler runs today (Task 9 scope) — the
+				// OWNER path's `selectVerificationMethod(doc, { did, methodId,
+				// relationship: "authentication" })` call is future work.
+				relationship: "legacy",
+				lifecycleStateRef: resolution.snapshotRef,
+				lifecycleFreshnessRef: resolution.retrievedAt,
+			};
+
+			// 11. Generate token, minting the six required claims (rules
+			// auth.token.signed-claims / auth.token.issuance-vs-request) from
+			// `input` above.
 			return {
 				result: {
 					status: 200,
 					tokens: generateTokenResponse({
 						accessToken: await generateToken(
-							{},
+							{
+								auth_contract_id: authContract,
+								verification_method: input.methodId,
+								did_document_snapshot: input.documentDigest,
+								lifecycle_state_ref: input.lifecycleStateRef,
+								lifecycle_freshness_ref: input.lifecycleFreshnessRef,
+								authorization_scope: AUTHZ_SCOPE_AT_ISSUANCE,
+							},
 							{
 								expiresIn,
 								keyStore,
