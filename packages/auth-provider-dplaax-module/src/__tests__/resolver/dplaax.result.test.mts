@@ -25,10 +25,30 @@ import { DplaaxDidResolver } from "../../resolver/dplaax.mjs";
  * `resolver.test.mts` keeps covering owner-only enforcement, registry
  * allow-list, and URL building — unaffected by this change apart from mock
  * plumbing (`.json()` -> `.text()`, bare result -> `result.document`).
+ *
+ * Since Task 3, `resolve()` reads the body through `createBoundedFetch`
+ * (`res.body.getReader()`, a real stream — single-use, like production
+ * fetch) instead of `res.text()`/`.arrayBuffer()` on a hand-rolled mock that
+ * could be "read" repeatedly. `stubFetchOnce`/`stubFetchOnceBytes` below use
+ * `mockImplementation` (a fresh `Response` per call) rather than
+ * `mockResolvedValue` (one shared instance) so tests that call
+ * `resolver.resolve()` twice against the same stub — to assert both
+ * `toBeInstanceOf` and `toMatchObject` on the rejection — don't try to read
+ * an already-consumed body on the second call.
  */
 describe("DplaaxDidResolver — ResolutionResult", () => {
     const registryBaseUrl = "https://registry.example";
-    const resolver = new DplaaxDidResolver(registryBaseUrl);
+    // `resolver` is constructed once, here, at describe-collection time —
+    // before any `vi.stubGlobal("fetch", ...)` in the tests below runs.
+    // `createBoundedFetch` is built once per resolver instance (by design:
+    // its concurrency semaphore is meant to be shared across every call),
+    // so its `fetchImpl` default parameter would otherwise capture whatever
+    // `fetch` was bound to at construction time — the real global fetch, not
+    // any per-test stub. This wrapper defers the `fetch` lookup to call
+    // time, so each test's `vi.stubGlobal` takes effect as expected.
+    const resolver = new DplaaxDidResolver(registryBaseUrl, {
+        fetchImpl: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+    });
 
     // The brief's illustrative DID ("did:dplaax:u:alice") has only 4 segments
     // and fails parseDplaaxDid's `did:dplaax:{registry}:{accountType}:{accountId}`
@@ -42,35 +62,25 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
         vi.unstubAllGlobals();
     });
 
+    // `mockImplementation` (not `mockResolvedValue`) so every fetch() call
+    // gets its own `Response` with a fresh, unconsumed body stream — matters
+    // for tests below that call `resolver.resolve()` more than once against
+    // the same stub (see file-level doc comment above).
     function stubFetchOnce(status: number, body: string): void {
-        const bytes = new TextEncoder().encode(body);
         vi.stubGlobal(
             "fetch",
-            vi.fn().mockResolvedValue({
-                ok: status >= 200 && status < 300,
-                status,
-                text: async () => body,
-                arrayBuffer: async () => bytes.buffer,
-            }),
+            vi.fn().mockImplementation(async () => new Response(body, { status })),
         );
     }
 
-    // Mocks a response backed by raw wire bytes, with BOTH `text()` and
-    // `arrayBuffer()` available — mirroring real fetch/undici, where
-    // `text()` decodes via TextDecoder (BOM-stripping per WHATWG Encoding)
-    // while `arrayBuffer()` hands back the untouched bytes. This lets the
-    // test fail with a meaningful assertion (canonicalBytes missing the
-    // BOM) against the current `res.text()`-based implementation, rather
-    // than a TypeError from an incomplete mock.
+    // Mocks a response backed by raw wire bytes. Kept as a distinct helper
+    // from `stubFetchOnce` (which takes a string) because several tests
+    // below construct bytes that aren't valid UTF-8 text on their own (e.g.
+    // a leading BOM prepended to a UTF-8 JSON body).
     function stubFetchOnceBytes(status: number, bytes: Uint8Array): void {
         vi.stubGlobal(
             "fetch",
-            vi.fn().mockResolvedValue({
-                ok: status >= 200 && status < 300,
-                status,
-                text: async () => new TextDecoder().decode(bytes),
-                arrayBuffer: async () => bytes.buffer,
-            }),
+            vi.fn().mockImplementation(async () => new Response(bytes, { status })),
         );
     }
 
@@ -94,8 +104,9 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
         // UTF-8 with U+FFFD before handing back a string — so encoding that
         // string back to bytes is NOT guaranteed to reproduce what the
         // registry served. canonicalBytes/digest must be computed over the
-        // raw wire bytes (read via arrayBuffer()) to satisfy the
-        // ResolutionResult contract ("the exact bytes the registry served").
+        // raw wire bytes (read via boundedFetch's res.body.getReader() walk)
+        // to satisfy the ResolutionResult contract ("the exact bytes the
+        // registry served").
         const body = `{"id":"${did}","verificationMethod":[]}`;
         const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
         const bodyBytes = new TextEncoder().encode(body);

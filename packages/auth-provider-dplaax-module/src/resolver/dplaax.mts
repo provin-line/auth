@@ -24,6 +24,12 @@ import {
     strictJsonParse,
 } from "@provin-line/auth-provider-did";
 import { parseDplaaxDid, requireOwner } from "@provin-line/did-dplaax";
+import {
+    type BoundedFetch,
+    type BoundedFetchOptions,
+    createBoundedFetch,
+    DEFAULT_BOUNDS,
+} from "./boundedFetch.mjs";
 
 export interface DplaaxDidResolverOptions {
     /**
@@ -41,6 +47,17 @@ export interface DplaaxDidResolverOptions {
      * lowercased + trimmed + deduped internally.
      */
     allowedRegistries?: string[];
+    /**
+     * Resource-floor bounds for the transport (timeout / body-size cap /
+     * concurrency). Merged over `DEFAULT_BOUNDS` — callers only need to
+     * override the fields they care about.
+     */
+    bounds?: Partial<BoundedFetchOptions>;
+    /**
+     * Injectable `fetch` implementation, primarily for tests. Defaults to
+     * the global `fetch`.
+     */
+    fetchImpl?: typeof fetch;
 }
 
 /**
@@ -64,6 +81,7 @@ export interface DplaaxDidResolverOptions {
 export class DplaaxDidResolver implements DidDocumentResolver {
     private readonly registryBaseUrl: string;
     private readonly allowedRegistries: Set<string>;
+    private readonly boundedFetch: BoundedFetch;
 
     constructor(
         registryBaseUrl: string,
@@ -91,6 +109,14 @@ export class DplaaxDidResolver implements DidDocumentResolver {
         this.allowedRegistries = new Set(
             [baseHost, ...extra].map((r) => r.trim().toLowerCase()),
         );
+
+        // Built once per instance (not per resolve() call) so the
+        // maxConcurrent semaphore is shared across every request this
+        // resolver makes, per the "resource floor" the transport enforces.
+        this.boundedFetch = createBoundedFetch(
+            { ...DEFAULT_BOUNDS, ...options.bounds },
+            options.fetchImpl,
+        );
     }
 
     async resolve(did: string): Promise<ResolutionResult> {
@@ -106,52 +132,41 @@ export class DplaaxDidResolver implements DidDocumentResolver {
 
         const url = `${this.registryBaseUrl}/did/${parsed.accountType}/${parsed.accountId}/did.json`;
 
-        // Fetch itself is untouched here (redirect/retry/TLS behaviour is
-        // Task 3's job) — only what happens to the response is restructured:
-        // network failures and non-2xx statuses map onto the two-class error
-        // taxonomy (errors.mts) instead of throwing a bare Error.
-        let res: Awaited<ReturnType<typeof fetch>>;
-        try {
-            res = await fetch(url);
-        } catch (err) {
-            if (err instanceof TypeError) {
-                throw new ResolutionUnavailableError(
-                    "network",
-                    `DID resolution failed for "${did}": network error (${err.message})`,
-                );
-            }
-            throw err;
-        }
+        // The bounded transport (timeout / body cap / redirect refusal /
+        // concurrency — Task 3's job) already turned network failures,
+        // timeouts, and an oversized body into the two-class error taxonomy
+        // (errors.mts); it either throws or returns bytes it fully read, so
+        // there's no separate fetch/network try-catch here anymore.
+        const { status, bytes: canonicalBytes, finalOrigin } = await this.boundedFetch(url);
 
-        if (!res.ok) {
-            if (res.status >= 500) {
+        if (status < 200 || status >= 300) {
+            if (status >= 500) {
                 throw new ResolutionUnavailableError(
                     "registry-5xx",
-                    `DID resolution failed for "${did}": HTTP ${res.status}`,
+                    `DID resolution failed for "${did}": HTTP ${status}`,
                 );
             }
-            if (res.status === 404) {
+            if (status === 404) {
                 throw new ResolutionRejectedError(
                     "did-not-found",
-                    `DID resolution failed for "${did}": HTTP ${res.status}`,
+                    `DID resolution failed for "${did}": HTTP ${status}`,
                 );
             }
             throw new ResolutionRejectedError(
                 "registry-4xx",
-                `DID resolution failed for "${did}": HTTP ${res.status}`,
+                `DID resolution failed for "${did}": HTTP ${status}`,
             );
         }
 
-        // Read the body exactly once, as raw bytes — canonicalBytes/digest
-        // must be the exact bytes the registry served (ResolutionResult
-        // contract), and res.text() does not guarantee that: per WHATWG
-        // Fetch, text() strips a leading UTF-8 BOM and replaces invalid
-        // UTF-8 with U+FFFD before returning a string, so re-encoding that
-        // string can silently diverge from the wire bytes. arrayBuffer()
-        // has no such normalization. strictJsonParse's input is decoded
-        // from these same canonicalBytes below, so `document` and the
-        // integrity fields can never drift apart.
-        const canonicalBytes = new Uint8Array(await res.arrayBuffer());
+        // canonicalBytes/digest must be the exact bytes the registry served
+        // (ResolutionResult contract) — boundedFetch hands back the raw
+        // bytes it read off the stream (never a res.text() round-trip: per
+        // WHATWG Fetch, text() strips a leading UTF-8 BOM and replaces
+        // invalid UTF-8 with U+FFFD before returning a string, so
+        // re-encoding that string could silently diverge from the wire
+        // bytes). strictJsonParse's input is decoded from these same
+        // canonicalBytes below, so `document` and the integrity fields can
+        // never drift apart.
         const digestBuffer = await crypto.subtle.digest("SHA-256", canonicalBytes);
         const digest = `sha256:${Buffer.from(digestBuffer).toString("hex")}`;
         const retrievedAt = new Date().toISOString();
@@ -200,10 +215,9 @@ export class DplaaxDidResolver implements DidDocumentResolver {
             );
         }
 
-        // `res.url` reflects the actual connection fetch() served the bytes
-        // from (e.g. after a redirect); fall back to the requested URL's
-        // origin for fetch mocks/environments that leave it unset.
-        const finalOrigin = new URL(res.url || url).origin;
+        // finalOrigin came back from boundedFetch (derived from res.url,
+        // falling back to the requested URL's origin for fetch mocks/
+        // environments that leave res.url unset).
         const snapshotRef = `registry:${finalOrigin}#${digest}`;
 
         return {

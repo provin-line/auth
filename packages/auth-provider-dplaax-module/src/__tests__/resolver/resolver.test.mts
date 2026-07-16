@@ -15,6 +15,20 @@ import { DplaaxDidResolver } from "../../resolver/dplaax.mjs";
 // (`ResolutionUnavailableError` / `ResolutionRejectedError`) are covered in
 // dplaax.result.test.mts; the 404 case here is kept as a regression pin for
 // this file's existing "HTTP error mapping" coverage.
+//
+// Since Task 3, the resolver reads the response body through
+// `createBoundedFetch` (a streaming `res.body.getReader()` walk, not
+// `res.text()`/`.arrayBuffer()`), and classifies on the numeric `status` it
+// returns rather than `res.ok`. Mocks below use real `Response` instances
+// (Node's global fetch Response) so `.body`/`.status`/`.url` all behave
+// exactly like production fetch, instead of hand-rolling those fields.
+
+// Real `Response` (Node's global fetch Response), not a hand-rolled mock —
+// gives boundedFetch a genuine `.body` ReadableStream/`.status` to read,
+// matching what production fetch returns.
+function mockDidDocResponse(didDoc: unknown, status = 200): Response {
+    return new Response(JSON.stringify(didDoc), { status });
+}
 
 describe("DplaaxDidResolver", () => {
     const registryBaseUrl = "https://registry.dplaax.dev";
@@ -31,11 +45,9 @@ describe("DplaaxDidResolver", () => {
 
     it("resolves an owner DID via HTTP (accountType-namespaced URL)", async () => {
         const didDoc = { id: ownerDid, verificationMethod: [] };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            text: async () => JSON.stringify(didDoc),
-            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const result = await resolver.resolve(ownerDid);
@@ -43,6 +55,7 @@ describe("DplaaxDidResolver", () => {
         expect(result.document).toEqual(didDoc);
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/org/acme/did.json`,
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
@@ -71,17 +84,16 @@ describe("DplaaxDidResolver", () => {
         // the registry legitimately adds a new accountType.
         const did = "did:dplaax:registry.dplaax.dev:user:alice";
         const didDoc = { id: did, verificationMethod: [] };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            text: async () => JSON.stringify(didDoc),
-            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const result = await resolver.resolve(did);
         expect(result.document).toEqual(didDoc);
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/user/alice/did.json`,
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
@@ -109,11 +121,9 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:Registry.Dplaax.dev:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            text: async () => JSON.stringify(didDoc),
-            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const result = await resolver.resolve("did:dplaax:Registry.Dplaax.dev:org:acme");
@@ -129,11 +139,9 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:legacy-hub.example.com:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            text: async () => JSON.stringify(didDoc),
-            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
             allowedRegistries: ["legacy-hub.example.com"],
@@ -147,6 +155,7 @@ describe("DplaaxDidResolver", () => {
         // lives now), not from the legacy registry name in the DID.
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/org/acme/did.json`,
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
@@ -158,11 +167,9 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:registry.dplaax.dev:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            text: async () => JSON.stringify(didDoc),
-            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
             allowedRegistries: ["legacy-hub.example.com"],
@@ -178,24 +185,22 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:registry.dplaax.dev:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            text: async () => JSON.stringify(didDoc),
-            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver("https://registry.dplaax.dev/");
         await resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme");
         expect(globalThis.fetch).toHaveBeenCalledWith(
             "https://registry.dplaax.dev/did/org/acme/did.json",
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
     it("throws on HTTP 404 error", async () => {
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: false,
-            status: 404,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse({}, 404),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const notFoundDid = "did:dplaax:registry.dplaax.dev:org:notfound";
