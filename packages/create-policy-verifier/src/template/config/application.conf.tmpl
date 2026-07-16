@@ -1,0 +1,90 @@
+http {
+  hostname = "0.0.0.0"
+  hostname = ${?HTTP_HOSTNAME}
+  port = __PORT__
+  port = ${?HTTP_PORT}
+  pathPrefix = ""
+  pathPrefix = ${?HTTP_PATH_PREFIX}
+}
+
+oauth {
+  jwt {
+    algorithm = "HS256"
+    algorithm = ${?OAUTH_JWT_ALGORITHM}
+    secret = ${?OAUTH_JWT_SECRET}
+    jwksUri = ${?OAUTH_JWT_JWKS_URI}
+    publicKey = ${?OAUTH_JWT_PUBLIC_KEY}
+    publicKeyPath = ${?OAUTH_JWT_PUBLIC_KEY_PATH}
+    validate = true
+    validate = ${?OAUTH_JWT_VALIDATE}
+  }
+}
+
+attribute {
+  collectors = [
+    { collector = "PayloadScopeCollector" }
+    { collector = "PayloadSubjectIdCollector" }
+    { collector = "SubjectDidCollector" }
+    { collector = "SubscriberDidCollector" }
+    { collector = "SubjectDidTypeCollector" }
+  ]
+}
+
+rule {
+  collectors = [
+    { collector = "ResourceActionScopeRuleCollector" }
+    {
+      # SECURITY NOTE — fail-closed default (keep this collector enabled).
+      # The policy evaluator ALLOWS a request when zero rules are collected,
+      # so without this collector every (resource, action) nobody wrote a
+      # policy for passes the PDP silently. DefaultDenyRuleCollector inverts
+      # that default: any request whose (resource, action) is not declared in
+      # `surface` below is denied unconditionally.
+      #
+      # `surface` is the deployment's declared L1 request surface. The entries
+      # mirror the o3co.authz.v1.policy method options in provin.oss
+      # api/protobuf/dplaax/*/v1/*.proto (the SoT), PLUS one HTTP-only PEP call
+      # that carries no proto option: `ingest:push` (provin.oss
+      # cmd/standalone/push.go — the /ingest/<name>/ HTTP surface is not a gRPC
+      # method). When the network gains a new RPC, extend this list in the same
+      # change that deploys it — matching an entry is an abstention (the other
+      # rule groups still decide), never a grant.
+      collector = "DefaultDenyRuleCollector"
+      surface = [
+        { resource = "schemas", action = "register" }
+        { resource = "schemas", action = "read" }
+        { resource = "schemas", action = "deprecate" }
+        { resource = "dids", action = "register" }
+        { resource = "dids", action = "issue" }
+        { resource = "dids", action = "read" }
+        { resource = "dids", action = "revoke" }
+        { resource = "signer", action = "sign-vc" }
+        { resource = "signer", action = "sign-wire" }
+        { resource = "vc", action = "store" }
+        { resource = "vc", action = "read" }
+        { resource = "chain", action = "subscribe" }
+        { resource = "chain", action = "unsubscribe" }
+        { resource = "chain", action = "read" }
+        { resource = "chain", action = "update-allowlist" }
+        { resource = "chain", action = "read-allowlist" }
+        { resource = "audit", action = "read" }
+        { resource = "tlog", action = "read" }
+        { resource = "ingest", action = "push" }
+      ]
+    }
+    {
+      # Enforce "the authenticated subject is the same party as the declared subscriber"
+      # only for actions that actually carry a subscriber_did in requestContext.
+      # Actions without a subscriber_did (e.g. disconnect) must NOT be listed here —
+      # otherwise the check would deny them for a missing target attribute.
+      #
+      # No rules are configured for this deployment: ChainPeerService is L2-only
+      # per dPLaaX auth spec § 2 (provin-line/oss#74), so registry.chain.peer.*
+      # never matches an L1-gated request. ChainService internal routes that
+      # carry subscriber_did can be added here explicitly if a deployment needs
+      # to enforce identity on them.
+      collector = "SubscriberIdentityCheckRuleCollector"
+      rules = []
+    }
+  ]
+}

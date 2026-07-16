@@ -1,0 +1,24 @@
+# Local development orchestration for __NAME__.
+#
+# `docker compose up --build` builds the runtime stage and exposes the
+# OAuth endpoints on host port __PORT__. Override env via a `.env` file
+# or by passing `-e VAR=value` on `docker compose run`.
+#
+# Sign your own keys + mount them into `keys/` (or set
+# OAUTH_JWT_PRIVATE_KEY / OAUTH_JWT_PUBLIC_KEY env vars) before running
+# against any real workload.
+
+services:
+  auth-provider:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "__PORT__:__PORT__"
+    environment:
+      CONFIG_ENV: development
+      HTTP_PORT: "__PORT__"
+      # Override with a real registry endpoint per deployment.
+      DPLAAX_REGISTRY_BASE_URL: "__REGISTRY_BASE_URL__"
+    volumes:
+      - ./keys:/home/node/app/keys:ro

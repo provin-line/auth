@@ -1,0 +1,27 @@
+{
+	"name": "@provin-line/auth-integration",
+	"description": "Cross-package integration tests: DID auth → JWT → policy verification flow (create-app.md § 6.2)",
+	"version": "0.0.1",
+	"private": true,
+	"license": "Apache-2.0",
+	"type": "module",
+	"scripts": {
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@noble/ed25519": "^3.1.0",
+		"@o3co/auth-provider-core": "^0.5.3",
+		"@o3co/auth.policy-verifier.builtins": "^0.3.1",
+		"@o3co/auth.policy-verifier.server": "^0.3.1",
+		"@provin-line/auth-provider-did": "workspace:*",
+		"@provin-line/auth-provider-dplaax-module": "workspace:*",
+		"@provin-line/policy-verifier-dplaax-module": "workspace:*",
+		"@types/express": "^5.0.6",
+		"@types/node": "^25.6.0",
+		"express": "^5.2.1",
+		"jose": "^6.2.2",
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.4"
+	}
+}

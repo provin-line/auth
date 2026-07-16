@@ -1,0 +1,38 @@
+# Development guidelines — __NAME__
+
+This is a generated dPLaaX auth.provider instance. Refer to the upstream
+sources of truth before touching the wiring:
+
+- **dPLaaX auth spec** (3-layer model, L1 boundaries, DID grammar):
+  <https://github.com/provin-line/scope/tree/main/scopes/spec.dplaax/.claude/specs>
+- **`@o3co/auth-provider-core`** runtime + composition docs:
+  <https://github.com/o3co/auth.provider>
+- **`@provin-line/auth-provider-dplaax-module`** module wiring + DID resolver:
+  <https://github.com/provin-line/auth/tree/main/packages/auth-provider-dplaax-module>
+
+## Where to add things
+
+| Concern | File |
+| --- | --- |
+| Per-deployment HOCON overrides | `config/{development,production}.conf` |
+| OAuth client registry | `config/clients.yaml` |
+| Signing-key material | `keys/` (gitignored) |
+| Per-deployment custom modules | `src/main.mts` — pass via `buildModules` overrides argument |
+
+## Tests
+
+```bash
+__PACKAGE_MANAGER_BIN__ run test
+```
+
+Add per-deployment tests under `src/__tests__/`. The default vitest config
+discovers `src/**/__tests__/**/*.test.mts`.
+
+## Regenerating
+
+To pick up newer dPLaaX or o3co framework pins, re-run
+`@provin-line/create-auth-provider` at the newer release tag and diff the
+output against this directory. Hand-edits to deployment payload
+(`config/`, `clients.yaml`, `keys/`) survive a regenerate when re-applied;
+framework wiring (`src/main.mts`, `package.json` deps, `tsconfig.json`)
+is overwritten.

@@ -1,0 +1,111 @@
+http {
+  port = __PORT__
+  port = ${?HTTP_PORT}
+  trustProxy = false
+  trustProxy = ${?HTTP_TRUST_PROXY}
+}
+
+oauth {
+  jwt {
+    issuer = ${?OAUTH_JWT_ISSUER}
+    legacyTypAccept = false
+    legacyTypAccept = ${?OAUTH_JWT_LEGACY_TYP_ACCEPT}
+    signingKey {
+      provider = "local"
+      provider = ${?OAUTH_JWT_SIGNING_KEY_PROVIDER}
+      local {
+        # Default to EdDSA; operators flip via OAUTH_JWT_ALGORITHM. The
+        # discriminated-union schema picks the matching branch — HS256 uses
+        # `secret` + `previousSecrets`; RS256/ES256/EdDSA use `privateKey` /
+        # `privateKeyPath` (+ `publicKey` / `publicKeyPath`) + `previousKeys`.
+        # The two `previous*` arrays are mutually exclusive at the schema
+        # level, so declare only the asymmetric one here (matching the
+        # default algorithm) and let operators overlay the HS256 form via
+        # their own environment-specific HOCON when they flip the algorithm.
+        algorithm = "EdDSA"
+        algorithm = ${?OAUTH_JWT_ALGORITHM}
+        kid = "v0"
+        kid = ${?OAUTH_JWT_KID}
+        # HS256 fallback (only honoured when algorithm = HS256)
+        secret = ${?OAUTH_JWT_SECRET}
+        # EdDSA keys — supplied via environment variables
+        privateKey = ${?OAUTH_JWT_PRIVATE_KEY}
+        privateKeyPath = ${?OAUTH_JWT_PRIVATE_KEY_PATH}
+        publicKey = ${?OAUTH_JWT_PUBLIC_KEY}
+        publicKeyPath = ${?OAUTH_JWT_PUBLIC_KEY_PATH}
+        # `previousKeys` (asymmetric) / `previousSecrets` (HS256) are both
+        # optional in the schema and absent / [] / null are equivalent at
+        # runtime. Leave them out of the HOCON entirely so the discriminated
+        # union accepts whichever algorithm the operator picks — declaring
+        # `previousKeys = []` literally would violate the HS256 branch's
+        # `.strict()` shape.
+      }
+    }
+  }
+  accessToken {
+    expiresIn = 3600
+    expiresIn = ${?OAUTH_ACCESS_TOKEN_EXPIRES_IN}
+  }
+  refreshToken {
+    expiresIn = 86400
+    expiresIn = ${?OAUTH_REFRESH_TOKEN_EXPIRES_IN}
+    # Reject refresh tokens whose family_id is not in the rotation store.
+    # Override to "accept" only during a bounded migration window.
+    unknownFamilyPolicy = "reject"
+    unknownFamilyPolicy = ${?OAUTH_REFRESH_TOKEN_UNKNOWN_FAMILY_POLICY}
+    # Reject refresh tokens that lack jti / family_id when rotation is wired.
+    legacyRtPolicy = "reject"
+    legacyRtPolicy = ${?OAUTH_REFRESH_TOKEN_LEGACY_RT_POLICY}
+  }
+  # When oauth.jwt.issuer is configured, require `openid` in /authorize
+  # scope by default. Set OAUTH_OIDC_MODE=dual only if this OP intentionally
+  # also accepts OAuth-only authorization requests.
+  oidcMode = "oidc-required"
+  oidcMode = ${?OAUTH_OIDC_MODE}
+  grants {
+    did {
+      # @deprecated — composition decides registration. Field accepted for
+      # HOCON-config compatibility but ignored at runtime.
+      enabled = true
+      enabled = ${?OAUTH_GRANTS_DID_ENABLED}
+      supportedAlgorithms = ["ed25519_raw"]
+      messageMaxAgeSec = 300
+      allowedAudiences = []
+    }
+  }
+}
+
+endpoints {
+  login {
+    url = "/login"
+    url = ${?ENDPOINTS_LOGIN_URL}
+  }
+}
+
+repositories {
+  client {
+    type = "yaml"
+    type = ${?CLIENT_REPOSITORY_TYPE}
+    yaml {
+      path = "./config/clients.yaml"
+      path = ${?CLIENT_REPOSITORY_PATH}
+    }
+  }
+  code {
+    type = "memory"
+  }
+}
+
+dplaax {
+  registry {
+    baseUrl = "__REGISTRY_BASE_URL__"
+    baseUrl = ${?DPLAAX_REGISTRY_BASE_URL}
+
+    # Optional: additional registry names accepted in DIDs' registry segment
+    # beyond baseUrl's hostname. Comma-separated via env var
+    # DPLAAX_REGISTRY_ALLOWED_REGISTRIES (e.g. legacy host after migration
+    # or public DID host when baseUrl is an internal URL).
+    allowedRegistries = []
+    allowedRegistries = ${?DPLAAX_REGISTRY_ALLOWED_REGISTRIES}
+  }
+}

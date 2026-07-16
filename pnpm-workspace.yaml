@@ -1,0 +1,6 @@
+packages:
+  - "packages/*"
+  - "integration"
+  # Generated dev/CI instances (git-ignored; see create-app.md § 5, § 6.3.1).
+  # Inert while instances/ is empty.
+  - "instances/*"

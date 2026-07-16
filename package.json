@@ -1,0 +1,21 @@
+{
+	"name": "@provin-line/dplaax.auth",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@10.30.2+sha512.36cdc707e7b7940a988c9c1ecf88d084f8514b5c3f085f53a2e244c2921d3b2545bc20dd4ebe1fc245feec463bb298aecea7a63ed1f7680b877dc6379d8d0cb4",
+	"scripts": {
+		"build": "pnpm -r run build",
+		"test": "pnpm -r run test",
+		"typecheck": "pnpm -r --if-present run typecheck",
+		"lint": "pnpm -r --if-present run lint"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.3"
+	},
+	"pnpm": {
+		"overrides": {
+			"@provin-line/auth-provider-dplaax-module": "workspace:*",
+			"@provin-line/policy-verifier-dplaax-module": "workspace:*"
+		}
+	}
+}

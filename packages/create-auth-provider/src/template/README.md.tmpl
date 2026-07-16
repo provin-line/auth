@@ -1,0 +1,66 @@
+# __NAME__
+
+__DESCRIPTION__
+
+Generated from [`@provin-line/create-auth-provider`](https://github.com/provin-line/auth/tree/main/packages/create-auth-provider).
+It wraps [`@o3co/auth-provider-core`](https://www.npmjs.com/package/@o3co/auth-provider-core)
+with the dPLaaX composition layer from
+[`@provin-line/auth-provider-dplaax-module`](https://github.com/provin-line/auth/tree/main/packages/auth-provider-dplaax-module)
+preregistered (DID grant resolver, JWT key store, client + code repositories,
+HOCON config schema).
+
+## Quick start
+
+```bash
+__PACKAGE_MANAGER_BIN__ install
+__PACKAGE_MANAGER_BIN__ run build
+__PACKAGE_MANAGER_BIN__ run start
+```
+
+The service listens on `http://localhost:__PORT__` by default. Override
+with `HTTP_PORT`. The DID registry the JWT-grant resolver queries is
+`__REGISTRY_BASE_URL__`; override with `DPLAAX_REGISTRY_BASE_URL`.
+
+Run the test suite:
+
+```bash
+__PACKAGE_MANAGER_BIN__ run test
+```
+
+## Configure
+
+| Where | What |
+| --- | --- |
+| `config/application.conf` | HOCON for HTTP, JWT signing, OAuth grants, repositories, dplaax.registry. |
+| `config/development.conf` / `config/production.conf` | Per-environment overlays merged via HOCON `withFallback`. |
+| `config/clients.yaml` | OAuth client registry. Replace `example-client` with your real entries. |
+| `keys/` | Signing-key material (`*.pem` / `*.key`). Globally gitignored. |
+
+JWT signing defaults to EdDSA. Supply keys via `OAUTH_JWT_PRIVATE_KEY` /
+`OAUTH_JWT_PUBLIC_KEY` env vars (or `*_PATH` variants pointing into
+`keys/`), or flip `OAUTH_JWT_ALGORITHM` to `HS256` for symmetric signing.
+
+## DID resolution
+
+dPLaaX auth.provider accepts only **owner DIDs** as authentication
+subjects (per spec § 2). Pipeline/process DIDs are handled by the Signer
+API downstream and rejected by this resolver. The DID registry hostname
+must match `dplaax.registry.baseUrl` (or be added to
+`dplaax.registry.allowedRegistries` for migration scenarios).
+
+## Docker
+
+```bash
+make docker                # build runtime image
+make docker-compose-up     # local stack via docker-compose.yml
+```
+
+## Package manager
+
+This scaffold uses pnpm (see `packageManager` in `package.json`) because
+the dPLaaX module deps are pinned via pnpm's git-subdirectory syntax,
+which is not npm-compatible. Override at your own risk.
+
+## License
+
+[__LICENSE__](./LICENSE).

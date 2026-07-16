@@ -1,0 +1,74 @@
+name: publish-images
+
+# Builds and pushes the two generated-instance images (policy-verifier,
+# auth-provider) to GHCR, so consumers (e.g. provin.oss's quickstart)
+# reference a published image instead of re-running generation-in-Dockerfile
+# themselves (gap-backlog L1: "provin.auth GHCR image publish CI").
+#
+# Triggers: manual (workflow_dispatch, builds the selected ref) and version
+# tags. Every build pushes an immutable sha-<sha> tag plus a moving tag named
+# after the branch/tag that triggered it — consumers pin the sha tag.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - generator: policy-verifier
+            port: "3001"
+            scaffold_args: ""
+          - generator: auth-provider
+            port: "3000"
+            # Placeholder only — overridden at runtime via
+            # DPLAAX_REGISTRY_BASE_URL (the image stays deployment-generic).
+            scaffold_args: "--registry-base-url http://localhost:8443"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Multi-arch: consumers include Apple-silicon dev machines (linux/arm64)
+      # as well as amd64 CI/servers; a single-arch image fails their pull
+      # outright ("no matching manifest").
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/provin-line/auth-${{ matrix.generator }}
+          tags: |
+            type=sha,format=long,prefix=sha-
+            type=ref,event=branch
+            type=ref,event=tag
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/generated-instance.Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GENERATOR=${{ matrix.generator }}
+            AUTH_REF=${{ github.sha }}
+            PORT=${{ matrix.port }}
+            SCAFFOLD_ARGS=${{ matrix.scaffold_args }}
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}

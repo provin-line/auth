@@ -1,0 +1,32 @@
+# Convenience targets for __NAME__.
+#
+# All targets delegate to the configured package manager so contributors
+# can swap pnpm for another manager via `make PKG=npm <target>`.
+
+PKG ?= __PACKAGE_MANAGER_BIN__
+
+.PHONY: install build typecheck test start docker docker-compose-up clean
+
+install:
+	$(PKG) install
+
+build:
+	$(PKG) run build
+
+typecheck:
+	$(PKG) run typecheck
+
+test:
+	$(PKG) run test
+
+start:
+	$(PKG) run start
+
+docker:
+	docker build -t __DOCKER_IMAGE_TAG__ .
+
+docker-compose-up:
+	docker compose up --build
+
+clean:
+	rm -rf dist node_modules

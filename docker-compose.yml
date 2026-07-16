@@ -1,0 +1,28 @@
+# Dev composition of generated instances (create-app.md § 5).
+# Prerequisite: `make instances` (instances/ is git-ignored, regenerated).
+services:
+  auth-provider:
+    build:
+      context: .
+      dockerfile: Dockerfile.instance
+      args:
+        INSTANCE: provider
+    ports:
+      - "3000:3000"
+    environment:
+      OAUTH_JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      OAUTH_JWT_SECRET: "${JWT_SECRET:-dplaax-dev-secret-change-in-production}"
+      OAUTH_JWT_ISSUER: "dplaax-auth"
+      DPLAAX_REGISTRY_BASE_URL: "${DPLAAX_REGISTRY_BASE_URL:-http://localhost:3002}"
+
+  policy-verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile.instance
+      args:
+        INSTANCE: policy-verifier
+    ports:
+      - "3001:3001"
+    environment:
+      OAUTH_JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      OAUTH_JWT_SECRET: "${JWT_SECRET:-dplaax-dev-secret-change-in-production}"

@@ -1,0 +1,17 @@
+# Local development orchestration for __NAME__.
+#
+# `docker compose up` builds the runtime stage and exposes the verify
+# endpoint on host port __PORT__. Override env via a `.env` file or by
+# passing `-e HTTP_PORT=...` on `docker compose run`.
+
+services:
+  policy-verifier:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "__PORT__:__PORT__"
+    environment:
+      CONFIG_ENV: development
+      HTTP_HOSTNAME: "0.0.0.0"
+      HTTP_PORT: "__PORT__"

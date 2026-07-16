@@ -1,0 +1,26 @@
+# Build artifacts and dependencies
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
+# Source control
+.git
+.gitignore
+
+# Editor and OS
+.vscode
+.idea
+.DS_Store
+
+# Local-only files
+.env
+.env.*
+*.pem
+*.seed
+
+# Docs and metadata not needed in image
+README.md
+*.md
+LICENSE

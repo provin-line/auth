@@ -1,0 +1,123 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      # pnpm's frozen install tolerates stale extra importers, so assert the
+      # invariant directly: the committed lockfile must never contain the
+      # local-only instances/* importers (see Makefile clean-instances).
+      - name: assert lockfile has no instances importers
+        run: |
+          if grep -q '^  instances/' pnpm-lock.yaml; then
+            echo "pnpm-lock.yaml contains instances/* importers — run 'make clean-instances' and recommit"
+            exit 1
+          fi
+
+      - run: pnpm -r run build
+
+      # Workspace-wide typecheck (after build: workspace siblings' .d.mts come
+      # from their dist). Runs the root script so the package set is defined
+      # in one place (package.json "typecheck").
+      - run: pnpm run typecheck
+
+      - run: pnpm -r run test
+
+  # Workspace-mode scaffold smoke (create-app.md § 6.3): generate instances
+  # from the generators, then install / build / typecheck / boot each one
+  # against the PR's package state (root pnpm.overrides → workspace:*).
+  smoke-workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: make instances
+
+      # The generated manifest must stay honest (create-app.md § 6.3.1):
+      # byte-identical to direct generator output (nothing in the workspace
+      # pipeline may mutate it), and free of workspace:/file:/link: leakage.
+      - name: assert generated manifests are unmutated
+        run: |
+          ref="$(git rev-parse HEAD)"
+          node packages/create-auth-provider/dist/cli.mjs provider \
+            --dplaax-module-ref "$ref" --out "$RUNNER_TEMP/regen/provider" --no-git-init
+          node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
+            --dplaax-module-ref "$ref" --port 3001 --out "$RUNNER_TEMP/regen/policy-verifier" --no-git-init
+          for inst in provider policy-verifier; do
+            diff "$RUNNER_TEMP/regen/$inst/package.json" "instances/$inst/package.json"
+            if grep -Eq '"(workspace|file|link):' "instances/$inst/package.json"; then
+              echo "specifier leak in $inst/package.json"
+              exit 1
+            fi
+          done
+
+      - run: make smoke
+
+  # Consumer-mode scaffold smoke (create-app.md § 6.3): the exact external
+  # consumer experience — generate OUTSIDE the workspace, install with no
+  # workspace assistance, deps resolve from the pinned git ref (the § 3.4
+  # pnpm block emitted into the scaffold handles transitive resolution).
+  # Runs on push only: the commit must be fetchable from GitHub.
+  smoke-consumer:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      # Workspace install only to build the generator CLIs.
+      - run: pnpm install --frozen-lockfile
+
+      - name: generate, install, build, boot outside the workspace
+        run: |
+          out="$RUNNER_TEMP/consumer"
+          node packages/create-auth-provider/dist/cli.mjs provider \
+            --dplaax-module-ref "$GITHUB_SHA" --out "$out/provider" --no-git-init
+          node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
+            --dplaax-module-ref "$GITHUB_SHA" --port 3001 --out "$out/policy-verifier" --no-git-init
+          for inst in provider policy-verifier; do
+            (cd "$out/$inst" && pnpm install && pnpm run build && pnpm run typecheck)
+          done
+          ./scripts/smoke-instance.sh "$out/provider" 3000 /_healthcheck
+          ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck
+          # One real DID-grant round trip (assertion → /oauth/token → 200 +
+          # tampered-signature reject): the boot smoke alone let the PDP
+          # surface drift and the missing @noble/ed25519 through.
+          node scripts/smoke-did-grant.mjs "$out/provider" 3100
+
+      - name: docker build the standalone Dockerfile
+        run: |
+          docker build -t smoke/provider "$RUNNER_TEMP/consumer/provider"
+          docker build -t smoke/policy-verifier "$RUNNER_TEMP/consumer/policy-verifier"

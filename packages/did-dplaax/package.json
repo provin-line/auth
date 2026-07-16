@@ -1,0 +1,38 @@
+{
+	"name": "@provin-line/did-dplaax",
+	"description": "did:dplaax grammar parser and hierarchy classifier (zero runtime deps, framework-agnostic)",
+	"version": "0.1.0",
+	"license": "Apache-2.0",
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./dist/index.mjs",
+			"types": "./dist/index.d.mts"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/provin-line/auth.git",
+		"directory": "packages/did-dplaax"
+	},
+	"scripts": {
+		"prebuild": "rimraf dist",
+		"build": "tsc",
+		"prepare": "pnpm run build",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage"
+	},
+	"devDependencies": {
+		"@types/node": "^25.6.0",
+		"@vitest/coverage-v8": "^4.1.4",
+		"rimraf": "^6.1.3",
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.4"
+	}
+}

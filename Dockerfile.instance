@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1.7
+#
+# Dev-composition image for a generated instance (create-app.md § 5).
+#
+#   make instances
+#   docker build -f Dockerfile.instance --build-arg INSTANCE=provider .
+#
+# Build context: repo root, with instances/<INSTANCE>/ generated. This is
+# the single workspace-flavored build artifact in the repo: it copies the
+# pnpm workspace so the instance resolves @provin-line/* from the local
+# package state (root overrides, create-app.md § 6.3.1) instead of the git
+# refs its manifest pins. The template's standalone Dockerfile — what
+# consumers get — is exercised by consumer-mode smoke in CI.
+#
+# Dev-only: the runtime stage keeps the whole workspace (and devDeps)
+# because workspace node_modules are symlink forests that don't survive
+# extraction. Image size is a non-goal here.
+
+FROM node:24-alpine AS node-base
+
+ENV HOME=/home/node
+
+RUN apk add --no-cache tini git \
+ && npm install -g corepack --force \
+ && corepack enable
+
+WORKDIR /home/node/app
+
+FROM node-base AS builder
+
+ARG INSTANCE
+
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+COPY packages/ ./packages/
+COPY integration/ ./integration/
+COPY instances/${INSTANCE}/ ./instances/${INSTANCE}/
+
+# Not frozen: the committed lockfile intentionally has no instances/*
+# importers (see Makefile clean-instances).
+RUN pnpm install --no-frozen-lockfile
+
+RUN pnpm --filter "./instances/${INSTANCE}" run build
+
+FROM builder AS runtime
+
+ARG INSTANCE
+ENV NODE_ENV=production
+
+WORKDIR /home/node/app/instances/${INSTANCE}
+
+USER node
+
+ENTRYPOINT ["tini", "--"]
+CMD ["node", "dist/main.mjs"]

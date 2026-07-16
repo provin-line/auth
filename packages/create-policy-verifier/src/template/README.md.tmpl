@@ -1,0 +1,57 @@
+# __NAME__
+
+__DESCRIPTION__
+
+Generated from [`@provin-line/create-policy-verifier`](https://github.com/provin-line/auth/tree/main/packages/create-policy-verifier).
+It wraps [`@o3co/auth.policy-verifier.server`](https://www.npmjs.com/package/@o3co/auth.policy-verifier.server)
+and preregisters the dPLaaX attribute and rule collectors from
+[`@provin-line/policy-verifier-dplaax-module`](https://github.com/provin-line/auth/tree/main/packages/policy-verifier-dplaax-module).
+
+## Quick start
+
+```bash
+__PACKAGE_MANAGER_BIN__ install
+__PACKAGE_MANAGER_BIN__ run build
+__PACKAGE_MANAGER_BIN__ run start
+```
+
+The service listens on `http://0.0.0.0:__PORT__` by default. Override with
+`HTTP_HOSTNAME` and `HTTP_PORT`.
+
+Run the test suite:
+
+```bash
+__PACKAGE_MANAGER_BIN__ run test
+```
+
+## Customize
+
+| Where | What |
+| --- | --- |
+| `config/application.conf` | Base attribute + rule collector lists. Add deployment-specific entries to `rule.collectors[].rules`. |
+| `config/development.conf` / `config/production.conf` | Per-environment overlays merged via HOCON `withFallback`. |
+| `src/rules/` | Project-specific `RuleCollector` implementations. Register them in `src/main.mts`. |
+| `src/collectors/` | Project-specific `AttributeCollector` implementations. Same wiring. |
+
+Per dPLaaX auth spec § 2, this verifier is L1-only; Pipeline Chain
+connection authentication runs on L2 wire signing and bypasses this
+service entirely. Avoid declaring `registry.chain.peer.*` rules — the
+default test in `src/__tests__/config/configFiles.test.mts` enforces
+that pin.
+
+## Docker
+
+```bash
+make docker                # build runtime image
+make docker-compose-up     # local stack via docker-compose.yml
+```
+
+## Package manager
+
+This scaffold uses pnpm (see `packageManager` in `package.json`) because
+the dPLaaX module dep is pinned via pnpm's git-subdirectory syntax,
+which is not npm-compatible. Override at your own risk.
+
+## License
+
+[__LICENSE__](./LICENSE).

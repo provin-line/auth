@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+coverage/
+
+# Private keys — never commit
+*.pem
+
+# Generated dev/CI instances (create-app.md § 5) — never committed
+instances/

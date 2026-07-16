@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# pnpm workspace lockfile lives at repo root; service-level lockfiles are
+# a sign someone ran `pnpm install` here directly, which is a footgun.
+pnpm-lock.yaml

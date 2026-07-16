@@ -1,0 +1,13 @@
+# OAuth client registry — sample entries. Replace per deployment.
+#
+# Each top-level key is a client_id; the value is the client metadata.
+# tokenEndpointAuthMethod values follow RFC 6749 §2.3 (since @o3co/auth-provider-core 0.5.x):
+#   - "client_secret_basic" — HTTP Basic
+#   - "client_secret_post"  — form body
+#   - "none"                 — public client (PKCE required at /authorize)
+
+example-client:
+  tokenEndpointAuthMethod: "client_secret_basic"
+  clientSecret: "change-me-in-production"
+  allowedRedirectUris: []
+  allowedScopes: []

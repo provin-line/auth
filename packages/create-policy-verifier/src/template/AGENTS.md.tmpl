@@ -1,0 +1,38 @@
+# Development guidelines — __NAME__
+
+This is a generated dPLaaX policy-verifier instance. Refer to the upstream
+sources of truth before touching the wiring:
+
+- **dPLaaX auth spec** (3-layer model, L1 boundaries, ChainPeerService L2-only
+  rule): <https://github.com/provin-line/scope/tree/main/scopes/spec.dplaax/.claude/specs>
+- **`@o3co/auth.policy-verifier.server`** runtime docs: <https://github.com/o3co/auth.policy-verifier>
+- **`@provin-line/policy-verifier-dplaax-module`** attribute + rule collectors:
+  <https://github.com/provin-line/auth/tree/main/packages/policy-verifier-dplaax-module>
+
+## Where to add things
+
+| Concern | File |
+| --- | --- |
+| Per-deployment rule entries | `config/application.conf` `rule.collectors[*].rules` |
+| Per-environment overrides | `config/{development,production}.conf` |
+| Project-specific `RuleCollector` classes | `src/rules/` + register in `src/main.mts` modules |
+| Project-specific `AttributeCollector` classes | `src/collectors/` + same wiring |
+
+## Tests
+
+```bash
+__PACKAGE_MANAGER_BIN__ run test
+```
+
+The default `src/__tests__/config/configFiles.test.mts` enforces the
+ChainPeerService L2-only rule (see dPLaaX auth spec § 2). Extend it as
+your deployment's L1 boundary grows.
+
+## Regenerating
+
+To pick up newer dPLaaX or o3co framework pins, re-run
+`@provin-line/create-policy-verifier` at the newer release tag and diff the
+output against this directory. Hand-edits to deployment payload
+(`config/`, `src/rules/`, `src/collectors/`) survive a regenerate when
+re-applied; framework wiring (`src/main.mts`, `package.json` deps,
+`tsconfig.json`) is overwritten.
