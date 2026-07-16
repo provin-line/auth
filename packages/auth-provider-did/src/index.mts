@@ -30,6 +30,16 @@ export type {
 	ResolutionResult,
 	VerificationMethod,
 } from "./resolver/types.mjs";
+export {
+	type AuthContractId,
+	DOMAIN_SEPARATION_TAG,
+	type LoginTranscript,
+	parseLoginTranscript,
+	TRANSCRIPT_VERSION,
+	TranscriptError,
+	validateOwnerLogin,
+	type ValidateOwnerLoginInput,
+} from "./transcript.mjs";
 export { detectAlgorithm } from "./verifiers/detect.mjs";
 export { extractEd25519PublicKeyBytes } from "./verifiers/ed25519Utils.mjs";
 export {
