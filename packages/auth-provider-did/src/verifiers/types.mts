@@ -20,6 +20,10 @@ export interface ParsedMessage {
 	timestamp: string;
 	nonce: string;
 	audience?: string;
+	/** Signed payload's `verification_method` member, if present. Not enforced here. */
+	verificationMethod?: string;
+	/** JWS protected header's `kid` member, if present. Not enforced here. */
+	headerKid?: string;
 }
 
 export interface VerificationContext {
