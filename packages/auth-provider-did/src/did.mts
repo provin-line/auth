@@ -24,7 +24,10 @@ import {
 import { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
 import { ResolutionUnavailableError } from "./resolver/errors.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
-import { selectVerificationMethod } from "./resolver/selectMethod.mjs";
+import {
+	type RelationshipName,
+	selectVerificationMethod,
+} from "./resolver/selectMethod.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
 import type { AuthContractId } from "./transcript.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
@@ -70,7 +73,7 @@ interface EvaluationInput {
 	 */
 	keyDigest: string;
 	/** LEGACY path (the only path this handler runs today) => `"legacy"`. */
-	relationship: "authentication" | "legacy";
+	relationship: RelationshipName | "legacy";
 	/** `resolution.snapshotRef`. */
 	lifecycleStateRef: string;
 	/** `resolution.retrievedAt`. */

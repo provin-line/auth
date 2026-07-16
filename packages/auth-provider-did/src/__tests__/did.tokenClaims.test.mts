@@ -27,6 +27,8 @@ import {
 	ResolutionRejectedError,
 	ResolutionUnavailableError,
 } from "../resolver/errors.mjs";
+import { extractVerificationKey } from "../resolver/extractKey.mjs";
+import { selectVerificationMethod } from "../resolver/selectMethod.mjs";
 import type {
 	DidDocument,
 	DidDocumentResolver,
@@ -93,7 +95,7 @@ const methodId = "did:key:z6MkClaims#key-1";
  */
 async function buildSignedRequest(
 	did: string,
-): Promise<{ ctx: GrantContext; resolver: DidDocumentResolver }> {
+): Promise<{ ctx: GrantContext; resolver: DidDocumentResolver; didDoc: DidDocument }> {
 	const privateKey = ed.utils.randomSecretKey();
 	const publicKey = await ed.getPublicKeyAsync(privateKey);
 	const x = Buffer.from(publicKey).toString("base64url");
@@ -138,6 +140,7 @@ async function buildSignedRequest(
 			authenticatedClient: null,
 		} as GrantContext,
 		resolver,
+		didDoc,
 	};
 }
 
@@ -185,6 +188,43 @@ describe("createDidGrant — token claims (Task 9)", () => {
 
 		expect(payload.lifecycle_state_ref).toBe(resolved.snapshotRef);
 		expect(payload.did_document_snapshot).toBe(resolved.digest);
+	});
+
+	// Reviewer finding A (Task 9 follow-up): `did.mts` computes `keyDigest`
+	// from a SECOND `selectVerificationMethod(didDocument, { did })` call,
+	// separate from the one `extractVerificationKey` runs internally to
+	// produce `resolvedKey.id` (-> the `verification_method` claim). Both
+	// calls are pure functions of the same (doc, did) pair, so they are
+	// structurally guaranteed to agree today — but that guarantee had no
+	// test. This test guards it two ways: (1) unit-level — call both
+	// selection paths directly, the same way `did.mts` does, and assert
+	// they resolve to the identical method id; (2) JWT-level — decode the
+	// minted token and assert `verification_method` is exactly that known
+	// id, for a document with a single controller-matched method. Together
+	// these confirm keyDigest and verification_method describe the SAME
+	// selected method (the two selectVerificationMethod calls must agree).
+	it("guards that keyDigest's selectVerificationMethod call and extractVerificationKey's internal call agree on the same method id", async () => {
+		const did = "did:key:z6MkCrossCall";
+		const { ctx, resolver, didDoc } = await buildSignedRequest(did);
+
+		// Unit-level: exercise both selection paths did.mts exercises
+		// (extractVerificationKey's internal call, and the standalone
+		// second call used for keyDigest) directly against the same
+		// (doc, did) pair, and assert they select the identical method.
+		const resolvedKey = await extractVerificationKey(didDoc, did);
+		const selected = selectVerificationMethod(didDoc, { did });
+		expect(selected.id).toBe(resolvedKey.id);
+		expect(selected.id).toBe(methodId);
+
+		// JWT-level: the minted verification_method claim must be exactly
+		// that same known id — the observable half of the guarantee.
+		const handler = createDidGrant(mockDeps, { resolver });
+		const { result } = await handler.handle(ctx);
+
+		expect(result.status).toBe(200);
+		if (!("tokens" in result)) throw new Error("expected a token response");
+		const payload = decodeJwt(result.tokens.access_token);
+		expect(payload.verification_method).toBe(methodId);
 	});
 });
 
@@ -260,5 +300,55 @@ describe("createDidGrant — resolver failure mapping (Task 9)", () => {
 		).not.toBe("error" in rejectedResult.result && rejectedResult.result.error);
 		expect("tokens" in unavailableResult.result).toBe(false);
 		expect("tokens" in rejectedResult.result).toBe(false);
+	});
+});
+
+describe("createDidGrant — select-step failure mapping (Task 9 reviewer fix)", () => {
+	// Reviewer finding C (Task 9 follow-up): the select-step catch in
+	// did.mts (around the `extractVerificationKey` / `selectVerificationMethod`
+	// calls) maps a thrown `MethodSelectionError` to 400 `invalid_grant` via
+	// the shared `mapResolutionFailure`, but until now no test drove a
+	// `MethodSelectionError` through THAT specific catch site — the earlier
+	// resolver-failure-mapping tests above only cover errors thrown by
+	// `resolver.resolve()` itself (an earlier step). This test resolves
+	// successfully but returns a DID Document with a duplicate
+	// verificationMethod id, which `selectVerificationMethod` rejects
+	// unconditionally (`"duplicate-method-id"`) before either call site can
+	// select a method — reaching the select-step catch specifically.
+	it("maps a MethodSelectionError (duplicate-method-id) from the select step to 400 invalid_grant and mints no token", async () => {
+		const did = "did:key:z6MkDuplicateMethod";
+		const { ctx } = await buildSignedRequest(did);
+
+		const dupMethodId = `${did}#key-1`;
+		const duplicateDoc: DidDocument = {
+			id: did,
+			verificationMethod: [
+				{
+					id: dupMethodId,
+					type: "JsonWebKey2020",
+					controller: did,
+					publicKeyJwk: { kty: "OKP", crv: "Ed25519", x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+				},
+				{
+					id: dupMethodId,
+					type: "JsonWebKey2020",
+					controller: did,
+					publicKeyJwk: { kty: "OKP", crv: "Ed25519", x: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
+				},
+			],
+		};
+		const resolver: DidDocumentResolver = {
+			async resolve(d: string): Promise<ResolutionResult> {
+				if (d === did) return makeMockResolution(duplicateDoc, did);
+				throw new ResolutionRejectedError("did-not-found", `DID not found: ${d}`);
+			},
+		};
+		const handler = createDidGrant(mockDeps, { resolver });
+
+		const { result } = await handler.handle(ctx);
+
+		expect(result.status).toBe(400);
+		expect("error" in result && result.error).toBe("invalid_grant");
+		expect("tokens" in result).toBe(false);
 	});
 });
