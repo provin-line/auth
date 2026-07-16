@@ -44,7 +44,7 @@ async function createSignedJws(
 
 	return {
 		jws,
-		resolvedKey: { format: "jwk", key: jwk },
+		resolvedKey: { format: "jwk", key: jwk, id: `${overrides?.didOverride ?? did}#key-1` },
 	};
 }
 
@@ -113,7 +113,7 @@ describe("JwsVerifier", () => {
 
 	it("returns error when jws field is missing from body", async () => {
 		const verifier = new JwsVerifier("EdDSA");
-		const resolvedKey: ExtractedKey = { format: "jwk", key: { kty: "OKP" } };
+		const resolvedKey: ExtractedKey = { format: "jwk", key: { kty: "OKP" }, id: `${did}#key-1` };
 
 		const result = await verifier.verify({
 			body: {},
@@ -134,6 +134,7 @@ describe("JwsVerifier", () => {
 		const resolvedKey: ExtractedKey = {
 			format: "multibase",
 			key: "z6MkSomeKey",
+			id: `${did}#key-1`,
 		};
 
 		const result = await verifier.verify({

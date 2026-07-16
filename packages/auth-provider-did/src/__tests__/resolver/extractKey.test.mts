@@ -15,6 +15,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { extractVerificationKey } from "../../resolver/extractKey.mjs";
+import type { MethodSelectionError } from "../../resolver/selectMethod.mjs";
 import type { DidDocument, JsonWebKey } from "../../resolver/types.mjs";
 
 const did = "did:key:z6MkTest";
@@ -41,12 +42,18 @@ describe("extractVerificationKey", () => {
 		const result = await extractVerificationKey(doc, did);
 
 		expect(result.format).toBe("jwk");
+		expect(result.id).toBe(`${did}#key-1`);
 		if (result.format === "jwk") {
 			expect(result.key).toEqual(jwk);
 		}
 	});
 
-	it("extracts publicKeyJwk from matching verificationMethod (id prefix match)", async () => {
+	it("throws method-not-found when id has the DID prefix but controller differs — LEGACY path is controller-only, no id-prefix fallback (fail-closed)", async () => {
+		// The old implementation matched on `vm.controller === did || vm.id.startsWith(did + "#")`,
+		// so an id-prefix match with a mismatched controller used to succeed. The LEGACY branch of
+		// `selectVerificationMethod` this now delegates to only accepts controller-matched
+		// candidates (see packages/auth-provider-did/src/resolver/selectMethod.mts) — that
+		// fallback is intentionally gone, not merely reordered.
 		const jwk: JsonWebKey = { kty: "EC", crv: "P-256", x: "abc", y: "def" };
 		const doc: DidDocument = {
 			id: did,
@@ -60,12 +67,9 @@ describe("extractVerificationKey", () => {
 			],
 		};
 
-		const result = await extractVerificationKey(doc, did);
-
-		expect(result.format).toBe("jwk");
-		if (result.format === "jwk") {
-			expect(result.key).toEqual(jwk);
-		}
+		await expect(extractVerificationKey(doc, did)).rejects.toMatchObject({
+			reason: "method-not-found",
+		} satisfies Partial<MethodSelectionError>);
 	});
 
 	it("extracts publicKeyMultibase from matching verificationMethod", async () => {
@@ -85,6 +89,7 @@ describe("extractVerificationKey", () => {
 		const result = await extractVerificationKey(doc, did);
 
 		expect(result.format).toBe("multibase");
+		expect(result.id).toBe(`${did}#key-1`);
 		if (result.format === "multibase") {
 			expect(result.key).toBe(multibaseKey);
 		}

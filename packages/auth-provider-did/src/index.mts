@@ -17,6 +17,12 @@ export { createDidGrant, type DidGrantOptions } from "./did.mjs";
 export { type DidModuleOptions, didConfigSchema, oauthDidModule } from "./module.mjs";
 export { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/errors.mjs";
 export { type ExtractedKey, extractVerificationKey } from "./resolver/extractKey.mjs";
+export {
+	MethodSelectionError,
+	type RelationshipName,
+	type SelectedMethod,
+	selectVerificationMethod,
+} from "./resolver/selectMethod.mjs";
 export { StrictJsonError, strictJsonParse } from "./resolver/strictJson.mjs";
 export type {
 	DidDocument,

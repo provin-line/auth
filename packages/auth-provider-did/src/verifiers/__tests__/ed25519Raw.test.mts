@@ -34,6 +34,7 @@ async function createSignedRequest(
 	const resolvedKey: ExtractedKey = {
 		format: "jwk",
 		key: { kty: "OKP", crv: "Ed25519", x },
+		id: `${did}#key-1`,
 	};
 
 	const message = JSON.stringify({
@@ -140,7 +141,11 @@ describe("Ed25519RawVerifier", () => {
 		const verifier = new Ed25519RawVerifier();
 		const publicKeyBytes = await ed.getPublicKeyAsync(privateKey);
 		const x = Buffer.from(publicKeyBytes).toString("base64url");
-		const resolvedKey: ExtractedKey = { format: "jwk", key: { kty: "OKP", crv: "Ed25519", x } };
+		const resolvedKey: ExtractedKey = {
+			format: "jwk",
+			key: { kty: "OKP", crv: "Ed25519", x },
+			id: `${did}#key-1`,
+		};
 
 		const result = await verifier.verify({
 			body: { signature: "dW51c2Vk", message: "not-json" },
