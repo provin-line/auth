@@ -17,6 +17,7 @@
 export { ResolutionRejectedError, ResolutionUnavailableError } from "./errors.mjs";
 export type { ExtractedKey } from "./extractKey.mjs";
 export { extractVerificationKey } from "./extractKey.mjs";
+export { StrictJsonError, strictJsonParse } from "./strictJson.mjs";
 export type {
 	DidDocument,
 	DidDocumentResolver,

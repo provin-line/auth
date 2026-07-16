@@ -75,7 +75,7 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
     }
 
     it("returns canonical bytes, digest, origin, snapshot and freshness refs", async () => {
-        const body = `{"id":"did:dplaax:u:alice","verificationMethod":[]}`;
+        const body = `{"id":"${did}","verificationMethod":[]}`;
         stubFetchOnce(200, body);
 
         const r = await resolver.resolve(did);
@@ -86,7 +86,7 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
         expect(r.finalOrigin).toBe("https://registry.example");
         expect(r.snapshotRef).toBe(`registry:${r.finalOrigin}#${r.digest}`);
         expect(Date.parse(r.retrievedAt)).not.toBeNaN();
-        expect(r.document.id).toBe("did:dplaax:u:alice");
+        expect(r.document.id).toBe(did);
     });
 
     it("preserves a leading UTF-8 BOM in canonicalBytes/digest (exact wire bytes, not text() round-trip)", async () => {
@@ -96,7 +96,7 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
         // registry served. canonicalBytes/digest must be computed over the
         // raw wire bytes (read via arrayBuffer()) to satisfy the
         // ResolutionResult contract ("the exact bytes the registry served").
-        const body = `{"id":"did:dplaax:u:alice","verificationMethod":[]}`;
+        const body = `{"id":"${did}","verificationMethod":[]}`;
         const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
         const bodyBytes = new TextEncoder().encode(body);
         const wireBytes = new Uint8Array(bom.length + bodyBytes.length);
@@ -114,10 +114,10 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
         expect(r.digest).toBe(expectedDigest);
 
         // The parsed document is unaffected — TextDecoder().decode() (used
-        // to derive the JSON.parse input from canonicalBytes) also strips a
-        // leading BOM by default, so parsing still succeeds; only the
-        // provenance bytes must stay exact.
-        expect(r.document.id).toBe("did:dplaax:u:alice");
+        // to derive the strictJsonParse input from canonicalBytes) also
+        // strips a leading BOM by default, so parsing still succeeds; only
+        // the provenance bytes must stay exact.
+        expect(r.document.id).toBe(did);
     });
 
     it("maps HTTP >=500 to ResolutionUnavailableError with reason registry-5xx", async () => {
@@ -146,5 +146,39 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
 
         await expect(resolver.resolve(did)).rejects.toBeInstanceOf(ResolutionUnavailableError);
         await expect(resolver.resolve(did)).rejects.toMatchObject({ reason: "network" });
+    });
+
+    // The brief's illustrative literals ("did:dplaax:u:alice" / "did:dplaax:u:mallory")
+    // are 4-segment and fail parseDplaaxDid's grammar before reaching the code
+    // under test (see the `did` const comment above) — adapted to 5-segment
+    // DIDs whose registry segment matches registryBaseUrl's host, mismatch
+    // semantics unchanged.
+    it("rejects a document whose id differs from the requested DID (byte-exact)", async () => {
+        const requestedDid = "did:dplaax:registry.example:u:alice";
+        stubFetchOnce(200, `{"id":"did:dplaax:registry.example:u:mallory","verificationMethod":[]}`);
+
+        await expect(resolver.resolve(requestedDid)).rejects.toThrow(ResolutionRejectedError);
+        await expect(resolver.resolve(requestedDid)).rejects.toMatchObject({ reason: "id-mismatch" });
+    });
+
+    it("rejects a strict-JSON-invalid document body as malformed-document", async () => {
+        stubFetchOnce(200, `{"id":"${did}","id":"dup"}`);
+
+        await expect(resolver.resolve(did)).rejects.toBeInstanceOf(ResolutionRejectedError);
+        await expect(resolver.resolve(did)).rejects.toMatchObject({ reason: "malformed-document" });
+    });
+
+    it("rejects a document body that is not a JSON object as malformed-document", async () => {
+        stubFetchOnce(200, `["not", "an", "object"]`);
+
+        await expect(resolver.resolve(did)).rejects.toBeInstanceOf(ResolutionRejectedError);
+        await expect(resolver.resolve(did)).rejects.toMatchObject({ reason: "malformed-document" });
+    });
+
+    it("rejects a document with a non-string id as malformed-document", async () => {
+        stubFetchOnce(200, `{"id":42,"verificationMethod":[]}`);
+
+        await expect(resolver.resolve(did)).rejects.toBeInstanceOf(ResolutionRejectedError);
+        await expect(resolver.resolve(did)).rejects.toMatchObject({ reason: "malformed-document" });
     });
 });

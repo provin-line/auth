@@ -20,6 +20,8 @@ import {
     ResolutionRejectedError,
     type ResolutionResult,
     ResolutionUnavailableError,
+    StrictJsonError,
+    strictJsonParse,
 } from "@provin-line/auth-provider-did";
 import { parseDplaaxDid, requireOwner } from "@provin-line/did-dplaax";
 
@@ -146,16 +148,57 @@ export class DplaaxDidResolver implements DidDocumentResolver {
         // Fetch, text() strips a leading UTF-8 BOM and replaces invalid
         // UTF-8 with U+FFFD before returning a string, so re-encoding that
         // string can silently diverge from the wire bytes. arrayBuffer()
-        // has no such normalization. The JSON.parse input is decoded from
-        // these same canonicalBytes below, so `document` and the integrity
-        // fields can never drift apart (parsing goes strict in Task 2, but
-        // this invariant holds regardless of parser).
+        // has no such normalization. strictJsonParse's input is decoded
+        // from these same canonicalBytes below, so `document` and the
+        // integrity fields can never drift apart.
         const canonicalBytes = new Uint8Array(await res.arrayBuffer());
         const digestBuffer = await crypto.subtle.digest("SHA-256", canonicalBytes);
         const digest = `sha256:${Buffer.from(digestBuffer).toString("hex")}`;
         const retrievedAt = new Date().toISOString();
         const text = new TextDecoder().decode(canonicalBytes);
-        const document = JSON.parse(text) as DidDocument;
+
+        // Strict decode: `JSON.parse` silently keeps the last of a duplicate
+        // key and ignores trailing data, either of which could smuggle a
+        // tampered/ambiguous document past this resolver. Both are
+        // definitive-rejection outcomes (`ResolutionRejectedError`), not
+        // transient ones — the registry served bytes that were reached, just
+        // not a valid document.
+        let parsedBody: unknown;
+        try {
+            parsedBody = strictJsonParse(text);
+        } catch (err) {
+            if (err instanceof StrictJsonError) {
+                throw new ResolutionRejectedError(
+                    "malformed-document",
+                    `DID resolution failed for "${did}": malformed document (${err.reason}: ${err.message})`,
+                );
+            }
+            throw err;
+        }
+
+        if (
+            typeof parsedBody !== "object" ||
+            parsedBody === null ||
+            Array.isArray(parsedBody) ||
+            typeof (parsedBody as Record<string, unknown>).id !== "string"
+        ) {
+            throw new ResolutionRejectedError(
+                "malformed-document",
+                `DID resolution failed for "${did}": document is not an object with a string "id"`,
+            );
+        }
+        const document = parsedBody as DidDocument;
+
+        // Byte-exact comparison — no normalization (rule auth.resolve.id-equality).
+        // A document whose `id` doesn't match the requested DID is a
+        // definitive rejection: either the registry served the wrong
+        // document, or something upstream tampered with routing/content.
+        if (document.id !== did) {
+            throw new ResolutionRejectedError(
+                "id-mismatch",
+                `DID resolution failed for "${did}": document id "${document.id}" does not match requested DID`,
+            );
+        }
 
         // `res.url` reflects the actual connection fetch() served the bytes
         // from (e.g. after a redirect); fall back to the requested URL's
