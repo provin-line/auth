@@ -61,4 +61,18 @@ describe("strictJsonParse", () => {
 		const text = `{"id":"d","n":1.5e2,"neg":-3,"b":true,"nil":null,"arr":[1,"two",false],"esc":"a\\n\\tb\\"c"}`;
 		expect(strictJsonParse(text)).toEqual(JSON.parse(text));
 	});
+
+	it("treats \"__proto__\" as an own data property, not a prototype reassignment", () => {
+		const text = `{"__proto__":{"polluted":true},"id":"safe"}`;
+		const parsed = strictJsonParse(text);
+
+		expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+		expect((parsed as Record<string, unknown>).polluted).toBeUndefined();
+
+		const names = Object.getOwnPropertyNames(parsed);
+		expect(names).toContain("__proto__");
+		expect(names).toContain("id");
+
+		expect(JSON.stringify(parsed)).toEqual(JSON.stringify(JSON.parse(text)));
+	});
 });

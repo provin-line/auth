@@ -114,7 +114,21 @@ function parseDocument(text: string): unknown {
 			seenKeys.add(key);
 			skipWhitespace();
 			expect(":");
-			result[key] = parseValue();
+			// Use defineProperty rather than `result[key] = value`: a plain
+			// bracket assignment for key `"__proto__"` does not create an own
+			// property — it reassigns `result`'s prototype (`[[Set]]`
+			// semantics), which both hides the member from
+			// `Object.getOwnPropertyNames`/`JSON.stringify` (violating the
+			// unknown-members-are-preserved contract) and can expose
+			// attacker-controlled properties through the injected prototype.
+			// `defineProperty` always creates an own data property, matching
+			// `JSON.parse`'s (spec-mandated CreateDataProperty) behavior.
+			Object.defineProperty(result, key, {
+				value: parseValue(),
+				writable: true,
+				enumerable: true,
+				configurable: true,
+			});
 			skipWhitespace();
 			if (text[i] === ",") {
 				i++;
