@@ -70,7 +70,29 @@ oauth {
       enabled = ${?OAUTH_GRANTS_DID_ENABLED}
       supportedAlgorithms = ["ed25519_raw"]
       messageMaxAgeSec = 300
-      allowedAudiences = []
+      # Audience allowlist for the DID grant — required, non-empty (fail
+      # closed; an empty/absent list used to mean "accept any audience",
+      # rule audit-5). Replace with your real audience(s) before deploying
+      # past localhost.
+      allowedAudiences = ["http://localhost:3000"]
+      allowedAudiences = ${?OAUTH_GRANTS_DID_ALLOWED_AUDIENCES}
+      # Upper bound, in seconds, on oauth.accessToken.expiresIn (above) for
+      # this grant — the P0 revocation-latency bound the token lifetime must
+      # stay within (rule auth.token.lifetime-bound). Required, no default;
+      # keep >= oauth.accessToken.expiresIn or boot fails closed.
+      revocationLatencyBoundSec = 3600
+      revocationLatencyBoundSec = ${?OAUTH_GRANTS_DID_REVOCATION_LATENCY_BOUND_SEC}
+      # Hard expiry cap for LEGACY_DID_LOGIN@1 tokens (rule
+      # auth.legacy.did-login). The schema's own default is 900s, but this
+      # scaffold's oauth.accessToken.expiresIn (above) is 3600s, so it is
+      # set explicitly here too — otherwise the default LEGACY contract
+      # below fails this same bound at boot.
+      legacyMaxTtlSec = 3600
+      legacyMaxTtlSec = ${?OAUTH_GRANTS_DID_LEGACY_MAX_TTL_SEC}
+      # Selecting an OWNER_* authContract requires a ratified owner-migration
+      # contract (auth.migration.enable-gate); default is LEGACY_DID_LOGIN@1.
+      # authContract = "OWNER_AUTHENTICATION_LOGIN@1"
+      # ownerMigrationRatified = true
     }
   }
 }

@@ -129,6 +129,9 @@ importers:
 
   packages/create-auth-provider:
     devDependencies:
+      '@provin-line/auth-provider-did':
+        specifier: workspace:*
+        version: link:../auth-provider-did
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
