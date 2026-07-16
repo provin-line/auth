@@ -46,7 +46,7 @@ const mockConfig = {
 			session: { enabled: true },
 			authorization_code: { enabled: true },
 			refresh_token: { enabled: true },
-			did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
+			did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
 		},
 	},
 } as unknown as GrantDependencies["config"];
@@ -344,7 +344,7 @@ describe("createDidGrant", () => {
 						session: { enabled: true },
 						authorization_code: { enabled: true },
 						refresh_token: { enabled: true },
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -388,7 +388,7 @@ describe("createDidGrant", () => {
 			const noDIDConfig = {
 				oauth: {
 					accessToken: { expiresIn: 3600 },
-					grants: { did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600 } },
+					grants: { did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600 } },
 				},
 			} as unknown as GrantDependencies["config"];
 
@@ -409,7 +409,7 @@ describe("createDidGrant", () => {
 			const partialConfig = {
 				oauth: {
 					accessToken: { expiresIn: 3600 },
-					grants: { did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true } },
+					grants: { did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true } },
 				},
 			} as unknown as GrantDependencies["config"];
 
@@ -493,7 +493,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -514,7 +514,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -535,7 +535,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw", "ed25519_jws"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw", "ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -569,7 +569,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -594,7 +594,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -627,7 +627,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -667,7 +667,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_prehash"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_prehash"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -718,7 +718,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -780,7 +780,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["custom_alg"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["custom_alg"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -822,7 +822,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -861,6 +861,9 @@ describe("createDidGrant", () => {
 			} as unknown as GrantDependencies["config"];
 		}
 
+		// Companion coverage for the fail-closed construction guard below: a
+		// valid non-empty allowedAudiences still constructs successfully AND
+		// still enforces the check both ways (allowed → 200, disallowed → 400).
 		it("returns 200 when audience is in the allowlist", async () => {
 			const config = makeConfigWithAllowedAudiences([
 				"https://api.example.com",
@@ -920,16 +923,63 @@ describe("createDidGrant", () => {
 			);
 		});
 
-		it("accepts any audience when allowedAudiences is empty (backward compat)", async () => {
+		// audit-5: an empty/absent allowlist used to mean "accept any audience"
+		// (fail-open) at the `createDidGrant` runtime layer — the exact
+		// vulnerability the original audit finding named, surviving here even
+		// after Task 8 closed it at the `didConfigSchema` parse layer, because a
+		// caller that hand-builds a config and skips `didConfigSchema.parse`
+		// (as these tests do) never goes through that schema check. These two
+		// tests replace the old "backward compat" test that asserted 200 for an
+		// empty allowlist — that assertion pinned the vulnerability, so it must
+		// fail now, not pass. Mirrors the `revocationLatencyBoundSec` boot-time
+		// assert in `did.mts` (fail closed, no default, throws at construction).
+		it("throws at construction when allowedAudiences is an empty array (fail closed, audit-5)", () => {
 			const config = makeConfigWithAllowedAudiences([]);
-			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkAudAny", {
-				audience: "https://anything.example.com",
-			});
-			const handler = createDidGrant({ config, keyStore: mockDeps.keyStore }, { resolver });
+			const resolver: DidDocumentResolver = {
+				async resolve(): Promise<ResolutionResult> {
+					throw new Error(
+						"should not be called — construction must throw before any request is handled",
+					);
+				},
+			};
 
-			const { result } = await handler.handle(ctx);
+			expect(() =>
+				createDidGrant({ config, keyStore: mockDeps.keyStore }, { resolver }),
+			).toThrow(/allowedAudiences/);
+		});
 
-			expect(result.status).toBe(200);
+		it("throws at construction when allowedAudiences is absent (fail closed, audit-5)", () => {
+			const config = {
+				oauth: {
+					jwt: { secret: "test-secret" },
+					accessToken: { expiresIn: 3600 },
+					refreshToken: { expiresIn: 86400 },
+					grants: {
+						session: { enabled: true },
+						authorization_code: { enabled: true },
+						refresh_token: { enabled: true },
+						did: {
+							revocationLatencyBoundSec: 3600,
+							legacyMaxTtlSec: 3600,
+							enabled: true,
+							algorithm: "ed25519_raw",
+							messageMaxAgeSec: 300,
+							// allowedAudiences intentionally omitted
+						},
+					},
+				},
+			} as unknown as GrantDependencies["config"];
+			const resolver: DidDocumentResolver = {
+				async resolve(): Promise<ResolutionResult> {
+					throw new Error(
+						"should not be called — construction must throw before any request is handled",
+					);
+				},
+			};
+
+			expect(() =>
+				createDidGrant({ config, keyStore: mockDeps.keyStore }, { resolver }),
+			).toThrow(/allowedAudiences/);
 		});
 
 		it("returns 200 when no audience is provided even with allowedAudiences configured", async () => {

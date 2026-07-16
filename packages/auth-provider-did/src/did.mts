@@ -53,6 +53,13 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 		.did;
 	const messageMaxAgeMs =
 		((didConfig?.messageMaxAgeSec as number | undefined) ?? DEFAULT_MESSAGE_MAX_AGE_SEC) * 1000;
+	// NO fail-open default — an empty/absent allowlist used to mean "accept
+	// any audience" (the original audit finding). `didConfigSchema` already
+	// rejects this at parse time (Task 8), but a caller that hand-builds a
+	// config and skips `didConfigSchema.parse` bypasses that check entirely;
+	// the guard below closes the same hole here, mirroring the
+	// `revocationLatencyBoundSec` boot-time assert below (fail closed, no
+	// default, rule audit-5).
 	const allowedAudiences = (didConfig?.allowedAudiences as string[] | undefined) ?? [];
 
 	// `config.oauth.accessToken.expiresIn` is a plain count of SECONDS, not a
@@ -77,6 +84,11 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 	if (revocationLatencyBoundSec === undefined) {
 		throw new Error(
 			"did grant config: revocationLatencyBoundSec is required (rule auth.token.lifetime-bound) — fail closed, no default",
+		);
+	}
+	if (allowedAudiences.length === 0) {
+		throw new Error(
+			"did grant config: allowedAudiences must be a non-empty list; an empty allowlist would accept any audience (fail-closed, audit-5)",
 		);
 	}
 	if (expiresIn > revocationLatencyBoundSec) {
@@ -287,7 +299,11 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				};
 			}
 
-			// 9. Validate audience against allowlist (empty allowlist = any audience accepted)
+			// 9. Validate audience against allowlist. `allowedAudiences` is
+			// guaranteed non-empty here — the boot-time guard above throws
+			// otherwise (audit-5) — so the only remaining case that skips this
+			// check is a request that carries no audience claim at all
+			// (unchanged, out of scope for audit-5).
 			// Note: the nonce is already consumed at this point (step 8), so a
 			// request that fails the audience check still burns its nonce — a
 			// deliberate change from the pre-NonceStore code, which stored the
@@ -295,7 +311,7 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			// into one call placed at the old check position to preserve error
 			// precedence (replay is reported before audience); the trade-off is
 			// audience-rejected requests can no longer retry with the same nonce.
-			if (verification.audience && allowedAudiences.length > 0) {
+			if (verification.audience) {
 				if (!allowedAudiences.includes(verification.audience)) {
 					return {
 						result: {
