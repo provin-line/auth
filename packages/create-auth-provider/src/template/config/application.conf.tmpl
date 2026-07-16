@@ -43,7 +43,15 @@ oauth {
     }
   }
   accessToken {
-    expiresIn = 3600
+    # Secure-by-default: 900s (15 min). Matches oauth.grants.did's own
+    # legacyMaxTtlSec default (900s, see module.mts) and keeps the
+    # LEGACY_DID_LOGIN@1 contract's hard-short-expiry intent (spec
+    # auth.legacy.did-login) satisfied out of the box. Deployers who accept
+    # a longer revocation-latency window can raise this via
+    # OAUTH_ACCESS_TOKEN_EXPIRES_IN — but must raise
+    # oauth.grants.did.revocationLatencyBoundSec / legacyMaxTtlSec (below)
+    # in lockstep, or boot fails closed.
+    expiresIn = 900
     expiresIn = ${?OAUTH_ACCESS_TOKEN_EXPIRES_IN}
   }
   refreshToken {
@@ -79,15 +87,21 @@ oauth {
       # Upper bound, in seconds, on oauth.accessToken.expiresIn (above) for
       # this grant — the P0 revocation-latency bound the token lifetime must
       # stay within (rule auth.token.lifetime-bound). Required, no default;
-      # keep >= oauth.accessToken.expiresIn or boot fails closed.
-      revocationLatencyBoundSec = 3600
+      # keep >= oauth.accessToken.expiresIn or boot fails closed. Secure
+      # default: a tight 900s (15 min) bound, matching accessToken.expiresIn
+      # above — deployers who accept slower revocation can raise this via
+      # OAUTH_GRANTS_DID_REVOCATION_LATENCY_BOUND_SEC.
+      revocationLatencyBoundSec = 900
       revocationLatencyBoundSec = ${?OAUTH_GRANTS_DID_REVOCATION_LATENCY_BOUND_SEC}
       # Hard expiry cap for LEGACY_DID_LOGIN@1 tokens (rule
-      # auth.legacy.did-login). The schema's own default is 900s, but this
-      # scaffold's oauth.accessToken.expiresIn (above) is 3600s, so it is
-      # set explicitly here too — otherwise the default LEGACY contract
-      # below fails this same bound at boot.
-      legacyMaxTtlSec = 3600
+      # auth.legacy.did-login). The schema's own default is 900s; this
+      # scaffold's oauth.accessToken.expiresIn (above) is also 900s now, so
+      # the two agree out of the box — set explicitly here anyway (rather
+      # than relying on the schema default) so it stays visible and
+      # independently overridable via OAUTH_GRANTS_DID_LEGACY_MAX_TTL_SEC
+      # if a deployer raises accessToken.expiresIn without wanting to loosen
+      # this cap in lockstep.
+      legacyMaxTtlSec = 900
       legacyMaxTtlSec = ${?OAUTH_GRANTS_DID_LEGACY_MAX_TTL_SEC}
       # Selecting an OWNER_* authContract requires a ratified owner-migration
       # contract (auth.migration.enable-gate); default is LEGACY_DID_LOGIN@1.

@@ -34,6 +34,7 @@
 	},
 	"dependencies": {},
 	"devDependencies": {
+		"@o3co/auth-provider-core": "^0.5.3",
 		"@provin-line/auth-provider-did": "workspace:*",
 		"@types/node": "^25.6.0",
 		"@vitest/coverage-v8": "^4.1.4",
