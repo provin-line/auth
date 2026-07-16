@@ -24,6 +24,7 @@ import {
 import { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
+import type { AuthContractId } from "./transcript.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
 import { createDefaultVerifierRegistry } from "./verifiers/factory.mjs";
 import type { VerifierRegistry } from "./verifiers/registry.mjs";
@@ -41,12 +42,55 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 
 	const DEFAULT_MESSAGE_MAX_AGE_SEC = 300;
 	const DEFAULT_ALGORITHM = "ed25519_raw";
+	// Mirror didConfigSchema's per-field zod defaults (module.mts) — these
+	// fallbacks only fire for callers that construct a config object by hand
+	// and skip `didConfigSchema.parse` (unit tests; `oauthDidModule`'s own
+	// boot path always runs the parsed/defaulted config through here).
+	const DEFAULT_AUTH_CONTRACT: AuthContractId = "LEGACY_DID_LOGIN@1";
+	const DEFAULT_LEGACY_MAX_TTL_SEC = 900;
 
 	const didConfig = (config.oauth.grants as Record<string, Record<string, unknown> | undefined>)
 		.did;
 	const messageMaxAgeMs =
 		((didConfig?.messageMaxAgeSec as number | undefined) ?? DEFAULT_MESSAGE_MAX_AGE_SEC) * 1000;
 	const allowedAudiences = (didConfig?.allowedAudiences as string[] | undefined) ?? [];
+
+	// `config.oauth.accessToken.expiresIn` is a plain count of SECONDS, not a
+	// duration string or ms value: `@o3co/auth-provider-core`'s `generateToken`
+	// computes `exp = Math.floor(Date.now() / 1000) + expiresIn` and puts it
+	// straight into the JWT's numeric `exp` claim (seconds since epoch) — see
+	// `generateToken` in `@o3co/auth-provider-core/dist/grants/token.mjs`.
+	// `revocationLatencyBoundSec` / `legacyMaxTtlSec` are seconds too, so the
+	// boot-time bound checks below compare like units with no conversion.
+	const expiresIn = config.oauth.accessToken.expiresIn;
+	const authContract =
+		(didConfig?.authContract as AuthContractId | undefined) ?? DEFAULT_AUTH_CONTRACT;
+	const legacyMaxTtlSec =
+		(didConfig?.legacyMaxTtlSec as number | undefined) ?? DEFAULT_LEGACY_MAX_TTL_SEC;
+	// NO default — didConfigSchema requires this field explicitly (fail
+	// closed, rule auth.token.lifetime-bound). A config that reached this
+	// point via `didConfigSchema.parse` always has it; a hand-built config
+	// that omits it fails the same way rather than silently skipping the
+	// bound check below.
+	const revocationLatencyBoundSec = didConfig?.revocationLatencyBoundSec as number | undefined;
+
+	if (revocationLatencyBoundSec === undefined) {
+		throw new Error(
+			"did grant config: revocationLatencyBoundSec is required (rule auth.token.lifetime-bound) — fail closed, no default",
+		);
+	}
+	if (expiresIn > revocationLatencyBoundSec) {
+		throw new Error(
+			`did grant config: oauth.accessToken.expiresIn (${expiresIn}s) exceeds revocationLatencyBoundSec ` +
+				`(${revocationLatencyBoundSec}s) — rule auth.token.lifetime-bound`,
+		);
+	}
+	if (authContract === "LEGACY_DID_LOGIN@1" && expiresIn > legacyMaxTtlSec) {
+		throw new Error(
+			`did grant config: oauth.accessToken.expiresIn (${expiresIn}s) exceeds legacyMaxTtlSec ` +
+				`(${legacyMaxTtlSec}s) for authContract "LEGACY_DID_LOGIN@1" — rule auth.legacy.did-login`,
+		);
+	}
 
 	const verifierRegistry = options.verifierRegistry ?? createDefaultVerifierRegistry();
 
@@ -271,7 +315,7 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 						accessToken: await generateToken(
 							{},
 							{
-								expiresIn: config.oauth.accessToken.expiresIn,
+								expiresIn,
 								keyStore,
 								issuer,
 								subject: verification.subject,

@@ -46,7 +46,7 @@ const mockConfig = {
 			session: { enabled: true },
 			authorization_code: { enabled: true },
 			refresh_token: { enabled: true },
-			did: { enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
+			did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
 		},
 	},
 } as unknown as GrantDependencies["config"];
@@ -344,7 +344,7 @@ describe("createDidGrant", () => {
 						session: { enabled: true },
 						authorization_code: { enabled: true },
 						refresh_token: { enabled: true },
-						did: { enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -380,10 +380,15 @@ describe("createDidGrant", () => {
 
 	describe("config defaults", () => {
 		it("uses default messageMaxAgeSec and algorithm when did config is absent", async () => {
+			// Task 8: `revocationLatencyBoundSec` has no JS-level fallback (fail
+			// closed — see did.mts's boot assert), so a config that omits the
+			// `did` slice entirely can no longer boot at all. This still tests
+			// what it always tested — messageMaxAgeSec/algorithm defaulting —
+			// by supplying only the two now-mandatory bound fields.
 			const noDIDConfig = {
 				oauth: {
 					accessToken: { expiresIn: 3600 },
-					grants: {},
+					grants: { did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600 } },
 				},
 			} as unknown as GrantDependencies["config"];
 
@@ -404,7 +409,7 @@ describe("createDidGrant", () => {
 			const partialConfig = {
 				oauth: {
 					accessToken: { expiresIn: 3600 },
-					grants: { did: { enabled: true } },
+					grants: { did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true } },
 				},
 			} as unknown as GrantDependencies["config"];
 
@@ -488,7 +493,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -509,7 +514,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_jws"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -530,7 +535,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw", "ed25519_jws"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw", "ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -564,7 +569,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_jws"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -589,7 +594,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -622,7 +627,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -662,7 +667,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_prehash"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_prehash"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -713,7 +718,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -775,7 +780,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["custom_alg"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["custom_alg"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -817,7 +822,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -844,6 +849,8 @@ describe("createDidGrant", () => {
 						authorization_code: { enabled: true },
 						refresh_token: { enabled: true },
 						did: {
+							revocationLatencyBoundSec: 3600,
+							legacyMaxTtlSec: 3600,
 							enabled: true,
 							algorithm: "ed25519_raw",
 							messageMaxAgeSec: 300,

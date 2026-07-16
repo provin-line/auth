@@ -23,8 +23,26 @@ import { buildModules, type DplaaxAppConfig } from "../buildModules.mjs";
 const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 
 function makeConfig(): DplaaxAppConfig {
+	const base = makeValidAppConfig();
 	return {
-		...makeValidAppConfig(),
+		...base,
+		oauth: {
+			...base.oauth,
+			// Task 8 (auth-provider-did): `oauth.grants.did` is required, with
+			// no object-level default — `allowedAudiences` and
+			// `revocationLatencyBoundSec` are mandatory (fail closed).
+			// `legacyMaxTtlSec` is raised to match `makeValidAppConfig()`'s
+			// `accessToken.expiresIn` (3600s) since `authContract` defaults to
+			// `LEGACY_DID_LOGIN@1` (rule auth.legacy.did-login caps legacy
+			// tokens at `legacyMaxTtlSec`, default 900s).
+			grants: {
+				did: {
+					allowedAudiences: ["https://api.example.com"],
+					revocationLatencyBoundSec: 3600,
+					legacyMaxTtlSec: 3600,
+				},
+			},
+		},
 		dplaax: {
 			registry: { baseUrl: "https://registry.example.com", allowedRegistries: [] },
 		},

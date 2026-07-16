@@ -178,7 +178,22 @@ beforeAll(async () => {
 				did: {
 					supportedAlgorithms: ["ed25519_raw"],
 					messageMaxAgeSec: 300,
-					allowedAudiences: [],
+					// Task 8 (auth-provider-did): `allowedAudiences` is required
+					// and must be non-empty (fail closed — an empty/absent
+					// allowlist used to mean "accept any audience"). This
+					// integration flow never sends an `audience` in the DID
+					// grant request (see buildDidTokenRequest below), so the
+					// allowlist's actual contents are inert here; the value
+					// below is a placeholder satisfying the schema.
+					allowedAudiences: ["https://policy-verifier.test.local"],
+					// `revocationLatencyBoundSec` is required, no default (fail
+					// closed). `legacyMaxTtlSec` is raised to match
+					// `accessToken.expiresIn` (3600s below) since `authContract`
+					// defaults to `LEGACY_DID_LOGIN@1` (rule
+					// auth.legacy.did-login caps legacy tokens at
+					// `legacyMaxTtlSec`, default 900s).
+					revocationLatencyBoundSec: 3600,
+					legacyMaxTtlSec: 3600,
 				},
 			},
 		},
