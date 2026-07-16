@@ -17,6 +17,7 @@
 import { defineModule, type GrantHandler, type Module } from "@o3co/auth-provider-core";
 import { z } from "zod";
 import { createDidGrant } from "./did.mjs";
+import type { NonceStore } from "./nonceStore.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
 import type { VerifierRegistry } from "./verifiers/registry.mjs";
 
@@ -62,10 +63,11 @@ export const didConfigSchema = z.object({
 });
 
 export type DidModuleOptions =
-	| { resolver: DidDocumentResolver; verifierRegistry?: VerifierRegistry }
+	| { resolver: DidDocumentResolver; verifierRegistry?: VerifierRegistry; nonceStore?: NonceStore }
 	| {
 			resolverFactory: (config: Record<string, unknown>) => DidDocumentResolver;
 			verifierRegistry?: VerifierRegistry;
+			nonceStore?: NonceStore;
 	  };
 
 // Pre-Phase-9 escape hatch — ComponentMap typed-slot inference for grant
@@ -103,7 +105,11 @@ export const oauthDidModule = (options: DidModuleOptions): Module =>
 							keyStore: deps.keyStore,
 							pathResolver: deps.pathResolver,
 						},
-						{ resolver, verifierRegistry: options.verifierRegistry },
+						{
+							resolver,
+							verifierRegistry: options.verifierRegistry,
+							nonceStore: options.nonceStore,
+						},
 					);
 				}) as (deps: AnyDeps) => GrantHandler,
 			},

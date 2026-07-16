@@ -20,9 +20,10 @@ import {
 	type GrantDependencies,
 } from "@o3co/auth-provider-core";
 import { CompactSign, exportJWK, generateKeyPair } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createDidGrant } from "../did.mjs";
+import type { NonceStore } from "../nonceStore.mjs";
 import type {
 	DidDocument,
 	DidDocumentResolver,
@@ -287,6 +288,49 @@ describe("createDidGrant", () => {
 			expect(result2.status).toBe(400);
 			expect("error" in result2 && result2.error).toBe("invalid_request");
 			expect("errorDescription" in result2 && result2.errorDescription).toContain("nonce");
+		});
+	});
+
+	describe("handle – injected nonceStore", () => {
+		it("uses the injected NonceStore instead of the default in-memory one", async () => {
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkInjected1");
+			const consume = vi.fn(async () => true);
+			const fakeNonceStore: NonceStore = { consume };
+
+			const handler = createDidGrant(mockDeps, { resolver, nonceStore: fakeNonceStore });
+			const { result } = await handler.handle(ctx);
+
+			expect(result.status).toBe(200);
+			expect(consume).toHaveBeenCalledTimes(1);
+			const [nonceArg, expiresAtMsArg] = consume.mock.calls[0] as [string, number];
+			expect(nonceArg).toContain("did-nonce:");
+			expect(typeof expiresAtMsArg).toBe("number");
+			expect(expiresAtMsArg).toBeGreaterThan(Date.now());
+		});
+
+		it("rejects the request when the injected NonceStore reports a replay", async () => {
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkInjected2");
+			const fakeNonceStore: NonceStore = { consume: vi.fn(async () => false) };
+
+			const handler = createDidGrant(mockDeps, { resolver, nonceStore: fakeNonceStore });
+			const { result } = await handler.handle(ctx);
+
+			expect(result.status).toBe(400);
+			expect("error" in result && result.error).toBe("invalid_request");
+			expect("errorDescription" in result && result.errorDescription).toContain("nonce");
+		});
+
+		it("does not call .stop() on an injected store from cleanup() (caller owns its lifecycle)", async () => {
+			const { resolver } = await makeSignedCtx("did:key:z6MkInjected3");
+			const stop = vi.fn();
+			const fakeNonceStore = { consume: vi.fn(async () => true), stop } as NonceStore & {
+				stop: () => void;
+			};
+
+			const handler = createDidGrant(mockDeps, { resolver, nonceStore: fakeNonceStore });
+			handler.cleanup?.();
+
+			expect(stop).not.toHaveBeenCalled();
 		});
 	});
 

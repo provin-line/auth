@@ -21,6 +21,7 @@ import {
 	generateToken,
 	generateTokenResponse,
 } from "@o3co/auth-provider-core";
+import { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
@@ -31,6 +32,7 @@ import type { SignatureVerifier } from "./verifiers/types.mjs";
 export interface DidGrantOptions {
 	resolver: DidDocumentResolver;
 	verifierRegistry?: VerifierRegistry;
+	nonceStore?: NonceStore;
 }
 
 export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions): GrantHandler => {
@@ -63,21 +65,11 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 		}
 	}
 
-	// In-memory nonce store (PoC)
-	const nonceStore = new Map<string, number>();
-
-	// `.unref()` so the interval does not keep the Node event loop alive after
-	// AppHandle.dispose(). v0.5.x's manifest model contributes grant handlers
-	// to the planner; AppHandle.dispose() does not iterate grant handlers'
-	// `cleanup()`, so a non-unref'd interval would retain the process across
-	// repeated test boot cycles or after graceful shutdown.
-	const cleanupInterval = setInterval(() => {
-		const now = Date.now();
-		for (const [key, time] of nonceStore) {
-			if (now - time > messageMaxAgeMs) nonceStore.delete(key);
-		}
-	}, 60 * 1000);
-	cleanupInterval.unref();
+	// Own the default nonce store's lifecycle (its sweep interval) only when
+	// we created it ourselves — an injected store is owned by whoever
+	// constructed it, so `cleanup()` below must not call `.stop()` on it.
+	const defaultNonceStore = options.nonceStore ? undefined : new InMemoryNonceStore();
+	const nonceStore: NonceStore = options.nonceStore ?? (defaultNonceStore as InMemoryNonceStore);
 
 	// Per-algorithm verifier cache: created lazily on first use
 	const verifierCache = new Map<string, SignatureVerifier>();
@@ -226,9 +218,12 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				};
 			}
 
-			// 8. Nonce replay check
+			// 8. Nonce replay check + store (single `consume` call). Expiry
+			// mirrors the freshness window enforced in step 7 above, reusing
+			// the same `now` so the nonce's lifetime matches the message's.
 			const nonceKey = `did-nonce:${parsedMessage.nonce}`;
-			if (nonceStore.has(nonceKey)) {
+			const nonceExpiresAtMs = now + messageMaxAgeMs;
+			if (!(await nonceStore.consume(nonceKey, nonceExpiresAtMs))) {
 				return {
 					result: {
 						status: 400,
@@ -239,6 +234,13 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			}
 
 			// 9. Validate audience against allowlist (empty allowlist = any audience accepted)
+			// Note: the nonce is already consumed at this point (step 8), so a
+			// request that fails the audience check still burns its nonce — a
+			// deliberate change from the pre-NonceStore code, which stored the
+			// nonce only after this check passed. `consume()` fuses check+store
+			// into one call placed at the old check position to preserve error
+			// precedence (replay is reported before audience); the trade-off is
+			// audience-rejected requests can no longer retry with the same nonce.
 			if (verification.audience && allowedAudiences.length > 0) {
 				if (!allowedAudiences.includes(verification.audience)) {
 					return {
@@ -251,10 +253,7 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				}
 			}
 
-			// 10. Store nonce (only after ALL validations passed)
-			nonceStore.set(nonceKey, Date.now());
-
-			// 11. Generate token
+			// 10. Generate token
 			return {
 				result: {
 					status: 200,
@@ -277,7 +276,7 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 		},
 
 		cleanup(): void {
-			clearInterval(cleanupInterval);
+			defaultNonceStore?.stop();
 		},
 	};
 };

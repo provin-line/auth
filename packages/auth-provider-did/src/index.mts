@@ -15,6 +15,7 @@
  */
 export { createDidGrant, type DidGrantOptions } from "./did.mjs";
 export { type DidModuleOptions, didConfigSchema, oauthDidModule } from "./module.mjs";
+export { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
 export { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/errors.mjs";
 export { type ExtractedKey, extractVerificationKey } from "./resolver/extractKey.mjs";
 export {

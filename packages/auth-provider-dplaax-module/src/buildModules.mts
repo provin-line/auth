@@ -15,6 +15,7 @@
  */
 import {
 	type DidDocumentResolver,
+	type NonceStore,
 	oauthDidModule,
 } from "@provin-line/auth-provider-did";
 import type { AppConfig, Module } from "@o3co/auth-provider-core";
@@ -63,6 +64,13 @@ export interface DplaaxBuildModulesOverrides {
 	 * Used by integration tests to point at an in-process mock registry.
 	 */
 	readonly didResolver?: DidDocumentResolver;
+	/**
+	 * Override the DID grant's nonce (replay-protection) store. Defaults to
+	 * `InMemoryNonceStore` (single-process PoC). Used by tests to inject a
+	 * spy/fake, or by multi-replica deployments to swap in a shared-store
+	 * implementation of `NonceStore`.
+	 */
+	readonly nonceStore?: NonceStore;
 }
 
 /**
@@ -98,6 +106,6 @@ export function buildModules(
 		// localised here so changing `DplaaxAppConfigBase` to add a section
 		// only requires editing one file.
 		oauthModule({ config: config as unknown as AppConfig }),
-		oauthDidModule({ resolver }),
+		oauthDidModule({ resolver, nonceStore: overrides.nonceStore }),
 	];
 }
