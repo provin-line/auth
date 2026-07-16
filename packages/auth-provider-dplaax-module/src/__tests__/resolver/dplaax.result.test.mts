@@ -43,12 +43,33 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
     });
 
     function stubFetchOnce(status: number, body: string): void {
+        const bytes = new TextEncoder().encode(body);
         vi.stubGlobal(
             "fetch",
             vi.fn().mockResolvedValue({
                 ok: status >= 200 && status < 300,
                 status,
                 text: async () => body,
+                arrayBuffer: async () => bytes.buffer,
+            }),
+        );
+    }
+
+    // Mocks a response backed by raw wire bytes, with BOTH `text()` and
+    // `arrayBuffer()` available — mirroring real fetch/undici, where
+    // `text()` decodes via TextDecoder (BOM-stripping per WHATWG Encoding)
+    // while `arrayBuffer()` hands back the untouched bytes. This lets the
+    // test fail with a meaningful assertion (canonicalBytes missing the
+    // BOM) against the current `res.text()`-based implementation, rather
+    // than a TypeError from an incomplete mock.
+    function stubFetchOnceBytes(status: number, bytes: Uint8Array): void {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({
+                ok: status >= 200 && status < 300,
+                status,
+                text: async () => new TextDecoder().decode(bytes),
+                arrayBuffer: async () => bytes.buffer,
             }),
         );
     }
@@ -65,6 +86,37 @@ describe("DplaaxDidResolver — ResolutionResult", () => {
         expect(r.finalOrigin).toBe("https://registry.example");
         expect(r.snapshotRef).toBe(`registry:${r.finalOrigin}#${r.digest}`);
         expect(Date.parse(r.retrievedAt)).not.toBeNaN();
+        expect(r.document.id).toBe("did:dplaax:u:alice");
+    });
+
+    it("preserves a leading UTF-8 BOM in canonicalBytes/digest (exact wire bytes, not text() round-trip)", async () => {
+        // WHATWG Fetch's text() strips a leading BOM and replaces invalid
+        // UTF-8 with U+FFFD before handing back a string — so encoding that
+        // string back to bytes is NOT guaranteed to reproduce what the
+        // registry served. canonicalBytes/digest must be computed over the
+        // raw wire bytes (read via arrayBuffer()) to satisfy the
+        // ResolutionResult contract ("the exact bytes the registry served").
+        const body = `{"id":"did:dplaax:u:alice","verificationMethod":[]}`;
+        const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+        const bodyBytes = new TextEncoder().encode(body);
+        const wireBytes = new Uint8Array(bom.length + bodyBytes.length);
+        wireBytes.set(bom, 0);
+        wireBytes.set(bodyBytes, bom.length);
+
+        stubFetchOnceBytes(200, wireBytes);
+
+        const r = await resolver.resolve(did);
+
+        expect(r.canonicalBytes).toEqual(wireBytes);
+
+        const expectedDigestBuffer = await crypto.subtle.digest("SHA-256", wireBytes);
+        const expectedDigest = `sha256:${Buffer.from(expectedDigestBuffer).toString("hex")}`;
+        expect(r.digest).toBe(expectedDigest);
+
+        // The parsed document is unaffected — TextDecoder().decode() (used
+        // to derive the JSON.parse input from canonicalBytes) also strips a
+        // leading BOM by default, so parsing still succeeds; only the
+        // provenance bytes must stay exact.
         expect(r.document.id).toBe("did:dplaax:u:alice");
     });
 

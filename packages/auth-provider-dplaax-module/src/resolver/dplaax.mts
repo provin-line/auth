@@ -140,15 +140,21 @@ export class DplaaxDidResolver implements DidDocumentResolver {
             );
         }
 
-        // Read the body exactly once — canonicalBytes/digest are computed
-        // over the same bytes that get JSON.parse'd below, so `document` and
-        // the integrity fields can never drift apart (parsing goes strict in
-        // Task 2, but this invariant holds regardless of parser).
-        const text = await res.text();
-        const canonicalBytes = new TextEncoder().encode(text);
+        // Read the body exactly once, as raw bytes — canonicalBytes/digest
+        // must be the exact bytes the registry served (ResolutionResult
+        // contract), and res.text() does not guarantee that: per WHATWG
+        // Fetch, text() strips a leading UTF-8 BOM and replaces invalid
+        // UTF-8 with U+FFFD before returning a string, so re-encoding that
+        // string can silently diverge from the wire bytes. arrayBuffer()
+        // has no such normalization. The JSON.parse input is decoded from
+        // these same canonicalBytes below, so `document` and the integrity
+        // fields can never drift apart (parsing goes strict in Task 2, but
+        // this invariant holds regardless of parser).
+        const canonicalBytes = new Uint8Array(await res.arrayBuffer());
         const digestBuffer = await crypto.subtle.digest("SHA-256", canonicalBytes);
         const digest = `sha256:${Buffer.from(digestBuffer).toString("hex")}`;
         const retrievedAt = new Date().toISOString();
+        const text = new TextDecoder().decode(canonicalBytes);
         const document = JSON.parse(text) as DidDocument;
 
         // `res.url` reflects the actual connection fetch() served the bytes

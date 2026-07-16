@@ -34,6 +34,7 @@ describe("DplaaxDidResolver", () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
             text: async () => JSON.stringify(didDoc),
+            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
@@ -73,6 +74,7 @@ describe("DplaaxDidResolver", () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
             text: async () => JSON.stringify(didDoc),
+            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
@@ -110,6 +112,7 @@ describe("DplaaxDidResolver", () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
             text: async () => JSON.stringify(didDoc),
+            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
@@ -129,6 +132,7 @@ describe("DplaaxDidResolver", () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
             text: async () => JSON.stringify(didDoc),
+            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
@@ -157,6 +161,7 @@ describe("DplaaxDidResolver", () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
             text: async () => JSON.stringify(didDoc),
+            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
@@ -176,6 +181,7 @@ describe("DplaaxDidResolver", () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
             text: async () => JSON.stringify(didDoc),
+            arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(didDoc)).buffer,
         });
 
         const resolver = new DplaaxDidResolver("https://registry.dplaax.dev/");
