@@ -1,3 +1,4 @@
+import { ResolutionRejectedError } from "@provin-line/auth-provider-did";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DplaaxDidResolver } from "../../resolver/dplaax.mjs";
 
@@ -6,6 +7,14 @@ import { DplaaxDidResolver } from "../../resolver/dplaax.mjs";
 // behaviour (owner-only enforcement, registry allow-list, URL building,
 // HTTP error mapping). The resolver paths through parseDplaaxDid
 // indirectly via the test cases below.
+//
+// `resolve()` now returns a `ResolutionResult` (canonical bytes / digest /
+// origin / snapshot refs), not a bare `DidDocument` — mocks below stub
+// `.text()` instead of `.json()`, and assertions read `result.document`.
+// The full `ResolutionResult` contract and the error taxonomy
+// (`ResolutionUnavailableError` / `ResolutionRejectedError`) are covered in
+// dplaax.result.test.mts; the 404 case here is kept as a regression pin for
+// this file's existing "HTTP error mapping" coverage.
 
 describe("DplaaxDidResolver", () => {
     const registryBaseUrl = "https://registry.dplaax.dev";
@@ -24,13 +33,13 @@ describe("DplaaxDidResolver", () => {
         const didDoc = { id: ownerDid, verificationMethod: [] };
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
-            json: async () => didDoc,
+            text: async () => JSON.stringify(didDoc),
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const result = await resolver.resolve(ownerDid);
 
-        expect(result).toEqual(didDoc);
+        expect(result.document).toEqual(didDoc);
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/org/acme/did.json`,
         );
@@ -63,11 +72,12 @@ describe("DplaaxDidResolver", () => {
         const didDoc = { id: did, verificationMethod: [] };
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
-            json: async () => didDoc,
+            text: async () => JSON.stringify(didDoc),
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(resolver.resolve(did)).resolves.toEqual(didDoc);
+        const result = await resolver.resolve(did);
+        expect(result.document).toEqual(didDoc);
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/user/alice/did.json`,
         );
@@ -99,13 +109,12 @@ describe("DplaaxDidResolver", () => {
         };
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
-            json: async () => didDoc,
+            text: async () => JSON.stringify(didDoc),
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve("did:dplaax:Registry.Dplaax.dev:org:acme"),
-        ).resolves.toEqual(didDoc);
+        const result = await resolver.resolve("did:dplaax:Registry.Dplaax.dev:org:acme");
+        expect(result.document).toEqual(didDoc);
     });
 
     it("accepts DID whose registry is in allowedRegistries (migration support)", async () => {
@@ -119,7 +128,7 @@ describe("DplaaxDidResolver", () => {
         };
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
-            json: async () => didDoc,
+            text: async () => JSON.stringify(didDoc),
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
@@ -129,7 +138,7 @@ describe("DplaaxDidResolver", () => {
             "did:dplaax:legacy-hub.example.com:org:acme",
         );
 
-        expect(result).toEqual(didDoc);
+        expect(result.document).toEqual(didDoc);
         // URL is built from registryBaseUrl (where the registry actually
         // lives now), not from the legacy registry name in the DID.
         expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -147,15 +156,14 @@ describe("DplaaxDidResolver", () => {
         };
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
-            json: async () => didDoc,
+            text: async () => JSON.stringify(didDoc),
         });
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
             allowedRegistries: ["legacy-hub.example.com"],
         });
-        await expect(
-            resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme"),
-        ).resolves.toEqual(didDoc);
+        const result = await resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme");
+        expect(result.document).toEqual(didDoc);
     });
 
     it("normalizes trailing slash on registryBaseUrl", async () => {
@@ -167,7 +175,7 @@ describe("DplaaxDidResolver", () => {
         };
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
             ok: true,
-            json: async () => didDoc,
+            text: async () => JSON.stringify(didDoc),
         });
 
         const resolver = new DplaaxDidResolver("https://registry.dplaax.dev/");
@@ -185,9 +193,13 @@ describe("DplaaxDidResolver", () => {
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const notFoundDid = "did:dplaax:registry.dplaax.dev:org:notfound";
-        await expect(resolver.resolve(notFoundDid)).rejects.toThrow(
-            `DID resolution failed for "${notFoundDid}": HTTP 404`,
+        await expect(resolver.resolve(notFoundDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
         );
+        await expect(resolver.resolve(notFoundDid)).rejects.toMatchObject({
+            reason: "did-not-found",
+            message: `DID resolution failed for "${notFoundDid}": HTTP 404`,
+        });
     });
 
     it("throws on non-dplaax DID", async () => {

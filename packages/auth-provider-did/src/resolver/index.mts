@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
+export { ResolutionRejectedError, ResolutionUnavailableError } from "./errors.mjs";
 export type { ExtractedKey } from "./extractKey.mjs";
 export { extractVerificationKey } from "./extractKey.mjs";
 export type {
 	DidDocument,
 	DidDocumentResolver,
+	ResolutionResult,
 	VerificationMethod,
 } from "./types.mjs";

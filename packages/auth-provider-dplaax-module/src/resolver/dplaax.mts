@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import type { DidDocument, DidDocumentResolver } from "@provin-line/auth-provider-did";
+import {
+    type DidDocument,
+    type DidDocumentResolver,
+    ResolutionRejectedError,
+    type ResolutionResult,
+    ResolutionUnavailableError,
+} from "@provin-line/auth-provider-did";
 import { parseDplaaxDid, requireOwner } from "@provin-line/did-dplaax";
 
 export interface DplaaxDidResolverOptions {
@@ -85,7 +91,7 @@ export class DplaaxDidResolver implements DidDocumentResolver {
         );
     }
 
-    async resolve(did: string): Promise<DidDocument> {
+    async resolve(did: string): Promise<ResolutionResult> {
         const parsed = parseDplaaxDid(did);
 
         requireOwner(parsed);
@@ -97,10 +103,68 @@ export class DplaaxDidResolver implements DidDocumentResolver {
         }
 
         const url = `${this.registryBaseUrl}/did/${parsed.accountType}/${parsed.accountId}/did.json`;
-        const res = await fetch(url);
-        if (!res.ok) {
-            throw new Error(`DID resolution failed for "${did}": HTTP ${res.status}`);
+
+        // Fetch itself is untouched here (redirect/retry/TLS behaviour is
+        // Task 3's job) — only what happens to the response is restructured:
+        // network failures and non-2xx statuses map onto the two-class error
+        // taxonomy (errors.mts) instead of throwing a bare Error.
+        let res: Awaited<ReturnType<typeof fetch>>;
+        try {
+            res = await fetch(url);
+        } catch (err) {
+            if (err instanceof TypeError) {
+                throw new ResolutionUnavailableError(
+                    "network",
+                    `DID resolution failed for "${did}": network error (${err.message})`,
+                );
+            }
+            throw err;
         }
-        return (await res.json()) as DidDocument;
+
+        if (!res.ok) {
+            if (res.status >= 500) {
+                throw new ResolutionUnavailableError(
+                    "registry-5xx",
+                    `DID resolution failed for "${did}": HTTP ${res.status}`,
+                );
+            }
+            if (res.status === 404) {
+                throw new ResolutionRejectedError(
+                    "did-not-found",
+                    `DID resolution failed for "${did}": HTTP ${res.status}`,
+                );
+            }
+            throw new ResolutionRejectedError(
+                "registry-4xx",
+                `DID resolution failed for "${did}": HTTP ${res.status}`,
+            );
+        }
+
+        // Read the body exactly once — canonicalBytes/digest are computed
+        // over the same bytes that get JSON.parse'd below, so `document` and
+        // the integrity fields can never drift apart (parsing goes strict in
+        // Task 2, but this invariant holds regardless of parser).
+        const text = await res.text();
+        const canonicalBytes = new TextEncoder().encode(text);
+        const digestBuffer = await crypto.subtle.digest("SHA-256", canonicalBytes);
+        const digest = `sha256:${Buffer.from(digestBuffer).toString("hex")}`;
+        const retrievedAt = new Date().toISOString();
+        const document = JSON.parse(text) as DidDocument;
+
+        // `res.url` reflects the actual connection fetch() served the bytes
+        // from (e.g. after a redirect); fall back to the requested URL's
+        // origin for fetch mocks/environments that leave it unset.
+        const finalOrigin = new URL(res.url || url).origin;
+        const snapshotRef = `registry:${finalOrigin}#${digest}`;
+
+        return {
+            document,
+            canonicalBytes,
+            digest,
+            requestedDid: did,
+            finalOrigin,
+            snapshotRef,
+            retrievedAt,
+        };
     }
 }

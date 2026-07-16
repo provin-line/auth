@@ -120,9 +120,9 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			}
 
 			// 2. Resolve DID Document
-			let didDocument: Awaited<ReturnType<typeof resolver.resolve>>;
+			let resolution: Awaited<ReturnType<typeof resolver.resolve>>;
 			try {
-				didDocument = await resolver.resolve(did);
+				resolution = await resolver.resolve(did);
 			} catch (err) {
 				return {
 					result: {
@@ -132,6 +132,9 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 					},
 				};
 			}
+			// `resolution` stays in scope beyond this block — Task 9 consumes
+			// the canonical bytes / digest / snapshot refs it carries.
+			const didDocument = resolution.document;
 
 			// 3. Extract verification key from DID Document
 			let resolvedKey: Awaited<ReturnType<typeof extractVerificationKey>>;

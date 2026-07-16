@@ -18,12 +18,12 @@ import { createSymmetricKeyStore, defineModule } from "@o3co/auth-provider-core"
 import { createTestApp, makeValidAppConfig } from "@o3co/auth-provider-core/testing";
 import { describe, expect, it } from "vitest";
 import { oauthDidModule } from "../module.mjs";
-import type { DidDocument, DidDocumentResolver } from "../resolver/types.mjs";
+import type { DidDocumentResolver, ResolutionResult } from "../resolver/types.mjs";
 
 const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 
 const mockResolver: DidDocumentResolver = {
-	async resolve(_did: string): Promise<DidDocument> {
+	async resolve(_did: string): Promise<ResolutionResult> {
 		throw new Error("not expected to be called in this test");
 	},
 };

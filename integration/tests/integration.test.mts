@@ -43,6 +43,7 @@ import {
 import type {
 	DidDocument,
 	DidDocumentResolver,
+	ResolutionResult,
 } from "@provin-line/auth-provider-did";
 import {
 	buildModules,
@@ -52,6 +53,7 @@ import { dplaaxModule } from "@provin-line/policy-verifier-dplaax-module";
 import express from "express";
 import { SignJWT } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { makeMockResolution } from "./utils.mjs";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -201,7 +203,7 @@ beforeAll(async () => {
 	//    Bypasses DplaaxDidResolver's owner-only / registry-allow-list checks
 	//    so the test focuses on the OAuth-token issuance path.
 	const mockResolver: DidDocumentResolver = {
-		async resolve(did: string): Promise<DidDocument> {
+		async resolve(did: string): Promise<ResolutionResult> {
 			const match = did.match(/^did:dplaax:[^:]+:org:([^:]+)$/);
 			if (!match) throw new Error(`Unsupported DID: ${did}`);
 			const res = await fetch(
@@ -211,7 +213,8 @@ beforeAll(async () => {
 				throw new Error(
 					`DID resolution failed for "${did}": HTTP ${res.status}`,
 				);
-			return res.json() as Promise<DidDocument>;
+			const doc = (await res.json()) as DidDocument;
+			return makeMockResolution(doc, did);
 		},
 	};
 

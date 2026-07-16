@@ -23,7 +23,12 @@ import { CompactSign, exportJWK, generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
 
 import { createDidGrant } from "../did.mjs";
-import type { DidDocument, DidDocumentResolver, JsonWebKey } from "../resolver/types.mjs";
+import type {
+	DidDocument,
+	DidDocumentResolver,
+	JsonWebKey,
+	ResolutionResult,
+} from "../resolver/types.mjs";
 import { VerifierRegistry } from "../verifiers/registry.mjs";
 import type {
 	SignatureVerifier,
@@ -51,6 +56,25 @@ const mockDeps: GrantDependencies = {
 };
 
 /**
+ * Wrap a `DidDocument` fixture into the minimal `ResolutionResult` shape
+ * `resolve()` now returns. The tests in this file exercise the DID-grant
+ * flow downstream of `.document` — the integrity/provenance fields are inert
+ * placeholders, same shape as the integration-test helper of the same name.
+ */
+function makeMockResolution(document: DidDocument, did: string): ResolutionResult {
+	const digest = `sha256:${"0".repeat(64)}`;
+	return {
+		document,
+		canonicalBytes: new TextEncoder().encode(JSON.stringify(document)),
+		digest,
+		requestedDid: did,
+		finalOrigin: "mock://registry",
+		snapshotRef: `registry:mock://registry#${digest}`,
+		retrievedAt: new Date().toISOString(),
+	};
+}
+
+/**
  * Build a mock DidDocumentResolver that returns a DID Document containing
  * the given Ed25519 public key encoded as a JWK.
  */
@@ -69,8 +93,8 @@ function buildResolver(did: string, publicKeyBytes: Uint8Array): DidDocumentReso
 		],
 	};
 	return {
-		async resolve(d: string): Promise<DidDocument> {
-			if (d === did) return didDoc;
+		async resolve(d: string): Promise<ResolutionResult> {
+			if (d === did) return makeMockResolution(didDoc, did);
 			throw new Error(`DID not found: ${d}`);
 		},
 	};
@@ -201,7 +225,7 @@ describe("createDidGrant", () => {
 
 		it("returns 400 when resolver fails (DID not found)", async () => {
 			const resolver: DidDocumentResolver = {
-				async resolve(d: string): Promise<DidDocument> {
+				async resolve(d: string): Promise<ResolutionResult> {
 					throw new Error(`DID not found: ${d}`);
 				},
 			};
@@ -353,7 +377,7 @@ describe("createDidGrant", () => {
 			};
 			const resolver: DidDocumentResolver = {
 				async resolve(d) {
-					if (d === did) return didDoc;
+					if (d === did) return makeMockResolution(didDoc, did);
 					throw new Error(`DID not found: ${d}`);
 				},
 			};

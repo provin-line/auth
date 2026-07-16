@@ -15,8 +15,14 @@
  */
 export { createDidGrant, type DidGrantOptions } from "./did.mjs";
 export { type DidModuleOptions, didConfigSchema, oauthDidModule } from "./module.mjs";
+export { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/errors.mjs";
 export { type ExtractedKey, extractVerificationKey } from "./resolver/extractKey.mjs";
-export type { DidDocument, DidDocumentResolver, VerificationMethod } from "./resolver/types.mjs";
+export type {
+	DidDocument,
+	DidDocumentResolver,
+	ResolutionResult,
+	VerificationMethod,
+} from "./resolver/types.mjs";
 export { detectAlgorithm } from "./verifiers/detect.mjs";
 export { extractEd25519PublicKeyBytes } from "./verifiers/ed25519Utils.mjs";
 export {
