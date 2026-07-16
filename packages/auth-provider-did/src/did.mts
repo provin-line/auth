@@ -68,8 +68,18 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 	// Own the default nonce store's lifecycle (its sweep interval) only when
 	// we created it ourselves — an injected store is owned by whoever
 	// constructed it, so `cleanup()` below must not call `.stop()` on it.
-	const defaultNonceStore = options.nonceStore ? undefined : new InMemoryNonceStore();
-	const nonceStore: NonceStore = options.nonceStore ?? (defaultNonceStore as InMemoryNonceStore);
+	// The if/else (rather than a ternary + cast) lets the compiler enforce
+	// that `defaultNonceStore` is set if and only if we created the store,
+	// so `cleanup()` only ever stops a store this function constructed.
+	let nonceStore: NonceStore;
+	let defaultNonceStore: InMemoryNonceStore | undefined;
+	if (options.nonceStore) {
+		nonceStore = options.nonceStore;
+		defaultNonceStore = undefined;
+	} else {
+		defaultNonceStore = new InMemoryNonceStore();
+		nonceStore = defaultNonceStore;
+	}
 
 	// Per-algorithm verifier cache: created lazily on first use
 	const verifierCache = new Map<string, SignatureVerifier>();

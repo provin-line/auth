@@ -332,6 +332,50 @@ describe("createDidGrant", () => {
 
 			expect(stop).not.toHaveBeenCalled();
 		});
+
+		it("computes nonce expiresAtMs as exactly now + messageMaxAgeMs (same freshness window as the timestamp check)", async () => {
+			const messageMaxAgeSec = 300;
+			const config = {
+				oauth: {
+					jwt: { secret: "test-secret" },
+					accessToken: { expiresIn: 3600 },
+					refreshToken: { expiresIn: 86400 },
+					grants: {
+						session: { enabled: true },
+						authorization_code: { enabled: true },
+						refresh_token: { enabled: true },
+						did: { enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec },
+					},
+				},
+			} as unknown as GrantDependencies["config"];
+
+			const nowMs = Date.UTC(2026, 0, 1, 0, 0, 0);
+			// Build the signed request under real timers — the async Ed25519
+			// signing inside makeSignedCtx must not run under fake timers.
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkExpiryParity", {
+				timestamp: new Date(nowMs).toISOString(),
+			});
+
+			const consume = vi.fn(async () => true);
+			const fakeNonceStore: NonceStore = { consume };
+			const handler = createDidGrant(
+				{ config, keyStore: mockDeps.keyStore },
+				{ resolver, nonceStore: fakeNonceStore },
+			);
+
+			vi.useFakeTimers();
+			vi.setSystemTime(nowMs);
+			try {
+				const { result } = await handler.handle(ctx);
+				expect(result.status).toBe(200);
+			} finally {
+				vi.useRealTimers();
+			}
+
+			expect(consume).toHaveBeenCalledTimes(1);
+			const [, expiresAtMsArg] = consume.mock.calls[0] as [string, number];
+			expect(expiresAtMsArg).toBe(nowMs + messageMaxAgeSec * 1000);
+		});
 	});
 
 	describe("config defaults", () => {
@@ -841,6 +885,32 @@ describe("createDidGrant", () => {
 				"https://evil.example.com",
 			);
 			expect("errorDescription" in result && result.errorDescription).toContain("not allowed");
+		});
+
+		it("burns the nonce even when the audience check fails (consume-before-audience, Option A)", async () => {
+			const config = makeConfigWithAllowedAudiences(["https://api.example.com"]);
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkAudBurn", {
+				audience: "https://evil.example.com",
+			});
+			const handler = createDidGrant({ config, keyStore: mockDeps.keyStore }, { resolver });
+
+			// First attempt: cryptographically valid signature, fresh nonce, but
+			// the audience is not in the allowlist.
+			const { result: result1 } = await handler.handle(ctx);
+			expect(result1.status).toBe(400);
+			expect("error" in result1 && result1.error).toBe("invalid_request");
+			expect("errorDescription" in result1 && result1.errorDescription).toContain("not allowed");
+
+			// Retry the identical request (same nonce). Option A consumes the
+			// nonce before the audience check runs, so the first attempt already
+			// burned it — the retry must be rejected as a replay, not
+			// re-evaluated against the audience allowlist.
+			const { result: result2 } = await handler.handle(ctx);
+			expect(result2.status).toBe(400);
+			expect("error" in result2 && result2.error).toBe("invalid_request");
+			expect("errorDescription" in result2 && result2.errorDescription).toContain(
+				"nonce already used",
+			);
 		});
 
 		it("accepts any audience when allowedAudiences is empty (backward compat)", async () => {
