@@ -80,7 +80,35 @@ const REQUIRED_STRING_FIELDS = [
 	"timestamp",
 ] as const satisfies readonly (keyof LoginTranscript)[];
 
-const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|z)$/;
+const TIMESTAMP_PATTERN =
+	/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|z)$/;
+
+/**
+ * `Date.parse` silently NORMALIZES an out-of-range calendar field instead
+ * of rejecting it — e.g. `"2026-02-30T00:00:00Z"` (Feb 30 doesn't exist)
+ * parses to a valid instant, `2026-03-02T00:00:00Z`. `TIMESTAMP_PATTERN`
+ * only checks digit *shape*, not calendar validity, so shape-match +
+ * `Date.parse`-ability alone both pass an impossible date through.
+ *
+ * Reconstructing the UTC calendar components from the parsed instant and
+ * comparing them back against the regex-captured input components catches
+ * the rollover: a valid date always round-trips to the exact same
+ * year/month/day/hour/minute/second it was written as; an invalid one never
+ * does (fractional seconds are intentionally excluded from the comparison —
+ * they don't affect the round value of any other field).
+ */
+function timestampRoundTrips(ms: number, match: RegExpExecArray): boolean {
+	const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr] = match;
+	const d = new Date(ms);
+	return (
+		d.getUTCFullYear() === Number(yearStr) &&
+		d.getUTCMonth() + 1 === Number(monthStr) &&
+		d.getUTCDate() === Number(dayStr) &&
+		d.getUTCHours() === Number(hourStr) &&
+		d.getUTCMinutes() === Number(minuteStr) &&
+		d.getUTCSeconds() === Number(secondStr)
+	);
+}
 
 /**
  * Every `parseLoginTranscript` / `validateOwnerLogin` rejection names the
@@ -135,7 +163,13 @@ export function parseLoginTranscript(payload: unknown): LoginTranscript {
 	}
 
 	const timestamp = record.timestamp as string;
-	if (!TIMESTAMP_PATTERN.test(timestamp) || Number.isNaN(Date.parse(timestamp))) {
+	const timestampMatch = TIMESTAMP_PATTERN.exec(timestamp);
+	const timestampMs = timestampMatch === null ? Number.NaN : Date.parse(timestamp);
+	if (
+		timestampMatch === null ||
+		Number.isNaN(timestampMs) ||
+		!timestampRoundTrips(timestampMs, timestampMatch)
+	) {
 		throw new TranscriptError("timestamp", "must be an RFC3339 UTC timestamp");
 	}
 

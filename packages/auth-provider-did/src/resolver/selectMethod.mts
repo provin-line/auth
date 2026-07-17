@@ -30,6 +30,7 @@ export type RelationshipName = "authentication" | "assertionMethod";
 export class MethodSelectionError extends Error {
 	constructor(
 		readonly reason:
+			| "invalid-method-id"
 			| "duplicate-method-id"
 			| "method-not-found"
 			| "controller-mismatch"
@@ -51,11 +52,20 @@ export interface SelectedMethod {
 /**
  * Select exactly one `verificationMethod` from a DID Document, fail-closed.
  *
- * A duplicate `id` anywhere in `verificationMethod[]` is rejected
- * (`"duplicate-method-id"`, rule `auth.method.relationship`) *always* —
- * even when the caller's `methodId` targets a different, non-duplicated
- * entry. A document that cannot uniquely name its own methods is
- * untrustworthy regardless of which method was asked for.
+ * A missing or non-string `id` on ANY entry in `verificationMethod[]` is
+ * rejected (`"invalid-method-id"`) *always* — even when the caller's
+ * `methodId`/controller-matching targets a different, well-formed entry —
+ * checked before duplicate-id detection or selection. Silently skipping the
+ * malformed entry and selecting a different one would let a document that
+ * carries one broken method still authenticate via another, which is a
+ * selection-ambiguity game (rule auth.token.signed-claims: a method with no
+ * string `id` can never populate the minted token's required
+ * `verification_method` claim). A duplicate `id` anywhere in
+ * `verificationMethod[]` is likewise rejected (`"duplicate-method-id"`, rule
+ * `auth.method.relationship`) *always* — even when the caller's `methodId`
+ * targets a different, non-duplicated entry. A document that cannot
+ * uniquely name its own methods is untrustworthy regardless of which method
+ * was asked for.
  *
  * Two call shapes, chosen by whether `opts.methodId` is given:
  *
@@ -86,6 +96,7 @@ export function selectVerificationMethod(
 	opts: { did: string; methodId?: string; relationship?: RelationshipName },
 ): SelectedMethod {
 	const methods = doc.verificationMethod ?? [];
+	rejectInvalidIds(methods);
 	rejectDuplicateIds(methods);
 
 	const { did, methodId, relationship } = opts;
@@ -95,6 +106,27 @@ export function selectVerificationMethod(
 	}
 
 	return selectLegacy(methods, did);
+}
+
+/**
+ * Fail closed on any `verificationMethod` entry whose `id` is missing or
+ * not a string — regardless of whether that entry is the one selection
+ * would otherwise pick. A method with no string `id` has valid key material
+ * but can never populate the minted token's required `verification_method`
+ * claim (rule `auth.token.signed-claims`); silently skipping it in favor of
+ * another controller-matched candidate would turn a malformed document into
+ * a selection-ambiguity game rather than a rejection.
+ */
+function rejectInvalidIds(methods: VerificationMethod[]): void {
+	for (const vm of methods) {
+		if (typeof vm.id !== "string" || vm.id.length === 0) {
+			throw new MethodSelectionError(
+				"invalid-method-id",
+				`verificationMethod has a missing or non-string "id" (got ${JSON.stringify(vm.id)}); ` +
+					"every entry must carry a non-empty string id",
+			);
+		}
+	}
 }
 
 function rejectDuplicateIds(methods: VerificationMethod[]): void {
@@ -142,13 +174,22 @@ function selectByMethodId(
  * at a verificationMethod, not smuggle one in inline). Other non-string
  * entries that don't match `methodId` are ignored: their presence alone is
  * not an error.
+ *
+ * `DidDocument`'s index signature (`[k: string]: unknown`) means a
+ * resolved-but-unvalidated document can carry a non-array value under
+ * `relationship` at runtime even though the type says `unknown[]` — a
+ * bare `for...of` over that would throw a raw (untyped) `TypeError`
+ * instead of a `MethodSelectionError`. Treated the same as an absent
+ * array: no entries to check, so `methodId` ends up `not-in-relationship`
+ * rather than escaping the taxonomy.
  */
 function assertStringReferenced(
 	doc: DidDocument,
 	relationship: RelationshipName,
 	methodId: string,
 ): void {
-	const entries = doc[relationship] ?? [];
+	const rawEntries = doc[relationship];
+	const entries = Array.isArray(rawEntries) ? rawEntries : [];
 	let embedded = false;
 	let referenced = false;
 

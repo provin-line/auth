@@ -97,6 +97,77 @@ describe("createBoundedFetch", () => {
 	);
 
 	it(
+		"classifies a 5xx response by status without reading its body — an oversized 503 body never throws body-too-large",
+		async () => {
+			// C2: a 503 (outage) response with a body that exceeds maxBodyBytes
+			// must surface as status 503 from boundedFetch, NOT throw
+			// body-too-large (which the caller would map to a 400, hiding the
+			// real 503 outage behind a wrong HTTP status).
+			const chunkSize = 16;
+			let reads = 0;
+			function oversizedErrorBody(totalBytes: number): typeof fetch {
+				let sent = 0;
+				return (async () => ({
+					status: 503,
+					url: "",
+					body: {
+						getReader: () => ({
+							read: async () => {
+								reads++;
+								if (sent >= totalBytes) {
+									return { done: true, value: undefined };
+								}
+								sent += chunkSize;
+								return { done: false, value: new Uint8Array(chunkSize).fill(7) };
+							},
+						}),
+					},
+				})) as unknown as typeof fetch;
+			}
+
+			const bf = createBoundedFetch(
+				{ ...DEFAULT_BOUNDS, maxBodyBytes: 64 },
+				oversizedErrorBody(1024),
+			);
+
+			const result = await bf("https://r.example/x");
+
+			expect(result.status).toBe(503);
+			expect(result.bytes.byteLength).toBe(0);
+			// The body must never be read for a non-2xx response.
+			expect(reads).toBe(0);
+		},
+		5000,
+	);
+
+	it(
+		"does not hang waiting on a 5xx response body that never resolves its read()",
+		async () => {
+			// C2: even a body whose stream never yields must not delay
+			// classification of a 5xx status — the caller needs the outage
+			// signal immediately, not after a timeout.
+			const hangingErrorBody: typeof fetch = (async () => ({
+				status: 503,
+				url: "",
+				body: {
+					getReader: () => ({
+						// Never resolves — proves boundedFetch doesn't await this.
+						read: () => new Promise(() => {}),
+					}),
+				},
+			})) as unknown as typeof fetch;
+
+			const bf = createBoundedFetch(DEFAULT_BOUNDS, hangingErrorBody);
+
+			const result = await bf("https://r.example/x");
+
+			expect(result.status).toBe(503);
+			expect(result.bytes.byteLength).toBe(0);
+		},
+		500,
+	);
+
+	it(
 		"passes redirect: 'error' to fetch (public profile rejects redirects)",
 		async () => {
 			let seen: RequestInit | undefined;

@@ -253,6 +253,45 @@ describe("createDidGrant", () => {
 				"DID not found",
 			);
 		});
+
+		it("returns 400 invalid_grant (no token minted) when the resolved verificationMethod has no string id", async () => {
+			// C1: a verificationMethod with valid key material but a missing `id`
+			// must never reach token minting — the minted JWT's required
+			// `verification_method` claim would otherwise be `undefined`,
+			// violating the six-claim contract (rule auth.token.signed-claims).
+			const did = "did:key:z6MkNoId";
+			const { ctx, privateKey } = await makeSignedCtx(did);
+			const publicKey = await ed.getPublicKeyAsync(privateKey);
+			const jwk: JsonWebKey = {
+				kty: "OKP",
+				crv: "Ed25519",
+				x: Buffer.from(publicKey).toString("base64url"),
+			};
+			const malformedDoc = {
+				id: did,
+				verificationMethod: [
+					{
+						// no `id` field — the bug this test guards against
+						type: "JsonWebKey2020",
+						controller: did,
+						publicKeyJwk: jwk,
+					},
+				],
+			} as unknown as DidDocument;
+			const resolver: DidDocumentResolver = {
+				async resolve(d: string): Promise<ResolutionResult> {
+					if (d !== did) throw new Error(`unexpected did: ${d}`);
+					return makeMockResolution(malformedDoc, did);
+				},
+			};
+			const handler = createDidGrant(mockDeps, { resolver });
+
+			const { result } = await handler.handle(ctx);
+
+			expect(result.status).toBe(400);
+			expect("error" in result && result.error).toBe("invalid_grant");
+			expect("tokens" in result).toBe(false);
+		});
 	});
 
 	describe("handle – success", () => {

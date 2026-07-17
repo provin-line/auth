@@ -31,9 +31,13 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
 
 /**
  * `auth.grant.*` / `auth.method.*` / `auth.transcript.*` vector family
- * (auth-grant.yaml). No vectors exist in dplaax.spec_draft for this family
- * yet (new rule file) — this is the FIRST definition of its `input`/
- * `expect` convention:
+ * (auth-grant.yaml). As of this writing, dplaax.spec_draft's
+ * vectors/README.md has no row for this family (auth-grant.yaml is a newer
+ * rule file) — this was the FIRST definition of its `input`/`expect`
+ * convention. (P2 vendors this family's real vectors —
+ * `auth-*.json` — from dplaax.spec_draft into `../vectors/`, tracked by
+ * `../vectors/SYNC_MANIFEST.json`, and runs them unmodified through this
+ * same convention.)
  *
  *   "input": {
  *     "did": "<the DID the grant authenticates as>",
@@ -65,9 +69,8 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
  * behavioral difference (the factory itself does nothing but call
  * `createDidGrant` with the same `{config, keyStore, pathResolver}` shape
  * this executor already builds). Driving `createDidGrant` directly is
- * therefore the stable, precedented choice — flagged in
- * `.superpowers/sdd/task-11-report.md` as a judgment call in case the
- * literal "via buildModules" reading was intended.
+ * therefore the stable, precedented choice — noted here as a judgment call
+ * in case a literal "via buildModules" reading was intended instead.
  */
 interface GrantVectorInput {
 	did: string;

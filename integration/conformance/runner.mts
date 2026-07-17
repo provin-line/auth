@@ -31,16 +31,19 @@
  *   { "id": string, "rule": string, "description": string,
  *     "input": object, "expect": "accept" | "reject" | object }
  *
- * The spec's README documents `input`/`expect` sub-shape conventions
- * per rule family (e.g. `commitment.*`, `resolver.*`, `confidence.*`) but
- * does not yet have rows for the `auth.*` / `did-resolution-auth.yaml`
- * families (auth-grant.yaml / did-resolution-auth.yaml are new — no
- * `auth-*.json` / `did-resolution-*.json` vectors exist in the spec repo
- * yet). This file's executors are therefore the FIRST implementation of
- * that family's `input`/`expect` convention; see the executor modules'
- * doc comments for the exact per-family shape, and
- * `.superpowers/sdd/task-11-report.md` for the rationale P2 needs to fold
- * this into the spec repo's README table.
+ * The spec's README documents `input`/`expect` sub-shape conventions per
+ * rule family (e.g. `commitment.*`, `resolver.*`, `confidence.*`) but, as of
+ * this writing, does not yet have rows for the `auth.*` /
+ * `did-resolution-auth.yaml` families (auth-grant.yaml /
+ * did-resolution-auth.yaml are newer rule files). This file's executors
+ * were therefore the FIRST implementation of that family's `input`/`expect`
+ * convention — see the executor modules' doc comments for the exact
+ * per-family shape. As of P2, dplaax.spec_draft's real `auth-*.json` /
+ * `did-resolution-*.json` vectors are vendored into `./vectors/` (via
+ * `scripts/sync-spec-vectors.sh`, tracked by `vectors/SYNC_MANIFEST.json`)
+ * and run unmodified through these same executors; folding this
+ * `input`/`expect` convention into the spec repo's own README table remains
+ * follow-up work there.
  *
  * Dispatch table (by `rule` id prefix):
  *   - `auth.resolve.*`                                  -> executors/resolve.mts

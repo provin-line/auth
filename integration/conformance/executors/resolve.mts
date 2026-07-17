@@ -21,9 +21,15 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
 /**
  * `auth.resolve.*` vector family (did-resolution-auth.yaml).
  *
- * This family has no vectors in dplaax.spec_draft yet (new rule file), so
- * there is no established README convention to match — this is the FIRST
- * definition of it. Convention chosen to mirror the mock-registry-response
+ * As of this writing, this family has no rows in dplaax.spec_draft's
+ * vectors/README.md (did-resolution-auth.yaml is a newer rule file), so
+ * there was no established README convention to match when this executor
+ * was written — this was the FIRST definition of it. (P2 vendors this
+ * family's real vectors — `did-resolution-*.json` — from dplaax.spec_draft
+ * into `../vectors/`, tracked by `../vectors/SYNC_MANIFEST.json`, and runs
+ * them unmodified through this same convention; folding the convention into
+ * the spec repo's own README table remains follow-up work there.)
+ * Convention chosen to mirror the mock-registry-response
  * shape `DplaaxDidResolver` actually consumes (a status + body pair), the
  * same shape `packages/auth-provider-dplaax-module/src/__tests__/resolver/
  * resolver.test.mts` builds by hand for every test case:

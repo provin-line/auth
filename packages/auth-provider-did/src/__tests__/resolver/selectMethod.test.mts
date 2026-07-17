@@ -61,6 +61,62 @@ describe("selectVerificationMethod", () => {
 		});
 	});
 
+	describe("invalid-method-id (missing/non-string id — always rejected, fail-closed)", () => {
+		it("throws invalid-method-id when the controller-matching method (LEGACY path) has no id", () => {
+			const { id: _omit, ...withoutId } = vm("key-1", did);
+			const doc: DidDocument = {
+				id: did,
+				verificationMethod: [withoutId as unknown as VerificationMethod],
+			};
+
+			expectReason(() => selectVerificationMethod(doc, { did }), "invalid-method-id");
+		});
+
+		it("throws invalid-method-id when the controller-matching method (LEGACY path) has a non-string id", () => {
+			const method = { ...vm("key-1", did), id: 42 as unknown as string };
+			const doc: DidDocument = { id: did, verificationMethod: [method] };
+
+			expectReason(() => selectVerificationMethod(doc, { did }), "invalid-method-id");
+		});
+
+		it("throws invalid-method-id on the OWNER path (methodId given) when a document method has no id, even though methodId targets a different, valid entry", () => {
+			const { id: _omit, ...brokenMethod } = vm("broken", "did:example:other");
+			const target = vm("target", did);
+			const doc: DidDocument = {
+				id: did,
+				verificationMethod: [brokenMethod as unknown as VerificationMethod, target],
+			};
+
+			expectReason(
+				() => selectVerificationMethod(doc, { did, methodId: target.id }),
+				"invalid-method-id",
+			);
+		});
+
+		it("fails closed rather than skipping the invalid-id method and selecting the other controller-matched candidate (no selection-ambiguity game)", () => {
+			const { id: _omit, ...brokenMethod } = vm("broken", did);
+			const valid = vm("valid", did);
+			const doc: DidDocument = {
+				id: did,
+				verificationMethod: [brokenMethod as unknown as VerificationMethod, valid],
+			};
+
+			expectReason(() => selectVerificationMethod(doc, { did }), "invalid-method-id");
+		});
+
+		it("is checked before duplicate-id detection (invalid-method-id, not duplicate-method-id, when both conditions are present)", () => {
+			const { id: _omit, ...brokenMethod } = vm("broken", did);
+			const dup1 = vm("dup", did);
+			const dup2 = vm("dup", did);
+			const doc: DidDocument = {
+				id: did,
+				verificationMethod: [brokenMethod as unknown as VerificationMethod, dup1, dup2],
+			};
+
+			expectReason(() => selectVerificationMethod(doc, { did }), "invalid-method-id");
+		});
+	});
+
 	describe("OWNER path (methodId given)", () => {
 		it("selects the exact method matching methodId, order-independent of controller-matching order (auth.grant.exact-method)", () => {
 			const first = vm("key-1", did); // also controller-matches — must NOT be picked
@@ -144,6 +200,25 @@ describe("selectVerificationMethod", () => {
 				assertionMethod: [method.id],
 				// no `authentication` entry for this method
 			};
+
+			expectReason(
+				() =>
+					selectVerificationMethod(doc, {
+						did,
+						methodId: method.id,
+						relationship: "authentication",
+					}),
+				"not-in-relationship",
+			);
+		});
+
+		it("throws not-in-relationship (not a raw TypeError) when the relationship value is a non-array", () => {
+			const method = vm("key-1", did);
+			const doc = {
+				id: did,
+				verificationMethod: [method],
+				authentication: "not-an-array" as unknown,
+			} as unknown as DidDocument;
 
 			expectReason(
 				() =>

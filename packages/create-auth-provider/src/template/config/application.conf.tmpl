@@ -83,6 +83,10 @@ oauth {
       # rule audit-5). Replace with your real audience(s) before deploying
       # past localhost.
       allowedAudiences = ["http://localhost:3000"]
+      # CAVEAT: this override must be a HOCON array literal, e.g.
+      # ["https://a.example","https://b.example"] — an env var supplies a
+      # plain string, which fails the config schema's z.array(...) check at
+      # boot (this array-typed field has no string-to-array coercion).
       allowedAudiences = ${?OAUTH_GRANTS_DID_ALLOWED_AUDIENCES}
       # Upper bound, in seconds, on oauth.accessToken.expiresIn (above) for
       # this grant — the P0 revocation-latency bound the token lifetime must

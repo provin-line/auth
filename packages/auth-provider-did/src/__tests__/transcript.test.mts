@@ -129,6 +129,25 @@ describe("parseLoginTranscript", () => {
 		expectTranscriptError(() => parseLoginTranscript(payload), "timestamp");
 	});
 
+	it("rejects a normalized invalid calendar date (Feb 30 — Date.parse silently rolls it over to Mar 2, not NaN)", () => {
+		// C4: Date.parse("2026-02-30T00:00:00Z") does NOT return NaN — it
+		// normalizes to 2026-03-02T00:00:00Z, a valid instant. Regex shape +
+		// Date.parse-ability alone therefore accept an impossible calendar
+		// date; the round-trip check must still reject it.
+		const payload = validPayload({ timestamp: "2026-02-30T00:00:00Z" });
+		expectTranscriptError(() => parseLoginTranscript(payload), "timestamp");
+	});
+
+	it("rejects another normalized invalid calendar date (2027 is not a leap year — Feb 29 rolls over to Mar 1)", () => {
+		const payload = validPayload({ timestamp: "2027-02-29T00:00:00Z" });
+		expectTranscriptError(() => parseLoginTranscript(payload), "timestamp");
+	});
+
+	it("accepts a valid leap-day timestamp (2028 is a leap year)", () => {
+		const payload = validPayload({ timestamp: "2028-02-29T00:00:00Z" });
+		expect(() => parseLoginTranscript(payload)).not.toThrow();
+	});
+
 	it("accepts a timestamp with fractional seconds and lowercase z", () => {
 		const payload = validPayload({ timestamp: "2026-07-16T12:00:00.123z" });
 		expect(() => parseLoginTranscript(payload)).not.toThrow();

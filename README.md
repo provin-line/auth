@@ -132,6 +132,18 @@ The `create-auth-provider` scaffold ships secure-by-default: its generated
 `oauth.grants.did.revocationLatencyBoundSec`, and
 `oauth.grants.did.legacyMaxTtlSec` all to `900` (15 minutes) out of the box.
 
+**Audience-absent requests (LEGACY path only, intentional).** `allowedAudiences`
+governs the server-side *allowlist* — it must be configured non-empty
+(above). It does NOT force every request to carry an `audience` claim: on
+the LEGACY path, a request that omits `audience` entirely is accepted and
+mints a token with no `aud` restriction. This is intentional, not an
+oversight — the spec's audience-required rule binds the strict OWNER
+profile (`OWNER_AUTHENTICATION_LOGIN@1` / `OWNER_ASSERTION_CONTROL_LOGIN@1`),
+which is fail-closed and not wired into the request handler yet (see
+Contract ids above); LEGACY was never bound by that rule. An empty or absent
+*allowlist* still fails closed regardless — this only concerns a request
+that omits the claim.
+
 ### Resolver hardening / bounds
 
 `DplaaxDidResolver`'s transport (`createBoundedFetch`) enforces a "resource

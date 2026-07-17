@@ -159,6 +159,28 @@ export function createBoundedFetch(
 				throw classifyTransportError(err, url, opts.timeoutMs);
 			}
 
+			const finalOrigin = new URL(res.url || url).origin;
+
+			// Classify by status BEFORE reading the body. A non-2xx response
+			// (most importantly a 5xx outage) must surface its status
+			// immediately: reading first would either delay a known outage
+			// behind a slow/hanging body, or throw `body-too-large` for an
+			// oversized error body — turning a real 503 into a wrong 400
+			// (dplaax.mts's ResolutionRejectedError mapping) instead of the
+			// promised 503. `dplaax.mts` only reads `bytes` on the 2xx/success
+			// path, so skipping the read here costs the caller nothing.
+			// Cancel (don't drain) the stream so it's freed rather than left
+			// hanging; best-effort — mocked/degenerate `body` shapes in tests
+			// may not implement `cancel()`.
+			if (res.status < 200 || res.status >= 300) {
+				try {
+					await res.body?.cancel?.();
+				} catch {
+					// best-effort cleanup only
+				}
+				return { status: res.status, bytes: new Uint8Array(0), finalOrigin };
+			}
+
 			let bytes: Uint8Array<ArrayBuffer>;
 			try {
 				bytes = await readBoundedBody(res, opts.maxBodyBytes);
@@ -169,7 +191,6 @@ export function createBoundedFetch(
 				throw classifyTransportError(err, url, opts.timeoutMs);
 			}
 
-			const finalOrigin = new URL(res.url || url).origin;
 			return { status: res.status, bytes, finalOrigin };
 		} finally {
 			clearTimeout(timer);
