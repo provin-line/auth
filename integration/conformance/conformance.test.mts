@@ -221,10 +221,12 @@ describe.skipIf(!process.env.DPLAAX_SPEC_DIR)(
 );
 
 describe("spec-vector drift check — detection logic (fixture-driven, always runs)", () => {
-	it("flags a new upstream vector missing from the manifest AND a stale/edited vendored copy, and reports clean once both are fixed", async () => {
+	it("flags a new upstream vector missing from the manifest, a stale/edited vendored copy, AND a manifest entry whose upstream vector no longer exists, and reports clean once all three are fixed", async () => {
 		// Not gated on DPLAAX_SPEC_DIR: this proves computeVectorDrift itself
-		// catches the two classes of drift the pre-C3 check missed, using
-		// throwaway fixture directories rather than the real spec checkout.
+		// catches all three drift classes it's documented to detect (new
+		// upstream vector, stale/edited local copy, removed/renamed upstream
+		// vector), using throwaway fixture directories rather than the real
+		// spec checkout.
 		const tmpRoot = await mkdtemp(path.join(tmpdir(), "conformance-drift-check-"));
 		try {
 			const specVectorsDir = path.join(tmpRoot, "spec", "vectors");
@@ -235,16 +237,24 @@ describe("spec-vector drift check — detection logic (fixture-driven, always ru
 			const stableContent = JSON.stringify({ id: "auth-stable-001" });
 			const staleVendoredContent = JSON.stringify({ id: "auth-stable-001", tampered: true });
 			const newUpstreamContent = JSON.stringify({ id: "auth-new-001" });
+			// (c) a manifest-tracked, still-vendored vector whose upstream
+			// source has been removed/renamed in the spec repo.
+			const removedContent = JSON.stringify({ id: "auth-removed-001" });
 
 			await writeFile(path.join(specVectorsDir, "auth-stable-001.json"), stableContent);
 			// (a) a new upstream vector the manifest doesn't know about yet.
 			await writeFile(path.join(specVectorsDir, "auth-new-001.json"), newUpstreamContent);
 			// (b) a local vendored copy that has drifted from what was synced.
 			await writeFile(path.join(vendoredDir, "auth-stable-001.json"), staleVendoredContent);
+			// (c) vendored + manifest-tracked, but deliberately NOT written to
+			// specVectorsDir — simulates the upstream spec vector having been
+			// removed or renamed after it was last synced.
+			await writeFile(path.join(vendoredDir, "auth-removed-001.json"), removedContent);
 
 			const driftedManifest = {
 				files: {
 					"auth-stable-001.json": createHash("sha256").update(stableContent).digest("hex"),
+					"auth-removed-001.json": createHash("sha256").update(removedContent).digest("hex"),
 				},
 			};
 
@@ -262,11 +272,20 @@ describe("spec-vector drift check — detection logic (fixture-driven, always ru
 					(i) => i.includes('"auth-stable-001.json"') && i.includes("stale/edited local copy"),
 				),
 			).toBe(true);
+			expect(
+				issues.some(
+					(i) =>
+						i.includes('"auth-removed-001.json"') && i.includes("no longer exists upstream"),
+				),
+			).toBe(true);
 
-			// Fix both drifts (sync the new vector, restore the vendored copy) —
-			// the check must go clean, proving it doesn't just always-fail.
+			// Fix all three drifts — sync the new vector, restore the tampered
+			// vendored copy, and decommission the removed-upstream vector
+			// (delete its vendored copy + drop it from the manifest) — the
+			// check must go clean, proving it doesn't just always-fail.
 			await writeFile(path.join(vendoredDir, "auth-stable-001.json"), stableContent);
 			await writeFile(path.join(vendoredDir, "auth-new-001.json"), newUpstreamContent);
+			await rm(path.join(vendoredDir, "auth-removed-001.json"));
 			const fixedManifest = {
 				files: {
 					"auth-stable-001.json": createHash("sha256").update(stableContent).digest("hex"),

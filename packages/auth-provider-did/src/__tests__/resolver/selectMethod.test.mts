@@ -93,7 +93,7 @@ describe("selectVerificationMethod", () => {
 			);
 		});
 
-		it("fails closed rather than skipping the invalid-id method and selecting the other controller-matched candidate (no selection-ambiguity game)", () => {
+		it("fails closed with invalid-method-id even though the invalid-id entry shares its controller with a second, valid entry — pre-fix, selectLegacy still throws here too (ambiguous-legacy-selection, since both entries share the controller), just under the wrong taxonomy reason, not a silent success (no selection-ambiguity game)", () => {
 			const { id: _omit, ...brokenMethod } = vm("broken", did);
 			const valid = vm("valid", did);
 			const doc: DidDocument = {
@@ -212,12 +212,43 @@ describe("selectVerificationMethod", () => {
 			);
 		});
 
-		it("throws not-in-relationship (not a raw TypeError) when the relationship value is a non-array", () => {
+		it("throws not-in-relationship (not a raw TypeError) when the relationship value is a non-iterable plain object", () => {
+			// A plain object `{}` is NOT iterable in JS -- unlike a string, which
+			// iterates over its characters and would make this fixture vacuous.
+			// Pre-fix code (`doc[relationship] ?? []` followed by a bare
+			// `for...of`) throws a raw, untyped `TypeError` ("{} is not
+			// iterable") for a plain-object fixture, NOT a `MethodSelectionError`
+			// -- so `expectReason`'s `toBeInstanceOf(MethodSelectionError)` check
+			// genuinely fails pre-fix. Only the `Array.isArray` guard in
+			// `assertStringReferenced` normalizes a non-array to the taxonomy's
+			// `not-in-relationship` reason (treated the same as an absent array).
 			const method = vm("key-1", did);
 			const doc = {
 				id: did,
 				verificationMethod: [method],
-				authentication: "not-an-array" as unknown,
+				authentication: {} as unknown,
+			} as unknown as DidDocument;
+
+			expectReason(
+				() =>
+					selectVerificationMethod(doc, {
+						did,
+						methodId: method.id,
+						relationship: "authentication",
+					}),
+				"not-in-relationship",
+			);
+		});
+
+		it("throws not-in-relationship (not a raw TypeError) when the relationship value is a non-iterable number", () => {
+			// Same non-iterable-value regression guard as the plain-object case
+			// above, with a different primitive: `42` is also not iterable, so
+			// pre-fix `for...of` throws a raw TypeError here too.
+			const method = vm("key-1", did);
+			const doc = {
+				id: did,
+				verificationMethod: [method],
+				authentication: 42 as unknown,
 			} as unknown as DidDocument;
 
 			expectReason(
