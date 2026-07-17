@@ -165,6 +165,29 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 	// bound check below.
 	const revocationLatencyBoundSec = didConfig?.revocationLatencyBoundSec as number | undefined;
 
+	// Fail-closed stopgap (Option B): the OWNER validation path
+	// (`validateOwnerLogin` in transcript.mts — versioned transcript,
+	// three-way kid match, Fork-Y relationship) is built and unit-tested but
+	// NOT wired into the `handle()` request flow below, which always runs the
+	// LEGACY (relationship-blind) checks. Selecting an OWNER contract here
+	// would otherwise mint a token LABELED OWNER_* (`auth_contract_id` claim,
+	// see step 11 of `handle()`) while only LEGACY validation ran — a token
+	// that misrepresents its own assurance level. Refuse at construction
+	// time, before any request is served, rather than let a mislabeled
+	// OWNER token be minted. Remove this guard once the OWNER path is
+	// actually enforced in `handle()`.
+	if (
+		authContract === "OWNER_AUTHENTICATION_LOGIN@1" ||
+		authContract === "OWNER_ASSERTION_CONTROL_LOGIN@1"
+	) {
+		throw new Error(
+			`authContract '${authContract}' selects the OWNER login contract, but the OWNER validation path ` +
+				"(versioned transcript, three-way kid match, Fork-Y relationship) is not yet wired into the " +
+				"request handler. Refusing to construct a grant that would mint an OWNER-labeled token while " +
+				"performing only LEGACY validation. Use LEGACY_DID_LOGIN@1 until the OWNER path is enforced.",
+		);
+	}
+
 	if (revocationLatencyBoundSec === undefined) {
 		throw new Error(
 			"did grant config: revocationLatencyBoundSec is required (rule auth.token.lifetime-bound) — fail closed, no default",

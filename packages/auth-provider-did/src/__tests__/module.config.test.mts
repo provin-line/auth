@@ -265,14 +265,25 @@ describe("createDidGrant — boot-time lifetime-bound asserts", () => {
 		);
 	});
 
-	it("does NOT apply legacyMaxTtlSec when authContract is not LEGACY_DID_LOGIN@1", () => {
+	it("does NOT reach the legacyMaxTtlSec check for a non-LEGACY authContract — the OWNER fail-closed guard (see below) throws first", () => {
+		// Was: "does NOT apply legacyMaxTtlSec when authContract is not
+		// LEGACY_DID_LOGIN@1", asserting `.not.toThrow()`. Superseded by the
+		// Option-B fail-closed stopgap: the only non-LEGACY values are the two
+		// OWNER_* contracts, and constructing a grant with either now throws
+		// unconditionally (OWNER path isn't wired into the handler yet) before
+		// the legacyMaxTtlSec bound is ever evaluated. This test still pins
+		// that outcome for this exact fixture; the OWNER-guard behavior itself
+		// is covered by the "OWNER authContract fail-closed guard" describe
+		// block below.
 		const config = makeBootConfig({
 			expiresIn: 3600,
 			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
 			revocationLatencyBoundSec: 7200,
 			legacyMaxTtlSec: 900,
 		});
-		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/OWNER/,
+		);
 	});
 
 	it("succeeds when expiresIn is within both bounds", () => {
@@ -289,6 +300,52 @@ describe("createDidGrant — boot-time lifetime-bound asserts", () => {
 			expiresIn: 900,
 			revocationLatencyBoundSec: 900,
 			legacyMaxTtlSec: 900,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
+	});
+});
+
+// ─── OWNER authContract fail-closed guard (Option-B stopgap) ───────────────
+//
+// The OWNER validation path (`validateOwnerLogin` in transcript.mts —
+// versioned transcript, three-way kid match, Fork-Y relationship) is built
+// and unit-tested but NOT wired into `createDidGrant`'s request handler,
+// which always runs the LEGACY (relationship-blind) flow. Selecting an
+// OWNER contract would otherwise mint a token LABELED OWNER_* while only
+// LEGACY validation ran — a token that misrepresents its own assurance
+// level. Until the OWNER path is wired in, grant construction must refuse
+// to build with an OWNER authContract at all (fail closed at boot, not at
+// request time).
+
+describe("createDidGrant — OWNER authContract fail-closed guard (Option-B stopgap)", () => {
+	it("throws when authContract is OWNER_AUTHENTICATION_LOGIN@1 (OWNER path not wired into the handler)", () => {
+		const config = makeBootConfig({
+			expiresIn: 3600,
+			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
+			revocationLatencyBoundSec: 3600,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/OWNER/,
+		);
+	});
+
+	it("throws when authContract is OWNER_ASSERTION_CONTROL_LOGIN@1 (OWNER path not wired into the handler)", () => {
+		const config = makeBootConfig({
+			expiresIn: 3600,
+			authContract: "OWNER_ASSERTION_CONTROL_LOGIN@1",
+			revocationLatencyBoundSec: 3600,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/OWNER/,
+		);
+	});
+
+	it("does NOT throw for authContract LEGACY_DID_LOGIN@1 (the default) with otherwise-valid config", () => {
+		const config = makeBootConfig({
+			expiresIn: 3600,
+			authContract: "LEGACY_DID_LOGIN@1",
+			revocationLatencyBoundSec: 3600,
+			legacyMaxTtlSec: 3600,
 		});
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
 	});
