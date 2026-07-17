@@ -60,7 +60,18 @@ describe("DplaaxDidResolver", () => {
     });
 
     it("rejects pipeline DID (Resolver is owner-only)", async () => {
+        // Pre-fetch validation failures fall under the two-class taxonomy
+        // (errors.mts) like every other resolve() failure — this must be a
+        // ResolutionRejectedError, not a plain Error, so callers that
+        // `instanceof`-classify (e.g. the conformance resolve executor)
+        // don't crash on it.
         const resolver = new DplaaxDidResolver(registryBaseUrl);
+        await expect(
+            resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1"),
+        ).rejects.toBeInstanceOf(ResolutionRejectedError);
+        await expect(
+            resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1"),
+        ).rejects.toMatchObject({ reason: "not-owner-did" });
         await expect(
             resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1"),
         ).rejects.toThrow(/owner DID/i);
@@ -68,11 +79,15 @@ describe("DplaaxDidResolver", () => {
 
     it("rejects process DID (Resolver is owner-only)", async () => {
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve(
-                "did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1:process:x1",
-            ),
-        ).rejects.toThrow(/owner DID/i);
+        const processDid =
+            "did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1:process:x1";
+        await expect(resolver.resolve(processDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve(processDid)).rejects.toMatchObject({
+            reason: "not-owner-did",
+        });
+        await expect(resolver.resolve(processDid)).rejects.toThrow(/owner DID/i);
     });
 
     it("resolves a non-org accountType owner DID (allow-list is the registry's responsibility)", async () => {
@@ -100,18 +115,34 @@ describe("DplaaxDidResolver", () => {
     it("still rejects an unsafe accountType segment (parser guarantee)", async () => {
         // Relaxing the allow-list must not relax segment safety: the URL is
         // built from accountType, so the parser's SAFE_SEGMENT grammar is the
-        // remaining (and sufficient) guard against path injection.
+        // remaining (and sufficient) guard against path injection. The raw
+        // parseDplaaxDid() throw must be caught and re-wrapped as a
+        // ResolutionRejectedError (taxonomy), not leak out as a plain Error.
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve("did:dplaax:registry.dplaax.dev:u%2Fser:alice"),
-        ).rejects.toThrow(/unsafe accountType segment/i);
+        const unsafeDid = "did:dplaax:registry.dplaax.dev:u%2Fser:alice";
+        await expect(resolver.resolve(unsafeDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve(unsafeDid)).rejects.toMatchObject({
+            reason: "malformed-did",
+        });
+        await expect(resolver.resolve(unsafeDid)).rejects.toThrow(
+            /unsafe accountType segment/i,
+        );
     });
 
     it("rejects DID whose registry segment does not match baseUrl host (default)", async () => {
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve("did:dplaax:other-registry.example.com:org:acme"),
-        ).rejects.toThrow(/registry "other-registry\.example\.com" not in allow-list/);
+        const foreignDid = "did:dplaax:other-registry.example.com:org:acme";
+        await expect(resolver.resolve(foreignDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve(foreignDid)).rejects.toMatchObject({
+            reason: "registry-not-allowlisted",
+        });
+        await expect(resolver.resolve(foreignDid)).rejects.toThrow(
+            /registry "other-registry\.example\.com" not in allow-list/,
+        );
     });
 
     it("matches registry segment case-insensitively", async () => {
@@ -215,6 +246,12 @@ describe("DplaaxDidResolver", () => {
 
     it("throws on non-dplaax DID", async () => {
         const resolver = new DplaaxDidResolver(registryBaseUrl);
+        await expect(resolver.resolve("did:key:z6Mk...")).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve("did:key:z6Mk...")).rejects.toMatchObject({
+            reason: "malformed-did",
+        });
         await expect(resolver.resolve("did:key:z6Mk...")).rejects.toThrow(
             '"did:key:z6Mk..." is not a did:dplaax DID',
         );

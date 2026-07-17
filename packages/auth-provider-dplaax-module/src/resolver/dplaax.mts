@@ -120,12 +120,38 @@ export class DplaaxDidResolver implements DidDocumentResolver {
     }
 
     async resolve(did: string): Promise<ResolutionResult> {
-        const parsed = parseDplaaxDid(did);
+        // Pre-fetch validation (parse / owner-only / allow-list) must land in
+        // the same two-class taxonomy (errors.mts) as every post-fetch
+        // failure below — every `resolve()` rejection is either
+        // ResolutionUnavailableError or ResolutionRejectedError, never a
+        // plain Error. Callers that `instanceof`-classify (e.g. the
+        // conformance resolve executor, integration/conformance/executors/
+        // resolve.mts) would otherwise crash on an unclassified throw
+        // instead of asserting a FAILED outcome. All three failures here are
+        // definitive rejections (never transient), so they map to
+        // ResolutionRejectedError, not ResolutionUnavailableError.
+        let parsed: ReturnType<typeof parseDplaaxDid>;
+        try {
+            parsed = parseDplaaxDid(did);
+        } catch (err) {
+            throw new ResolutionRejectedError(
+                "malformed-did",
+                err instanceof Error ? err.message : String(err),
+            );
+        }
 
-        requireOwner(parsed);
+        try {
+            requireOwner(parsed);
+        } catch (err) {
+            throw new ResolutionRejectedError(
+                "not-owner-did",
+                err instanceof Error ? err.message : String(err),
+            );
+        }
 
         if (!this.allowedRegistries.has(parsed.registry.toLowerCase())) {
-            throw new Error(
+            throw new ResolutionRejectedError(
+                "registry-not-allowlisted",
                 `registry "${parsed.registry}" not in allow-list for DID: "${did}"`,
             );
         }

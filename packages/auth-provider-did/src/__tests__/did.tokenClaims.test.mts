@@ -350,5 +350,17 @@ describe("createDidGrant — select-step failure mapping (Task 9 reviewer fix)",
 		expect(result.status).toBe(400);
 		expect("error" in result && result.error).toBe("invalid_grant");
 		expect("tokens" in result).toBe(false);
+		// Pre-P2 taxonomy hardening: a MethodSelectionError is NEITHER
+		// ResolutionUnavailableError NOR ResolutionRejectedError — the
+		// genuinely-unexpected fallthrough in `mapResolutionFailure` — so its
+		// internal message ("duplicate-method-id", the raw doc content) must
+		// not be echoed to the client. Status/error code are unchanged; only
+		// the leaked message text is replaced with a generic description.
+		expect(
+			"errorDescription" in result && result.errorDescription,
+		).toBe("grant could not be processed");
+		expect(
+			"errorDescription" in result && result.errorDescription,
+		).not.toContain("duplicate-method-id");
 	});
 });

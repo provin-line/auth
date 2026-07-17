@@ -22,7 +22,7 @@ import {
 	generateTokenResponse,
 } from "@o3co/auth-provider-core";
 import { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
-import { ResolutionUnavailableError } from "./resolver/errors.mjs";
+import { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/errors.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
 import {
 	type RelationshipName,
@@ -100,24 +100,38 @@ async function sha256Hex(input: string): Promise<string> {
  * failure to its HTTP outcome. `ResolutionUnavailableError` means the
  * registry could not be reached, or is reachable but failing transiently —
  * the DID itself may still be valid, so this is INDETERMINATE and maps to
- * 503 (a client can retry). Everything else this handler can catch here —
- * `ResolutionRejectedError`, `MethodSelectionError`, `TranscriptError` (the
- * last not yet reachable on the LEGACY-only path this handler runs today;
+ * 503 (a client can retry). `ResolutionRejectedError` — every `resolve()`
+ * failure now lands in one of these two classes (errors.mts's two-class
+ * taxonomy) — is FAILED and maps to 400 `invalid_grant`, echoing its
+ * message: that message is resolver-authored and already meant for a
+ * client to see.
+ *
+ * Anything else reaching here — `MethodSelectionError`, `TranscriptError`
+ * (not yet reachable on the LEGACY-only path this handler runs today;
  * folded into the mapping now so a future OWNER-path caller gets it for
- * free), or any other unclassified error — is FAILED and maps to 400
- * `invalid_grant`. Neither outcome mints a token: callers return the
- * mapped result immediately.
+ * free), or any other unclassified error — is also FAILED and maps to 400
+ * `invalid_grant`, but is genuinely unexpected: don't echo its `.message`
+ * into the client-facing `errorDescription` (it may carry internal detail
+ * never meant for a client — stack context, raw document content, etc.);
+ * use a generic description instead. Neither outcome mints a token: callers
+ * return the mapped result immediately.
  */
 function mapResolutionFailure(
 	err: unknown,
 ):
 	| { status: 503; error: "temporarily_unavailable"; errorDescription: string }
 	| { status: 400; error: "invalid_grant"; errorDescription: string } {
-	const errorDescription = err instanceof Error ? err.message : String(err);
 	if (err instanceof ResolutionUnavailableError) {
-		return { status: 503, error: "temporarily_unavailable", errorDescription };
+		return { status: 503, error: "temporarily_unavailable", errorDescription: err.message };
 	}
-	return { status: 400, error: "invalid_grant", errorDescription };
+	if (err instanceof ResolutionRejectedError) {
+		return { status: 400, error: "invalid_grant", errorDescription: err.message };
+	}
+	return {
+		status: 400,
+		error: "invalid_grant",
+		errorDescription: "grant could not be processed",
+	};
 }
 
 export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions): GrantHandler => {

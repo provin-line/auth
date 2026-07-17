@@ -71,9 +71,15 @@ export const didConfigSchema = z.object({
 						 * The P0 auth contract this grant enforces (dplaax.spec_draft).
 						 * `LEGACY_DID_LOGIN@1` — the pre-existing message shape with no
 						 * signed transcript — is the scaffold/default contract. The two
-						 * `OWNER_*` values are transcript-bearing contracts (wired in
-						 * Task 9) gated by `ownerMigrationRatified` below (rule
-						 * `auth.migration.enable-gate`). Kept in sync by hand with
+						 * `OWNER_*` values select transcript-bearing contracts gated by
+						 * `ownerMigrationRatified` below (rule `auth.migration.enable-
+						 * gate`) — but the OWNER validation path (versioned transcript,
+						 * three-way kid match, Fork-Y relationship; see transcript.mts)
+						 * is NOT wired into the request handler yet. `createDidGrant`
+						 * fails closed at construction time for either `OWNER_*` value
+						 * (see the guard in did.mts) until that path is enforced in
+						 * `handle()` — selecting an OWNER_* contract today is a boot-time
+						 * error, not a runtime one. Kept in sync by hand with
 						 * `AuthContractId` in `./transcript.mts` — zod's literal-union
 						 * enum can't reference that type's members directly.
 						 */
