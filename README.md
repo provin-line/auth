@@ -70,7 +70,7 @@ Client
 
 The DID grant (`@provin-line/auth-provider-did`, composed into the resolver
 `DplaaxDidResolver` from `@provin-line/auth-provider-dplaax-module`) issues
-tokens under a P0 auth contract (dplaax.spec_draft). This section documents
+tokens under a P0 auth contract (dplaax.spec). This section documents
 what actually ships today, not the full target contract.
 
 ### Contract ids

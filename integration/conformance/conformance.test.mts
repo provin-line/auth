@@ -19,7 +19,7 @@
  *
  * Loads every `*.json` vector in `./vectors/`, runs it through `runVector`,
  * and asserts the outcome equals the vector's `expect`. As of P2, these
- * vectors are vendored from dplaax.spec_draft's real `auth-*.json` /
+ * vectors are vendored from dplaax.spec's real `auth-*.json` /
  * `did-resolution-*.json` vectors (via `scripts/sync-spec-vectors.sh`,
  * tracked by `vectors/SYNC_MANIFEST.json`) — the spec repo is the normative
  * source of truth (rule `auth.contract.normative-sot`); this directory
@@ -57,7 +57,7 @@ const vectors = await loadVectors();
  * `auth-grant-kid-mismatch-001` exercises rule `auth.grant.kid-match`
  * ("The JWS protected kid, the signed-payload method id, and the
  * resolver-selected method id MUST be identical; any divergence among the
- * three MUST fail closed" — dplaax.spec_draft rules/auth-grant.yaml).
+ * three MUST fail closed" — dplaax.spec rules/auth-grant.yaml).
  * `createDidGrant` (packages/auth-provider-did/src/did.mts) does not
  * perform this three-way check today: `validateOwnerLogin` — the function
  * that implements it (packages/auth-provider-did/src/transcript.mts) — is
@@ -85,7 +85,7 @@ const vectors = await loadVectors();
  */
 const KNOWN_FAILING_VECTOR_IDS: ReadonlySet<string> = new Set(["auth-grant-kid-mismatch-001"]);
 
-describe("conformance vectors (dplaax.spec_draft auth.* / did-resolution-auth rules)", () => {
+describe("conformance vectors (dplaax.spec auth.* / did-resolution-auth rules)", () => {
 	it("found at least one vendored vector", () => {
 		expect(vectors.length).toBeGreaterThan(0);
 	});

@@ -31,11 +31,11 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
 
 /**
  * `auth.grant.*` / `auth.method.*` / `auth.transcript.*` vector family
- * (auth-grant.yaml). As of this writing, dplaax.spec_draft's
+ * (auth-grant.yaml). As of this writing, dplaax.spec's
  * vectors/README.md has no row for this family (auth-grant.yaml is a newer
  * rule file) — this was the FIRST definition of its `input`/`expect`
  * convention. (P2 vendors this family's real vectors —
- * `auth-*.json` — from dplaax.spec_draft into `../vectors/`, tracked by
+ * `auth-*.json` — from dplaax.spec into `../vectors/`, tracked by
  * `../vectors/SYNC_MANIFEST.json`, and runs them unmodified through this
  * same convention.)
  *

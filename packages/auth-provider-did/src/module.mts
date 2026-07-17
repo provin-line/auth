@@ -68,7 +68,7 @@ export const didConfigSchema = z.object({
 						 */
 						allowedAudiences: z.array(z.string().min(1)).min(1),
 						/**
-						 * The P0 auth contract this grant enforces (dplaax.spec_draft).
+						 * The P0 auth contract this grant enforces (dplaax.spec).
 						 * `LEGACY_DID_LOGIN@1` — the pre-existing message shape with no
 						 * signed transcript — is the scaffold/default contract. The two
 						 * `OWNER_*` values select transcript-bearing contracts gated by

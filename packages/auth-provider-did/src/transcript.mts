@@ -18,7 +18,7 @@ import type { ParsedMessage } from "./verifiers/types.mjs";
 
 /**
  * The versioned wire/signing-scope shape of the OWNER-path login transcript
- * (dplaax.spec_draft P0 auth contract). Bumped whenever the signed shape
+ * (dplaax.spec P0 auth contract). Bumped whenever the signed shape
  * changes in a way that must not be silently accepted by an older verifier.
  */
 export const TRANSCRIPT_VERSION = "login-transcript-v1";
@@ -204,7 +204,7 @@ export interface ValidateOwnerLoginInput {
 }
 
 /**
- * OWNER-path login-transcript enforcement (dplaax.spec_draft P0 auth
+ * OWNER-path login-transcript enforcement (dplaax.spec P0 auth
  * contract, `auth_contract_id` ∈ `OWNER_*`). Pure and side-effect-free:
  * callers own signature verification, verification-method selection, and
  * replay/freshness (the existing nonce/timestamp machinery, fed from

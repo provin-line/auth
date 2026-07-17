@@ -10,7 +10,7 @@ releases.
 
 ## [Unreleased]
 
-P0 auth contract work (dplaax.spec_draft): hardens DID resolution, tightens
+P0 auth contract work (dplaax.spec): hardens DID resolution, tightens
 verification-method selection, adds an OWNER-path login transcript
 (validated but not yet wired in), a pluggable nonce store, six signed token
 claims with an explicit outcome split, and a conformance vector runner. See
@@ -69,7 +69,7 @@ contracts are fail-closed).
   `auth.token.signed-claims`, `auth.token.issuance-vs-request`,
   `auth.resolve.single-input-binding`.
 - A conformance vector runner (`integration/conformance`) that loads
-  `dplaax.spec_draft`-shaped vectors and executes them against the real
+  `dplaax.spec`-shaped vectors and executes them against the real
   resolve/grant code paths, fails closed (throws) on a vector naming a rule
   with no registered executor rather than silently skipping it, and carries
   a `DPLAAX_SPEC_DIR`-gated drift check against the upstream spec's vector

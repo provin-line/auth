@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Vendor dplaax.spec_draft's auth.*/did-resolution-auth conformance vectors
+# Vendor dplaax.spec's auth.*/did-resolution-auth conformance vectors
 # into integration/conformance/vectors/ (Task 11, rule
 # auth.contract.normative-sot). Not run in CI yet — a manual/local step
 # until P2 wires a cross-repo job.
 #
-# Usage: DPLAAX_SPEC_DIR=/path/to/dplaax.spec_draft scripts/sync-spec-vectors.sh
+# Usage: DPLAAX_SPEC_DIR=/path/to/dplaax.spec scripts/sync-spec-vectors.sh
 set -euo pipefail
 
 if [[ -z "${DPLAAX_SPEC_DIR:-}" ]]; then
-	echo "error: DPLAAX_SPEC_DIR is not set (path to a dplaax.spec_draft checkout)" >&2
+	echo "error: DPLAAX_SPEC_DIR is not set (path to a dplaax.spec checkout)" >&2
 	exit 1
 fi
 

@@ -54,7 +54,7 @@ npm install @noble/ed25519
 
 ## P0 Auth Contract
 
-This package mints tokens under a P0 auth contract (dplaax.spec_draft). Full
+This package mints tokens under a P0 auth contract (dplaax.spec). Full
 detail — the six token claims, config keys, resolver failure semantics, and
 liveness posture — lives in [the repo README's "P0 Auth Contract"
 section](../../README.md#p0-auth-contract); this is the short version.

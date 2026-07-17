@@ -17,14 +17,14 @@
 /**
  * Conformance vector runner (Task 11, rule `auth.contract.normative-sot`).
  *
- * dplaax.spec_draft is the normative source of truth for the DID
+ * dplaax.spec is the normative source of truth for the DID
  * authentication verification contract; provin.auth's implementation is a
  * projection of it (rule `auth.contract.normative-sot`). This runner is the
- * bridge that lets provin.auth execute dplaax.spec_draft's vector shape
+ * bridge that lets provin.auth execute dplaax.spec's vector shape
  * against this repo's actual executors, so drift between the spec and the
  * implementation shows up as a failing test rather than silent divergence.
  *
- * Vector shape (top-level — spec-pinned, matches dplaax.spec_draft's
+ * Vector shape (top-level — spec-pinned, matches dplaax.spec's
  * `vectors/README.md` EXACTLY, verified against `vectors/resolver-001.json`,
  * `vectors/commitment-001.json`, `vectors/confidence-002.json`):
  *
@@ -38,7 +38,7 @@
  * did-resolution-auth.yaml are newer rule files). This file's executors
  * were therefore the FIRST implementation of that family's `input`/`expect`
  * convention — see the executor modules' doc comments for the exact
- * per-family shape. As of P2, dplaax.spec_draft's real `auth-*.json` /
+ * per-family shape. As of P2, dplaax.spec's real `auth-*.json` /
  * `did-resolution-*.json` vectors are vendored into `./vectors/` (via
  * `scripts/sync-spec-vectors.sh`, tracked by `vectors/SYNC_MANIFEST.json`)
  * and run unmodified through these same executors; folding this
@@ -57,7 +57,7 @@
 import { runGrantVector } from "./executors/grant.mjs";
 import { runResolveVector } from "./executors/resolve.mjs";
 
-/** The generic dplaax.spec_draft vector shape — see file doc comment. */
+/** The generic dplaax.spec vector shape — see file doc comment. */
 export interface Vector {
 	readonly id: string;
 	readonly rule: string;
