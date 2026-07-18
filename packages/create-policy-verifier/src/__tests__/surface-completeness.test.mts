@@ -58,9 +58,12 @@ const EXPECTED_SURFACE: ReadonlyArray<readonly [string, string]> = [
 	["chain", "read"],
 	["chain", "update-allowlist"],
 	["chain", "read-allowlist"],
+	["chain", "report-health"],
 	["audit", "read"],
+	["audit", "register"],
 	["tlog", "read"],
 	["ingest", "push"],
+	["payloads", "retain"],
 ];
 
 // Matches one surface entry `{ resource = "R", action = "A" }`, tying resource
