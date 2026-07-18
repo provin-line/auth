@@ -67,9 +67,12 @@ rule {
         { resource = "chain", action = "read" }
         { resource = "chain", action = "update-allowlist" }
         { resource = "chain", action = "read-allowlist" }
+        { resource = "chain", action = "report-health" }
         { resource = "audit", action = "read" }
+        { resource = "audit", action = "register" }
         { resource = "tlog", action = "read" }
         { resource = "ingest", action = "push" }
+        { resource = "payloads", action = "retain" }
       ]
     }
     {
