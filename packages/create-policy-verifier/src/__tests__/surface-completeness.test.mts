@@ -62,6 +62,7 @@ const EXPECTED_SURFACE: ReadonlyArray<readonly [string, string]> = [
 	["audit", "read"],
 	["audit", "register"],
 	["tlog", "read"],
+	["tlog", "mirror"],
 	["ingest", "push"],
 	["payloads", "retain"],
 ];
