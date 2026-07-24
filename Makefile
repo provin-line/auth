@@ -21,7 +21,11 @@ instances:
 	node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
 		--dplaax-module-ref $(HEAD_SHA) --port 3001 \
 		--out instances/policy-verifier --no-git-init
-	pnpm install
+	# --no-frozen-lockfile explicitly: the committed lockfile intentionally
+	# has no instances/* importers (see clean-instances below), so a frozen
+	# install — pnpm's default under CI=true — always fails here once the
+	# generated instances' pins move ahead of the workspace lockfile.
+	pnpm install --no-frozen-lockfile
 
 # Restores pnpm-lock.yaml as well: with instances/ present, `pnpm install`
 # records instances/* importers in the lockfile. Those are local-only and
