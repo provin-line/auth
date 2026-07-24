@@ -20,13 +20,16 @@ see [create-app.md](create-app.md).
 
 > **Implementation status (v0.2)**: this section is the **target contract**.
 > The shipping default is the bounded `LEGACY_DID_LOGIN@1` grant contract,
-> which selects the verification method by exact id across the whole
-> document (relationship-blind) and accepts audience-absent requests; the
-> strict OWNER profile that enforces the authentication-relationship binding
-> is built but intentionally fail-closed (unwired) pending the spec's
-> migration gate (`auth.migration.enable-gate`). The top-level README
-> ("DID grant" and "Contract ids") and CHANGELOG `[0.2.0]` state exactly
-> what runs today.
+> which selects the verification method by controller match (exactly one
+> candidate or reject; relationship-blind, and the request's JWS `kid` is
+> surfaced but not enforced) and accepts audience-absent requests. The
+> strict OWNER profile (exact method-id + three-way `kid` match +
+> authentication-relationship binding) is built but not wired into the
+> request handler — constructing a provider with an `OWNER_*` contract
+> refuses fail-closed; the spec's migration gate
+> (`auth.migration.enable-gate`) keeps Fork-Y enrollment disabled
+> regardless. The top-level README ("P0 Auth Contract" → "Contract ids")
+> and CHANGELOG `[0.2.0]` state exactly what runs today.
 
 ### 2.1 Authentication (provider) — Required
 
@@ -70,8 +73,8 @@ see [create-app.md](create-app.md).
 
 ### 2.4 Authorization (policy-verifier) — Out of OSS scope
 
-- Provenance Confidence Level evaluation. See provin.oss [docs/GLOSSARY.md](https://github.com/provin-line/oss/blob/main/docs/GLOSSARY.md); receiver-side threshold enforcement is the receiver's responsibility.
-- Identity Verification Level evaluation. See provin.oss [docs/GLOSSARY.md](https://github.com/provin-line/oss/blob/main/docs/GLOSSARY.md); org-domain DNS TXT verification runs outside this service.
+- Provenance Confidence Level evaluation. See the **confidence** entry in provin.oss [docs/GLOSSARY.md](https://github.com/provin-line/oss/blob/main/docs/GLOSSARY.md) and dplaax/spec `rules/confidence.yaml`; receiver-side threshold enforcement is the receiver's responsibility.
+- Identity Verification Level evaluation. See the **organization verification** entry in provin.oss [docs/GLOSSARY.md](https://github.com/provin-line/oss/blob/main/docs/GLOSSARY.md); org-domain DNS TXT verification runs outside this service.
 - Cross-registry trust scoring, Trust Cluster anchoring, Transparency Log replay.
 
 ## 3. Boundary discipline

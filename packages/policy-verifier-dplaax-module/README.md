@@ -96,7 +96,7 @@ This package is **not published to npm**. Consumers reference it via pnpm's git-
 }
 ```
 
-See [create-app.md § 3.1 / § 3.3](../../docs/create-app.md) for the rationale and the consumer-facing scaffolding command.
+See [create-app.md § 3.1 / § 3.3](https://github.com/provin-line/auth/blob/develop/docs/create-app.md) for the rationale and the consumer-facing scaffolding command.
 
 ## License
 
