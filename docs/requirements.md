@@ -18,13 +18,23 @@ see [create-app.md](create-app.md).
 
 ## 2. Mandate from the dPLaaX spec
 
+> **Implementation status (v0.2)**: this section is the **target contract**.
+> The shipping default is the bounded `LEGACY_DID_LOGIN@1` grant contract,
+> which selects the verification method by exact id across the whole
+> document (relationship-blind) and accepts audience-absent requests; the
+> strict OWNER profile that enforces the authentication-relationship binding
+> is built but intentionally fail-closed (unwired) pending the spec's
+> migration gate (`auth.migration.enable-gate`). The top-level README
+> ("DID grant" and "Contract ids") and CHANGELOG `[0.2.0]` state exactly
+> what runs today.
+
 ### 2.1 Authentication (provider) — Required
 
 - MUST expose an OAuth 2.0 token endpoint that accepts `grant_type=did`.
 - MUST resolve `did:dplaax` Owner DIDs by HTTP-fetching `GET {registryBaseUrl}/did/{accountType}/{accountId}/did.json` from the configured DID Registry.
 - MUST verify the DID signature challenge against the resolved DID Document's authentication keys.
 - MUST issue a JWT asserting the authenticated subject DID. JWT is an **identity assertion only** — see §3.
-- MUST reject non-Owner DIDs (Pipeline / Process) at the resolver level. Their signature paths are handled by the Signer API (see `oss/docs/did/overview.md` §4).
+- MUST reject non-Owner DIDs (Pipeline / Process) at the resolver level. Their signature paths are handled by the Signer API (see provin.oss [docs/protocol/services.md](https://github.com/provin-line/oss/blob/main/docs/protocol/services.md)).
 - MUST accept any syntactically valid `accountType` from the parser; allow-list enforcement (`org` only at present) is the DID Registry's responsibility at registration time.
 - MUST allow operators to configure `dplaax.registry.allowedRegistries` so DIDs whose `registry` segment differs from the runtime `registryBaseUrl` (migrations, dev/local) remain resolvable.
 - MUST operate with file-based / in-memory state only. No database connection.
@@ -60,8 +70,8 @@ see [create-app.md](create-app.md).
 
 ### 2.4 Authorization (policy-verifier) — Out of OSS scope
 
-- Provenance Confidence Level evaluation. See `oss/docs/concepts/provenance.md`; receiver-side threshold enforcement is the receiver's responsibility.
-- Identity Verification Level evaluation. See `oss/docs/concepts/identity-verification.md`; org-domain DNS TXT verification runs outside this service.
+- Provenance Confidence Level evaluation. See provin.oss [docs/GLOSSARY.md](https://github.com/provin-line/oss/blob/main/docs/GLOSSARY.md); receiver-side threshold enforcement is the receiver's responsibility.
+- Identity Verification Level evaluation. See provin.oss [docs/GLOSSARY.md](https://github.com/provin-line/oss/blob/main/docs/GLOSSARY.md); org-domain DNS TXT verification runs outside this service.
 - Cross-registry trust scoring, Trust Cluster anchoring, Transparency Log replay.
 
 ## 3. Boundary discipline
@@ -70,7 +80,7 @@ These rules follow from the dPLaaX responsibility split (authentication =
 auth.provider, authorization = each registry's allow-list / policy):
 
 - **JWT is an identity assertion, not an authorization token.** Downstream registries MUST NOT consult JWT scopes for authorization. They consult their own allow-lists.
-- **Pipeline Chain connection authentication does NOT go through this provider.** Pipeline Components authenticate peers via direct DID signature verification using `#auth-key`. See `oss/docs/protocol/pipeline-chain.md`.
+- **Pipeline Chain connection authentication does NOT go through this provider.** Pipeline Components authenticate peers via direct DID signature verification using the `#auth` verification method (L2 wireauth). See provin.oss [docs/protocol/auth.md](https://github.com/provin-line/oss/blob/main/docs/protocol/auth.md).
 - **dPLaaX-specific behavior stays in this repository.** Generalizable improvements are contributed back to upstream `@o3co/auth.*`. Only `did:dplaax` resolver, dPLaaX collectors, and dPLaaX config schema extensions live here.
 
 ## 4. Operational requirements

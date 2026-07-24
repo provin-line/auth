@@ -46,10 +46,10 @@ repository keeps no standing instance. Rationale:
 
 | Path | Role | Published |
 | --- | --- | --- |
-| `packages/create-auth-provider` | Generator + canonical template for an auth-provider instance | npm |
-| `packages/create-policy-verifier` | Generator + canonical template for a policy-verifier instance | npm |
-| `packages/auth-provider-did`, `packages/did-dplaax` | DID grant / `did:dplaax` method libraries | npm |
-| `packages/auth-provider-dplaax-module`, `packages/policy-verifier-dplaax-module` | dPLaaX composition modules consumed by generated instances | npm |
+| `packages/create-auth-provider` | Generator + canonical template for an auth-provider instance | not yet — run from a repo clone |
+| `packages/create-policy-verifier` | Generator + canonical template for a policy-verifier instance | not yet — run from a repo clone |
+| `packages/auth-provider-did`, `packages/did-dplaax` | DID grant / `did:dplaax` method libraries | not yet — consumed as git-subdirectory refs (§ 3.3) |
+| `packages/auth-provider-dplaax-module`, `packages/policy-verifier-dplaax-module` | dPLaaX composition modules consumed by generated instances | not yet — consumed as git-subdirectory refs (§ 3.3) |
 | `integration/` | Private workspace package: cross-package flow tests (§ 6.2) | no |
 | `instances/` | Git-ignored output directory for locally generated dev instances (§ 5) | no |
 

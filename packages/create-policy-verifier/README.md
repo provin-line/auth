@@ -49,8 +49,9 @@ Options:
 
 ## Generated instance shape
 
-See [spec § 6.1](https://github.com/provin-line/scope/blob/main/scopes/spec.dplaax/.claude/specs/dplaax-create-app.spec.md#61-files-emitted)
-for the complete file list. Common shape:
+See the template directory [`src/template/`](./src/template/) for the
+complete file list — the template is the source of truth
+([create-app.md § 1.1](../../docs/create-app.md)). Common shape:
 
 ```text
 <name>/
