@@ -7,7 +7,10 @@ name: publish-images
 #
 # Triggers: manual (workflow_dispatch, builds the selected ref) and version
 # tags. Every build pushes an immutable sha-<sha> tag plus a moving tag named
-# after the branch/tag that triggered it — consumers pin the sha tag.
+# after the branch/tag that triggered it. A version-tag build (v1.2.3) also
+# pushes a moving minor tag (v1.2) — the provin.oss quickstart pins that so it
+# tracks patch releases without a pin bump; pin the sha-<sha> tag instead for
+# exact reproducibility.
 
 on:
   workflow_dispatch:
@@ -54,6 +57,7 @@ jobs:
           images: ghcr.io/provin-line/auth-${{ matrix.generator }}
           tags: |
             type=sha,format=long,prefix=sha-
+            type=semver,pattern=v{{major}}.{{minor}}
             type=ref,event=branch
             type=ref,event=tag
 
