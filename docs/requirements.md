@@ -18,7 +18,11 @@ see [create-app.md](create-app.md).
 
 ## 2. Mandate from the dPLaaX spec
 
-> **Implementation status (v0.2)**: this section is the **target contract**.
+> **Implementation status (develop, unreleased)**: this section is the
+> **target contract**. Note: the published GHCR `v0.2` images predate the P0
+> auth contract (`v0.2.0` = `19b8bfd`; the contract below landed in
+> `71c0352` and is recorded under CHANGELOG `[Unreleased]`) — it ships with
+> the next tag.
 > The shipping default is the bounded `LEGACY_DID_LOGIN@1` grant contract,
 > which selects the verification method by controller match (exactly one
 > candidate or reject; relationship-blind, and the request's JWS `kid` is
