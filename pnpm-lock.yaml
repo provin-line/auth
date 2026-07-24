@@ -129,6 +129,12 @@ importers:
 
   packages/create-auth-provider:
     devDependencies:
+      '@o3co/auth-provider-core':
+        specifier: ^0.5.3
+        version: 0.5.3(express@5.2.1)
+      '@provin-line/auth-provider-did':
+        specifier: workspace:*
+        version: link:../auth-provider-did
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0

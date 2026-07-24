@@ -1,3 +1,4 @@
+import { ResolutionRejectedError } from "@provin-line/auth-provider-did";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DplaaxDidResolver } from "../../resolver/dplaax.mjs";
 
@@ -6,6 +7,28 @@ import { DplaaxDidResolver } from "../../resolver/dplaax.mjs";
 // behaviour (owner-only enforcement, registry allow-list, URL building,
 // HTTP error mapping). The resolver paths through parseDplaaxDid
 // indirectly via the test cases below.
+//
+// `resolve()` now returns a `ResolutionResult` (canonical bytes / digest /
+// origin / snapshot refs), not a bare `DidDocument` — mocks below stub
+// `.text()` instead of `.json()`, and assertions read `result.document`.
+// The full `ResolutionResult` contract and the error taxonomy
+// (`ResolutionUnavailableError` / `ResolutionRejectedError`) are covered in
+// dplaax.result.test.mts; the 404 case here is kept as a regression pin for
+// this file's existing "HTTP error mapping" coverage.
+//
+// Since Task 3, the resolver reads the response body through
+// `createBoundedFetch` (a streaming `res.body.getReader()` walk, not
+// `res.text()`/`.arrayBuffer()`), and classifies on the numeric `status` it
+// returns rather than `res.ok`. Mocks below use real `Response` instances
+// (Node's global fetch Response) so `.body`/`.status`/`.url` all behave
+// exactly like production fetch, instead of hand-rolling those fields.
+
+// Real `Response` (Node's global fetch Response), not a hand-rolled mock —
+// gives boundedFetch a genuine `.body` ReadableStream/`.status` to read,
+// matching what production fetch returns.
+function mockDidDocResponse(didDoc: unknown, status = 200): Response {
+    return new Response(JSON.stringify(didDoc), { status });
+}
 
 describe("DplaaxDidResolver", () => {
     const registryBaseUrl = "https://registry.dplaax.dev";
@@ -22,22 +45,33 @@ describe("DplaaxDidResolver", () => {
 
     it("resolves an owner DID via HTTP (accountType-namespaced URL)", async () => {
         const didDoc = { id: ownerDid, verificationMethod: [] };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            json: async () => didDoc,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const result = await resolver.resolve(ownerDid);
 
-        expect(result).toEqual(didDoc);
+        expect(result.document).toEqual(didDoc);
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/org/acme/did.json`,
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
     it("rejects pipeline DID (Resolver is owner-only)", async () => {
+        // Pre-fetch validation failures fall under the two-class taxonomy
+        // (errors.mts) like every other resolve() failure — this must be a
+        // ResolutionRejectedError, not a plain Error, so callers that
+        // `instanceof`-classify (e.g. the conformance resolve executor)
+        // don't crash on it.
         const resolver = new DplaaxDidResolver(registryBaseUrl);
+        await expect(
+            resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1"),
+        ).rejects.toBeInstanceOf(ResolutionRejectedError);
+        await expect(
+            resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1"),
+        ).rejects.toMatchObject({ reason: "not-owner-did" });
         await expect(
             resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1"),
         ).rejects.toThrow(/owner DID/i);
@@ -45,11 +79,15 @@ describe("DplaaxDidResolver", () => {
 
     it("rejects process DID (Resolver is owner-only)", async () => {
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve(
-                "did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1:process:x1",
-            ),
-        ).rejects.toThrow(/owner DID/i);
+        const processDid =
+            "did:dplaax:registry.dplaax.dev:org:acme:pipeline:p1:process:x1";
+        await expect(resolver.resolve(processDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve(processDid)).rejects.toMatchObject({
+            reason: "not-owner-did",
+        });
+        await expect(resolver.resolve(processDid)).rejects.toThrow(/owner DID/i);
     });
 
     it("resolves a non-org accountType owner DID (allow-list is the registry's responsibility)", async () => {
@@ -61,33 +99,50 @@ describe("DplaaxDidResolver", () => {
         // the registry legitimately adds a new accountType.
         const did = "did:dplaax:registry.dplaax.dev:user:alice";
         const didDoc = { id: did, verificationMethod: [] };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            json: async () => didDoc,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(resolver.resolve(did)).resolves.toEqual(didDoc);
+        const result = await resolver.resolve(did);
+        expect(result.document).toEqual(didDoc);
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/user/alice/did.json`,
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
     it("still rejects an unsafe accountType segment (parser guarantee)", async () => {
         // Relaxing the allow-list must not relax segment safety: the URL is
         // built from accountType, so the parser's SAFE_SEGMENT grammar is the
-        // remaining (and sufficient) guard against path injection.
+        // remaining (and sufficient) guard against path injection. The raw
+        // parseDplaaxDid() throw must be caught and re-wrapped as a
+        // ResolutionRejectedError (taxonomy), not leak out as a plain Error.
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve("did:dplaax:registry.dplaax.dev:u%2Fser:alice"),
-        ).rejects.toThrow(/unsafe accountType segment/i);
+        const unsafeDid = "did:dplaax:registry.dplaax.dev:u%2Fser:alice";
+        await expect(resolver.resolve(unsafeDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve(unsafeDid)).rejects.toMatchObject({
+            reason: "malformed-did",
+        });
+        await expect(resolver.resolve(unsafeDid)).rejects.toThrow(
+            /unsafe accountType segment/i,
+        );
     });
 
     it("rejects DID whose registry segment does not match baseUrl host (default)", async () => {
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve("did:dplaax:other-registry.example.com:org:acme"),
-        ).rejects.toThrow(/registry "other-registry\.example\.com" not in allow-list/);
+        const foreignDid = "did:dplaax:other-registry.example.com:org:acme";
+        await expect(resolver.resolve(foreignDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve(foreignDid)).rejects.toMatchObject({
+            reason: "registry-not-allowlisted",
+        });
+        await expect(resolver.resolve(foreignDid)).rejects.toThrow(
+            /registry "other-registry\.example\.com" not in allow-list/,
+        );
     });
 
     it("matches registry segment case-insensitively", async () => {
@@ -97,15 +152,13 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:Registry.Dplaax.dev:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            json: async () => didDoc,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
-        await expect(
-            resolver.resolve("did:dplaax:Registry.Dplaax.dev:org:acme"),
-        ).resolves.toEqual(didDoc);
+        const result = await resolver.resolve("did:dplaax:Registry.Dplaax.dev:org:acme");
+        expect(result.document).toEqual(didDoc);
     });
 
     it("accepts DID whose registry is in allowedRegistries (migration support)", async () => {
@@ -117,10 +170,9 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:legacy-hub.example.com:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            json: async () => didDoc,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
             allowedRegistries: ["legacy-hub.example.com"],
@@ -129,11 +181,12 @@ describe("DplaaxDidResolver", () => {
             "did:dplaax:legacy-hub.example.com:org:acme",
         );
 
-        expect(result).toEqual(didDoc);
+        expect(result.document).toEqual(didDoc);
         // URL is built from registryBaseUrl (where the registry actually
         // lives now), not from the legacy registry name in the DID.
         expect(globalThis.fetch).toHaveBeenCalledWith(
             `${registryBaseUrl}/did/org/acme/did.json`,
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
@@ -145,17 +198,15 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:registry.dplaax.dev:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            json: async () => didDoc,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl, {
             allowedRegistries: ["legacy-hub.example.com"],
         });
-        await expect(
-            resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme"),
-        ).resolves.toEqual(didDoc);
+        const result = await resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme");
+        expect(result.document).toEqual(didDoc);
     });
 
     it("normalizes trailing slash on registryBaseUrl", async () => {
@@ -165,33 +216,42 @@ describe("DplaaxDidResolver", () => {
             id: "did:dplaax:registry.dplaax.dev:org:acme",
             verificationMethod: [],
         };
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: true,
-            json: async () => didDoc,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse(didDoc),
+        );
 
         const resolver = new DplaaxDidResolver("https://registry.dplaax.dev/");
         await resolver.resolve("did:dplaax:registry.dplaax.dev:org:acme");
         expect(globalThis.fetch).toHaveBeenCalledWith(
             "https://registry.dplaax.dev/did/org/acme/did.json",
+            expect.objectContaining({ redirect: "error" }),
         );
     });
 
     it("throws on HTTP 404 error", async () => {
-        (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-            ok: false,
-            status: 404,
-        });
+        (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+            async () => mockDidDocResponse({}, 404),
+        );
 
         const resolver = new DplaaxDidResolver(registryBaseUrl);
         const notFoundDid = "did:dplaax:registry.dplaax.dev:org:notfound";
-        await expect(resolver.resolve(notFoundDid)).rejects.toThrow(
-            `DID resolution failed for "${notFoundDid}": HTTP 404`,
+        await expect(resolver.resolve(notFoundDid)).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
         );
+        await expect(resolver.resolve(notFoundDid)).rejects.toMatchObject({
+            reason: "did-not-found",
+            message: `DID resolution failed for "${notFoundDid}": HTTP 404`,
+        });
     });
 
     it("throws on non-dplaax DID", async () => {
         const resolver = new DplaaxDidResolver(registryBaseUrl);
+        await expect(resolver.resolve("did:key:z6Mk...")).rejects.toBeInstanceOf(
+            ResolutionRejectedError,
+        );
+        await expect(resolver.resolve("did:key:z6Mk...")).rejects.toMatchObject({
+            reason: "malformed-did",
+        });
         await expect(resolver.resolve("did:key:z6Mk...")).rejects.toThrow(
             '"did:key:z6Mk..." is not a did:dplaax DID',
         );

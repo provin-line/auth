@@ -40,7 +40,7 @@ export class JwsVerifier implements SignatureVerifier {
 		}
 
 		// 2. Decode protected header and check algorithm
-		let header: { alg?: string };
+		let header: { alg?: string; kid?: string };
 		try {
 			header = decodeProtectedHeader(body.jws);
 		} catch {
@@ -92,9 +92,9 @@ export class JwsVerifier implements SignatureVerifier {
 		}
 
 		// 6. Parse payload as JSON -> ParsedMessage
-		let parsedMessage: ParsedMessage;
+		let rawPayload: Record<string, unknown>;
 		try {
-			parsedMessage = JSON.parse(new TextDecoder().decode(payload)) as ParsedMessage;
+			rawPayload = JSON.parse(new TextDecoder().decode(payload)) as Record<string, unknown>;
 		} catch {
 			return {
 				valid: false,
@@ -102,6 +102,18 @@ export class JwsVerifier implements SignatureVerifier {
 				errorDescription: "payload must be valid JSON",
 			};
 		}
+
+		// Surface (but do not enforce) the JWS header's kid and the payload's
+		// verification_method; three-way matching against the resolved key is
+		// the caller's responsibility (see Task 6/9).
+		const parsedMessage: ParsedMessage = {
+			...(rawPayload as unknown as ParsedMessage),
+			headerKid: header.kid,
+			verificationMethod:
+				typeof rawPayload.verification_method === "string"
+					? rawPayload.verification_method
+					: undefined,
+		};
 
 		// 7. Validate payload.did matches ctx.did
 		if (parsedMessage.did !== did) {

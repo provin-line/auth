@@ -20,10 +20,17 @@ import {
 	type GrantDependencies,
 } from "@o3co/auth-provider-core";
 import { CompactSign, exportJWK, generateKeyPair } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createDidGrant } from "../did.mjs";
-import type { DidDocument, DidDocumentResolver, JsonWebKey } from "../resolver/types.mjs";
+import type { NonceStore } from "../nonceStore.mjs";
+import { ResolutionRejectedError } from "../resolver/errors.mjs";
+import type {
+	DidDocument,
+	DidDocumentResolver,
+	JsonWebKey,
+	ResolutionResult,
+} from "../resolver/types.mjs";
 import { VerifierRegistry } from "../verifiers/registry.mjs";
 import type {
 	SignatureVerifier,
@@ -40,7 +47,7 @@ const mockConfig = {
 			session: { enabled: true },
 			authorization_code: { enabled: true },
 			refresh_token: { enabled: true },
-			did: { enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
+			did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
 		},
 	},
 } as unknown as GrantDependencies["config"];
@@ -49,6 +56,25 @@ const mockDeps: GrantDependencies = {
 	config: mockConfig,
 	keyStore: createSymmetricKeyStore("test-secret"),
 };
+
+/**
+ * Wrap a `DidDocument` fixture into the minimal `ResolutionResult` shape
+ * `resolve()` now returns. The tests in this file exercise the DID-grant
+ * flow downstream of `.document` — the integrity/provenance fields are inert
+ * placeholders, same shape as the integration-test helper of the same name.
+ */
+function makeMockResolution(document: DidDocument, did: string): ResolutionResult {
+	const digest = `sha256:${"0".repeat(64)}`;
+	return {
+		document,
+		canonicalBytes: new TextEncoder().encode(JSON.stringify(document)),
+		digest,
+		requestedDid: did,
+		finalOrigin: "mock://registry",
+		snapshotRef: `registry:mock://registry#${digest}`,
+		retrievedAt: new Date().toISOString(),
+	};
+}
 
 /**
  * Build a mock DidDocumentResolver that returns a DID Document containing
@@ -69,8 +95,8 @@ function buildResolver(did: string, publicKeyBytes: Uint8Array): DidDocumentReso
 		],
 	};
 	return {
-		async resolve(d: string): Promise<DidDocument> {
-			if (d === did) return didDoc;
+		async resolve(d: string): Promise<ResolutionResult> {
+			if (d === did) return makeMockResolution(didDoc, did);
 			throw new Error(`DID not found: ${d}`);
 		},
 	};
@@ -199,10 +225,18 @@ describe("createDidGrant", () => {
 			expect("error" in result && result.error).toBe("invalid_grant");
 		});
 
-		it("returns 400 when resolver fails (DID not found)", async () => {
+		it("returns 400 invalid_grant when resolver rejects the DID (DID not found)", async () => {
+			// Task 9 (rule auth.resolve.failure-mapping): a `ResolutionRejectedError`
+			// is the FAILED half of the two-class resolver taxonomy — definitively
+			// unresolvable, not a transient outage — so it maps to 400
+			// `invalid_grant`, not the pre-Task-9 flat `invalid_request`. See
+			// `did.tokenClaims.test.mts` for the 503-vs-400 split this pins.
 			const resolver: DidDocumentResolver = {
-				async resolve(d: string): Promise<DidDocument> {
-					throw new Error(`DID not found: ${d}`);
+				async resolve(d: string): Promise<ResolutionResult> {
+					throw new ResolutionRejectedError(
+						"did-not-found",
+						`DID not found: ${d}`,
+					);
 				},
 			};
 			const handler = createDidGrant(mockDeps, { resolver });
@@ -214,8 +248,49 @@ describe("createDidGrant", () => {
 			const { result } = await handler.handle(wrappedCtx);
 
 			expect(result.status).toBe(400);
-			expect("error" in result && result.error).toBe("invalid_request");
-			expect("errorDescription" in result && result.errorDescription).toContain("DID not found");
+			expect("error" in result && result.error).toBe("invalid_grant");
+			expect("errorDescription" in result && result.errorDescription).toContain(
+				"DID not found",
+			);
+		});
+
+		it("returns 400 invalid_grant (no token minted) when the resolved verificationMethod has no string id", async () => {
+			// C1: a verificationMethod with valid key material but a missing `id`
+			// must never reach token minting — the minted JWT's required
+			// `verification_method` claim would otherwise be `undefined`,
+			// violating the six-claim contract (rule auth.token.signed-claims).
+			const did = "did:key:z6MkNoId";
+			const { ctx, privateKey } = await makeSignedCtx(did);
+			const publicKey = await ed.getPublicKeyAsync(privateKey);
+			const jwk: JsonWebKey = {
+				kty: "OKP",
+				crv: "Ed25519",
+				x: Buffer.from(publicKey).toString("base64url"),
+			};
+			const malformedDoc = {
+				id: did,
+				verificationMethod: [
+					{
+						// no `id` field — the bug this test guards against
+						type: "JsonWebKey2020",
+						controller: did,
+						publicKeyJwk: jwk,
+					},
+				],
+			} as unknown as DidDocument;
+			const resolver: DidDocumentResolver = {
+				async resolve(d: string): Promise<ResolutionResult> {
+					if (d !== did) throw new Error(`unexpected did: ${d}`);
+					return makeMockResolution(malformedDoc, did);
+				},
+			};
+			const handler = createDidGrant(mockDeps, { resolver });
+
+			const { result } = await handler.handle(ctx);
+
+			expect(result.status).toBe(400);
+			expect("error" in result && result.error).toBe("invalid_grant");
+			expect("tokens" in result).toBe(false);
 		});
 	});
 
@@ -266,12 +341,104 @@ describe("createDidGrant", () => {
 		});
 	});
 
+	describe("handle – injected nonceStore", () => {
+		it("uses the injected NonceStore instead of the default in-memory one", async () => {
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkInjected1");
+			const consume = vi.fn(async () => true);
+			const fakeNonceStore: NonceStore = { consume };
+
+			const handler = createDidGrant(mockDeps, { resolver, nonceStore: fakeNonceStore });
+			const { result } = await handler.handle(ctx);
+
+			expect(result.status).toBe(200);
+			expect(consume).toHaveBeenCalledTimes(1);
+			const [nonceArg, expiresAtMsArg] = consume.mock.calls[0] as [string, number];
+			expect(nonceArg).toContain("did-nonce:");
+			expect(typeof expiresAtMsArg).toBe("number");
+			expect(expiresAtMsArg).toBeGreaterThan(Date.now());
+		});
+
+		it("rejects the request when the injected NonceStore reports a replay", async () => {
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkInjected2");
+			const fakeNonceStore: NonceStore = { consume: vi.fn(async () => false) };
+
+			const handler = createDidGrant(mockDeps, { resolver, nonceStore: fakeNonceStore });
+			const { result } = await handler.handle(ctx);
+
+			expect(result.status).toBe(400);
+			expect("error" in result && result.error).toBe("invalid_request");
+			expect("errorDescription" in result && result.errorDescription).toContain("nonce");
+		});
+
+		it("does not call .stop() on an injected store from cleanup() (caller owns its lifecycle)", async () => {
+			const { resolver } = await makeSignedCtx("did:key:z6MkInjected3");
+			const stop = vi.fn();
+			const fakeNonceStore = { consume: vi.fn(async () => true), stop } as NonceStore & {
+				stop: () => void;
+			};
+
+			const handler = createDidGrant(mockDeps, { resolver, nonceStore: fakeNonceStore });
+			handler.cleanup?.();
+
+			expect(stop).not.toHaveBeenCalled();
+		});
+
+		it("computes nonce expiresAtMs as exactly now + messageMaxAgeMs (same freshness window as the timestamp check)", async () => {
+			const messageMaxAgeSec = 300;
+			const config = {
+				oauth: {
+					jwt: { secret: "test-secret" },
+					accessToken: { expiresIn: 3600 },
+					refreshToken: { expiresIn: 86400 },
+					grants: {
+						session: { enabled: true },
+						authorization_code: { enabled: true },
+						refresh_token: { enabled: true },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec },
+					},
+				},
+			} as unknown as GrantDependencies["config"];
+
+			const nowMs = Date.UTC(2026, 0, 1, 0, 0, 0);
+			// Build the signed request under real timers — the async Ed25519
+			// signing inside makeSignedCtx must not run under fake timers.
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkExpiryParity", {
+				timestamp: new Date(nowMs).toISOString(),
+			});
+
+			const consume = vi.fn(async () => true);
+			const fakeNonceStore: NonceStore = { consume };
+			const handler = createDidGrant(
+				{ config, keyStore: mockDeps.keyStore },
+				{ resolver, nonceStore: fakeNonceStore },
+			);
+
+			vi.useFakeTimers();
+			vi.setSystemTime(nowMs);
+			try {
+				const { result } = await handler.handle(ctx);
+				expect(result.status).toBe(200);
+			} finally {
+				vi.useRealTimers();
+			}
+
+			expect(consume).toHaveBeenCalledTimes(1);
+			const [, expiresAtMsArg] = consume.mock.calls[0] as [string, number];
+			expect(expiresAtMsArg).toBe(nowMs + messageMaxAgeSec * 1000);
+		});
+	});
+
 	describe("config defaults", () => {
 		it("uses default messageMaxAgeSec and algorithm when did config is absent", async () => {
+			// Task 8: `revocationLatencyBoundSec` has no JS-level fallback (fail
+			// closed — see did.mts's boot assert), so a config that omits the
+			// `did` slice entirely can no longer boot at all. This still tests
+			// what it always tested — messageMaxAgeSec/algorithm defaulting —
+			// by supplying only the two now-mandatory bound fields.
 			const noDIDConfig = {
 				oauth: {
 					accessToken: { expiresIn: 3600 },
-					grants: {},
+					grants: { did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600 } },
 				},
 			} as unknown as GrantDependencies["config"];
 
@@ -292,7 +459,7 @@ describe("createDidGrant", () => {
 			const partialConfig = {
 				oauth: {
 					accessToken: { expiresIn: 3600 },
-					grants: { did: { enabled: true } },
+					grants: { did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true } },
 				},
 			} as unknown as GrantDependencies["config"];
 
@@ -353,7 +520,7 @@ describe("createDidGrant", () => {
 			};
 			const resolver: DidDocumentResolver = {
 				async resolve(d) {
-					if (d === did) return didDoc;
+					if (d === did) return makeMockResolution(didDoc, did);
 					throw new Error(`DID not found: ${d}`);
 				},
 			};
@@ -376,7 +543,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -397,7 +564,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_jws"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -418,7 +585,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw", "ed25519_jws"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw", "ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -452,7 +619,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_jws"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_jws"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -477,7 +644,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -510,7 +677,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, algorithm: "ed25519_raw", messageMaxAgeSec: 300 },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -550,7 +717,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_prehash"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_prehash"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -601,7 +768,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -663,7 +830,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["custom_alg"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["custom_alg"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -705,7 +872,7 @@ describe("createDidGrant", () => {
 					jwt: { secret: "test-secret" },
 					accessToken: { expiresIn: 3600 },
 					grants: {
-						did: { enabled: true, supportedAlgorithms: ["ed25519_raw"] },
+						did: { allowedAudiences: ["https://api.example.com"], revocationLatencyBoundSec: 3600, legacyMaxTtlSec: 3600, enabled: true, supportedAlgorithms: ["ed25519_raw"] },
 					},
 				},
 			} as unknown as GrantDependencies["config"];
@@ -732,6 +899,8 @@ describe("createDidGrant", () => {
 						authorization_code: { enabled: true },
 						refresh_token: { enabled: true },
 						did: {
+							revocationLatencyBoundSec: 3600,
+							legacyMaxTtlSec: 3600,
 							enabled: true,
 							algorithm: "ed25519_raw",
 							messageMaxAgeSec: 300,
@@ -742,6 +911,9 @@ describe("createDidGrant", () => {
 			} as unknown as GrantDependencies["config"];
 		}
 
+		// Companion coverage for the fail-closed construction guard below: a
+		// valid non-empty allowedAudiences still constructs successfully AND
+		// still enforces the check both ways (allowed → 200, disallowed → 400).
 		it("returns 200 when audience is in the allowlist", async () => {
 			const config = makeConfigWithAllowedAudiences([
 				"https://api.example.com",
@@ -775,16 +947,89 @@ describe("createDidGrant", () => {
 			expect("errorDescription" in result && result.errorDescription).toContain("not allowed");
 		});
 
-		it("accepts any audience when allowedAudiences is empty (backward compat)", async () => {
-			const config = makeConfigWithAllowedAudiences([]);
-			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkAudAny", {
-				audience: "https://anything.example.com",
+		it("burns the nonce even when the audience check fails (consume-before-audience, Option A)", async () => {
+			const config = makeConfigWithAllowedAudiences(["https://api.example.com"]);
+			const { ctx, resolver } = await makeSignedCtx("did:key:z6MkAudBurn", {
+				audience: "https://evil.example.com",
 			});
 			const handler = createDidGrant({ config, keyStore: mockDeps.keyStore }, { resolver });
 
-			const { result } = await handler.handle(ctx);
+			// First attempt: cryptographically valid signature, fresh nonce, but
+			// the audience is not in the allowlist.
+			const { result: result1 } = await handler.handle(ctx);
+			expect(result1.status).toBe(400);
+			expect("error" in result1 && result1.error).toBe("invalid_request");
+			expect("errorDescription" in result1 && result1.errorDescription).toContain("not allowed");
 
-			expect(result.status).toBe(200);
+			// Retry the identical request (same nonce). Option A consumes the
+			// nonce before the audience check runs, so the first attempt already
+			// burned it — the retry must be rejected as a replay, not
+			// re-evaluated against the audience allowlist.
+			const { result: result2 } = await handler.handle(ctx);
+			expect(result2.status).toBe(400);
+			expect("error" in result2 && result2.error).toBe("invalid_request");
+			expect("errorDescription" in result2 && result2.errorDescription).toContain(
+				"nonce already used",
+			);
+		});
+
+		// audit-5: an empty/absent allowlist used to mean "accept any audience"
+		// (fail-open) at the `createDidGrant` runtime layer — the exact
+		// vulnerability the original audit finding named, surviving here even
+		// after Task 8 closed it at the `didConfigSchema` parse layer, because a
+		// caller that hand-builds a config and skips `didConfigSchema.parse`
+		// (as these tests do) never goes through that schema check. These two
+		// tests replace the old "backward compat" test that asserted 200 for an
+		// empty allowlist — that assertion pinned the vulnerability, so it must
+		// fail now, not pass. Mirrors the `revocationLatencyBoundSec` boot-time
+		// assert in `did.mts` (fail closed, no default, throws at construction).
+		it("throws at construction when allowedAudiences is an empty array (fail closed, audit-5)", () => {
+			const config = makeConfigWithAllowedAudiences([]);
+			const resolver: DidDocumentResolver = {
+				async resolve(): Promise<ResolutionResult> {
+					throw new Error(
+						"should not be called — construction must throw before any request is handled",
+					);
+				},
+			};
+
+			expect(() =>
+				createDidGrant({ config, keyStore: mockDeps.keyStore }, { resolver }),
+			).toThrow(/allowedAudiences/);
+		});
+
+		it("throws at construction when allowedAudiences is absent (fail closed, audit-5)", () => {
+			const config = {
+				oauth: {
+					jwt: { secret: "test-secret" },
+					accessToken: { expiresIn: 3600 },
+					refreshToken: { expiresIn: 86400 },
+					grants: {
+						session: { enabled: true },
+						authorization_code: { enabled: true },
+						refresh_token: { enabled: true },
+						did: {
+							revocationLatencyBoundSec: 3600,
+							legacyMaxTtlSec: 3600,
+							enabled: true,
+							algorithm: "ed25519_raw",
+							messageMaxAgeSec: 300,
+							// allowedAudiences intentionally omitted
+						},
+					},
+				},
+			} as unknown as GrantDependencies["config"];
+			const resolver: DidDocumentResolver = {
+				async resolve(): Promise<ResolutionResult> {
+					throw new Error(
+						"should not be called — construction must throw before any request is handled",
+					);
+				},
+			};
+
+			expect(() =>
+				createDidGrant({ config, keyStore: mockDeps.keyStore }, { resolver }),
+			).toThrow(/allowedAudiences/);
 		});
 
 		it("returns 200 when no audience is provided even with allowedAudiences configured", async () => {

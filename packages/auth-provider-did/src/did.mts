@@ -21,8 +21,15 @@ import {
 	generateToken,
 	generateTokenResponse,
 } from "@o3co/auth-provider-core";
+import { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
+import { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/errors.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
+import {
+	type RelationshipName,
+	selectVerificationMethod,
+} from "./resolver/selectMethod.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
+import type { AuthContractId } from "./transcript.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
 import { createDefaultVerifierRegistry } from "./verifiers/factory.mjs";
 import type { VerifierRegistry } from "./verifiers/registry.mjs";
@@ -31,6 +38,100 @@ import type { SignatureVerifier } from "./verifiers/types.mjs";
 export interface DidGrantOptions {
 	resolver: DidDocumentResolver;
 	verifierRegistry?: VerifierRegistry;
+	nonceStore?: NonceStore;
+}
+
+/**
+ * The P0-mint authorization scope — the ONLY scope value this handler ever
+ * issues (rule `auth.token.signed-claims`). The spec taxonomy also defines
+ * `CURRENT_AUTHORIZATION_AT_REQUEST@1` for a later, non-P0 minting mode;
+ * this package does not mint it.
+ */
+export const AUTHZ_SCOPE_AT_ISSUANCE =
+	"AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1";
+
+/**
+ * The bound inputs to a single authorization decision, assembled exactly
+ * once per request (rule `auth.resolve.single-input-binding`) so every
+ * token claim below traces back to one coherent snapshot instead of being
+ * re-derived piecemeal at mint time.
+ *
+ * P0 lifecycle refs are the registry snapshot digest + retrieval instant —
+ * a documented projection until a real lifecycle service exists.
+ */
+interface EvaluationInput {
+	/** `resolution.digest` — `"sha256:<64hex>"`, prefixed (see `keyDigest` below for the bare-hex counterpart). */
+	documentDigest: string;
+	/** Selected method id, from the `extractVerificationKey` result's `.id`. */
+	methodId: string;
+	/**
+	 * sha256 hex over the canonical JSON of the selected verification
+	 * method — a P0 projection (`JSON.stringify`, NOT full JCS canonical
+	 * form). Bare lowercase hex with NO `sha256:` prefix — contrast
+	 * `documentDigest` above, which keeps the prefix it arrives with from
+	 * `resolution.digest`.
+	 */
+	keyDigest: string;
+	/** LEGACY path (the only path this handler runs today) => `"legacy"`. */
+	relationship: RelationshipName | "legacy";
+	/** `resolution.snapshotRef`. */
+	lifecycleStateRef: string;
+	/** `resolution.retrievedAt`. */
+	lifecycleFreshnessRef: string;
+}
+
+/**
+ * SHA-256 hex digest of a UTF-8 string via Web Crypto (`crypto.subtle`) —
+ * the same primitive `verifiers/ed25519Prehash.mts` uses for its message
+ * hash, no extra hashing dependency. Returns bare lowercase hex with NO
+ * `sha256:` prefix; callers that need the prefixed form (matching
+ * `ResolutionResult.digest`) add it themselves.
+ */
+async function sha256Hex(input: string): Promise<string> {
+	const bytes = new TextEncoder().encode(input);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+	return Array.from(new Uint8Array(hashBuffer))
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
+}
+
+/**
+ * Rule `auth.resolve.failure-mapping`: maps a caught resolve/select
+ * failure to its HTTP outcome. `ResolutionUnavailableError` means the
+ * registry could not be reached, or is reachable but failing transiently —
+ * the DID itself may still be valid, so this is INDETERMINATE and maps to
+ * 503 (a client can retry). `ResolutionRejectedError` — every `resolve()`
+ * failure now lands in one of these two classes (errors.mts's two-class
+ * taxonomy) — is FAILED and maps to 400 `invalid_grant`, echoing its
+ * message: that message is resolver-authored and already meant for a
+ * client to see.
+ *
+ * Anything else reaching here — `MethodSelectionError`, `TranscriptError`
+ * (not yet reachable on the LEGACY-only path this handler runs today;
+ * folded into the mapping now so a future OWNER-path caller gets it for
+ * free), or any other unclassified error — is also FAILED and maps to 400
+ * `invalid_grant`, but is genuinely unexpected: don't echo its `.message`
+ * into the client-facing `errorDescription` (it may carry internal detail
+ * never meant for a client — stack context, raw document content, etc.);
+ * use a generic description instead. Neither outcome mints a token: callers
+ * return the mapped result immediately.
+ */
+function mapResolutionFailure(
+	err: unknown,
+):
+	| { status: 503; error: "temporarily_unavailable"; errorDescription: string }
+	| { status: 400; error: "invalid_grant"; errorDescription: string } {
+	if (err instanceof ResolutionUnavailableError) {
+		return { status: 503, error: "temporarily_unavailable", errorDescription: err.message };
+	}
+	if (err instanceof ResolutionRejectedError) {
+		return { status: 400, error: "invalid_grant", errorDescription: err.message };
+	}
+	return {
+		status: 400,
+		error: "invalid_grant",
+		errorDescription: "grant could not be processed",
+	};
 }
 
 export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions): GrantHandler => {
@@ -39,12 +140,90 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 
 	const DEFAULT_MESSAGE_MAX_AGE_SEC = 300;
 	const DEFAULT_ALGORITHM = "ed25519_raw";
+	// Mirror didConfigSchema's per-field zod defaults (module.mts) — these
+	// fallbacks only fire for callers that construct a config object by hand
+	// and skip `didConfigSchema.parse` (unit tests; `oauthDidModule`'s own
+	// boot path always runs the parsed/defaulted config through here).
+	const DEFAULT_AUTH_CONTRACT: AuthContractId = "LEGACY_DID_LOGIN@1";
+	const DEFAULT_LEGACY_MAX_TTL_SEC = 900;
 
 	const didConfig = (config.oauth.grants as Record<string, Record<string, unknown> | undefined>)
 		.did;
 	const messageMaxAgeMs =
 		((didConfig?.messageMaxAgeSec as number | undefined) ?? DEFAULT_MESSAGE_MAX_AGE_SEC) * 1000;
+	// NO fail-open default — an empty/absent allowlist used to mean "accept
+	// any audience" (the original audit finding). `didConfigSchema` already
+	// rejects this at parse time (Task 8), but a caller that hand-builds a
+	// config and skips `didConfigSchema.parse` bypasses that check entirely;
+	// the guard below closes the same hole here, mirroring the
+	// `revocationLatencyBoundSec` boot-time assert below (fail closed, no
+	// default, rule audit-5).
 	const allowedAudiences = (didConfig?.allowedAudiences as string[] | undefined) ?? [];
+
+	// `config.oauth.accessToken.expiresIn` is a plain count of SECONDS, not a
+	// duration string or ms value: `@o3co/auth-provider-core`'s `generateToken`
+	// computes `exp = Math.floor(Date.now() / 1000) + expiresIn` and puts it
+	// straight into the JWT's numeric `exp` claim (seconds since epoch) — see
+	// `generateToken` in `@o3co/auth-provider-core/dist/grants/token.mjs`.
+	// `revocationLatencyBoundSec` / `legacyMaxTtlSec` are seconds too, so the
+	// boot-time bound checks below compare like units with no conversion.
+	const expiresIn = config.oauth.accessToken.expiresIn;
+	const authContract =
+		(didConfig?.authContract as AuthContractId | undefined) ?? DEFAULT_AUTH_CONTRACT;
+	const legacyMaxTtlSec =
+		(didConfig?.legacyMaxTtlSec as number | undefined) ?? DEFAULT_LEGACY_MAX_TTL_SEC;
+	// NO default — didConfigSchema requires this field explicitly (fail
+	// closed, rule auth.token.lifetime-bound). A config that reached this
+	// point via `didConfigSchema.parse` always has it; a hand-built config
+	// that omits it fails the same way rather than silently skipping the
+	// bound check below.
+	const revocationLatencyBoundSec = didConfig?.revocationLatencyBoundSec as number | undefined;
+
+	// Fail-closed stopgap (Option B): the OWNER validation path
+	// (`validateOwnerLogin` in transcript.mts — versioned transcript,
+	// three-way kid match, Fork-Y relationship) is built and unit-tested but
+	// NOT wired into the `handle()` request flow below, which always runs the
+	// LEGACY (relationship-blind) checks. Selecting an OWNER contract here
+	// would otherwise mint a token LABELED OWNER_* (`auth_contract_id` claim,
+	// see step 11 of `handle()`) while only LEGACY validation ran — a token
+	// that misrepresents its own assurance level. Refuse at construction
+	// time, before any request is served, rather than let a mislabeled
+	// OWNER token be minted. Remove this guard once the OWNER path is
+	// actually enforced in `handle()`.
+	if (
+		authContract === "OWNER_AUTHENTICATION_LOGIN@1" ||
+		authContract === "OWNER_ASSERTION_CONTROL_LOGIN@1"
+	) {
+		throw new Error(
+			`authContract '${authContract}' selects the OWNER login contract, but the OWNER validation path ` +
+				"(versioned transcript, three-way kid match, Fork-Y relationship) is not yet wired into the " +
+				"request handler. Refusing to construct a grant that would mint an OWNER-labeled token while " +
+				"performing only LEGACY validation. Use LEGACY_DID_LOGIN@1 until the OWNER path is enforced.",
+		);
+	}
+
+	if (revocationLatencyBoundSec === undefined) {
+		throw new Error(
+			"did grant config: revocationLatencyBoundSec is required (rule auth.token.lifetime-bound) — fail closed, no default",
+		);
+	}
+	if (allowedAudiences.length === 0) {
+		throw new Error(
+			"did grant config: allowedAudiences must be a non-empty list; an empty allowlist would accept any audience (fail-closed, audit-5)",
+		);
+	}
+	if (expiresIn > revocationLatencyBoundSec) {
+		throw new Error(
+			`did grant config: oauth.accessToken.expiresIn (${expiresIn}s) exceeds revocationLatencyBoundSec ` +
+				`(${revocationLatencyBoundSec}s) — rule auth.token.lifetime-bound`,
+		);
+	}
+	if (authContract === "LEGACY_DID_LOGIN@1" && expiresIn > legacyMaxTtlSec) {
+		throw new Error(
+			`did grant config: oauth.accessToken.expiresIn (${expiresIn}s) exceeds legacyMaxTtlSec ` +
+				`(${legacyMaxTtlSec}s) for authContract "LEGACY_DID_LOGIN@1" — rule auth.legacy.did-login`,
+		);
+	}
 
 	const verifierRegistry = options.verifierRegistry ?? createDefaultVerifierRegistry();
 
@@ -63,21 +242,21 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 		}
 	}
 
-	// In-memory nonce store (PoC)
-	const nonceStore = new Map<string, number>();
-
-	// `.unref()` so the interval does not keep the Node event loop alive after
-	// AppHandle.dispose(). v0.5.x's manifest model contributes grant handlers
-	// to the planner; AppHandle.dispose() does not iterate grant handlers'
-	// `cleanup()`, so a non-unref'd interval would retain the process across
-	// repeated test boot cycles or after graceful shutdown.
-	const cleanupInterval = setInterval(() => {
-		const now = Date.now();
-		for (const [key, time] of nonceStore) {
-			if (now - time > messageMaxAgeMs) nonceStore.delete(key);
-		}
-	}, 60 * 1000);
-	cleanupInterval.unref();
+	// Own the default nonce store's lifecycle (its sweep interval) only when
+	// we created it ourselves — an injected store is owned by whoever
+	// constructed it, so `cleanup()` below must not call `.stop()` on it.
+	// The if/else (rather than a ternary + cast) lets the compiler enforce
+	// that `defaultNonceStore` is set if and only if we created the store,
+	// so `cleanup()` only ever stops a store this function constructed.
+	let nonceStore: NonceStore;
+	let defaultNonceStore: InMemoryNonceStore | undefined;
+	if (options.nonceStore) {
+		nonceStore = options.nonceStore;
+		defaultNonceStore = undefined;
+	} else {
+		defaultNonceStore = new InMemoryNonceStore();
+		nonceStore = defaultNonceStore;
+	}
 
 	// Per-algorithm verifier cache: created lazily on first use
 	const verifierCache = new Map<string, SignatureVerifier>();
@@ -119,32 +298,38 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				};
 			}
 
-			// 2. Resolve DID Document
-			let didDocument: Awaited<ReturnType<typeof resolver.resolve>>;
+			// 2. Resolve DID Document. Failure mapping (rule
+			// auth.resolve.failure-mapping): `ResolutionUnavailableError` (the
+			// registry is unreachable/failing transiently — INDETERMINATE) maps
+			// to 503; everything else (`ResolutionRejectedError` or any other
+			// resolve-time error) is FAILED and maps to 400 `invalid_grant`.
+			let resolution: Awaited<ReturnType<typeof resolver.resolve>>;
 			try {
-				didDocument = await resolver.resolve(did);
+				resolution = await resolver.resolve(did);
 			} catch (err) {
-				return {
-					result: {
-						status: 400,
-						error: "invalid_request",
-						errorDescription: err instanceof Error ? err.message : "DID resolution failed",
-					},
-				};
+				return { result: mapResolutionFailure(err) };
 			}
+			// `resolution` stays in scope beyond this block — Task 9 consumes
+			// the canonical bytes / digest / snapshot refs it carries.
+			const didDocument = resolution.document;
 
-			// 3. Extract verification key from DID Document
+			// 3. Extract verification key from DID Document. `selected` is
+			// computed alongside `resolvedKey` for Task 9's `keyDigest`:
+			// `extractVerificationKey` (the LEGACY delegate) already calls
+			// `selectVerificationMethod` internally but only surfaces the
+			// extracted key material (`ExtractedKey`), not the full
+			// `VerificationMethod` object `keyDigest` needs to canonicalize.
+			// The second call is deterministic and pure (no I/O) with the same
+			// (doc, did) inputs as the first, so it succeeds/fails in lockstep
+			// with it — the shared catch below applies the same failure
+			// mapping (`MethodSelectionError` → 400 `invalid_grant`) to both.
 			let resolvedKey: Awaited<ReturnType<typeof extractVerificationKey>>;
+			let selected: ReturnType<typeof selectVerificationMethod>;
 			try {
 				resolvedKey = await extractVerificationKey(didDocument, did);
+				selected = selectVerificationMethod(didDocument, { did });
 			} catch (err) {
-				return {
-					result: {
-						status: 400,
-						error: "invalid_request",
-						errorDescription: err instanceof Error ? err.message : "key extraction failed",
-					},
-				};
+				return { result: mapResolutionFailure(err) };
 			}
 
 			// 4. Detect algorithm from request body and validate it is allowed
@@ -223,9 +408,12 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				};
 			}
 
-			// 8. Nonce replay check
+			// 8. Nonce replay check + store (single `consume` call). Expiry
+			// mirrors the freshness window enforced in step 7 above, reusing
+			// the same `now` so the nonce's lifetime matches the message's.
 			const nonceKey = `did-nonce:${parsedMessage.nonce}`;
-			if (nonceStore.has(nonceKey)) {
+			const nonceExpiresAtMs = now + messageMaxAgeMs;
+			if (!(await nonceStore.consume(nonceKey, nonceExpiresAtMs))) {
 				return {
 					result: {
 						status: 400,
@@ -235,8 +423,19 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				};
 			}
 
-			// 9. Validate audience against allowlist (empty allowlist = any audience accepted)
-			if (verification.audience && allowedAudiences.length > 0) {
+			// 9. Validate audience against allowlist. `allowedAudiences` is
+			// guaranteed non-empty here — the boot-time guard above throws
+			// otherwise (audit-5) — so the only remaining case that skips this
+			// check is a request that carries no audience claim at all
+			// (unchanged, out of scope for audit-5).
+			// Note: the nonce is already consumed at this point (step 8), so a
+			// request that fails the audience check still burns its nonce — a
+			// deliberate change from the pre-NonceStore code, which stored the
+			// nonce only after this check passed. `consume()` fuses check+store
+			// into one call placed at the old check position to preserve error
+			// precedence (replay is reported before audience); the trade-off is
+			// audience-rejected requests can no longer retry with the same nonce.
+			if (verification.audience) {
 				if (!allowedAudiences.includes(verification.audience)) {
 					return {
 						result: {
@@ -248,18 +447,39 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 				}
 			}
 
-			// 10. Store nonce (only after ALL validations passed)
-			nonceStore.set(nonceKey, Date.now());
+			// 10. Assemble the single EvaluationInput this decision is bound to
+			// (rule auth.resolve.single-input-binding) — every token claim below
+			// reads from this one object rather than being re-derived piecemeal.
+			const input: EvaluationInput = {
+				documentDigest: resolution.digest,
+				methodId: resolvedKey.id,
+				keyDigest: await sha256Hex(JSON.stringify(selected.method)),
+				// The only path this handler runs today (Task 9 scope) — the
+				// OWNER path's `selectVerificationMethod(doc, { did, methodId,
+				// relationship: "authentication" })` call is future work.
+				relationship: "legacy",
+				lifecycleStateRef: resolution.snapshotRef,
+				lifecycleFreshnessRef: resolution.retrievedAt,
+			};
 
-			// 11. Generate token
+			// 11. Generate token, minting the six required claims (rules
+			// auth.token.signed-claims / auth.token.issuance-vs-request) from
+			// `input` above.
 			return {
 				result: {
 					status: 200,
 					tokens: generateTokenResponse({
 						accessToken: await generateToken(
-							{},
 							{
-								expiresIn: config.oauth.accessToken.expiresIn,
+								auth_contract_id: authContract,
+								verification_method: input.methodId,
+								did_document_snapshot: input.documentDigest,
+								lifecycle_state_ref: input.lifecycleStateRef,
+								lifecycle_freshness_ref: input.lifecycleFreshnessRef,
+								authorization_scope: AUTHZ_SCOPE_AT_ISSUANCE,
+							},
+							{
+								expiresIn,
 								keyStore,
 								issuer,
 								subject: verification.subject,
@@ -274,7 +494,7 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 		},
 
 		cleanup(): void {
-			clearInterval(cleanupInterval);
+			defaultNonceStore?.stop();
 		},
 	};
 };

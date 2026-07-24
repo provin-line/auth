@@ -43,7 +43,15 @@ oauth {
     }
   }
   accessToken {
-    expiresIn = 3600
+    # Secure-by-default: 900s (15 min). Matches oauth.grants.did's own
+    # legacyMaxTtlSec default (900s, see module.mts) and keeps the
+    # LEGACY_DID_LOGIN@1 contract's hard-short-expiry intent (spec
+    # auth.legacy.did-login) satisfied out of the box. Deployers who accept
+    # a longer revocation-latency window can raise this via
+    # OAUTH_ACCESS_TOKEN_EXPIRES_IN — but must raise
+    # oauth.grants.did.revocationLatencyBoundSec / legacyMaxTtlSec (below)
+    # in lockstep, or boot fails closed.
+    expiresIn = 900
     expiresIn = ${?OAUTH_ACCESS_TOKEN_EXPIRES_IN}
   }
   refreshToken {
@@ -70,7 +78,39 @@ oauth {
       enabled = ${?OAUTH_GRANTS_DID_ENABLED}
       supportedAlgorithms = ["ed25519_raw"]
       messageMaxAgeSec = 300
-      allowedAudiences = []
+      # Audience allowlist for the DID grant — required, non-empty (fail
+      # closed; an empty/absent list used to mean "accept any audience",
+      # rule audit-5). Replace with your real audience(s) before deploying
+      # past localhost.
+      allowedAudiences = ["http://localhost:3000"]
+      # CAVEAT: this override must be a HOCON array literal, e.g.
+      # ["https://a.example","https://b.example"] — an env var supplies a
+      # plain string, which fails the config schema's z.array(...) check at
+      # boot (this array-typed field has no string-to-array coercion).
+      allowedAudiences = ${?OAUTH_GRANTS_DID_ALLOWED_AUDIENCES}
+      # Upper bound, in seconds, on oauth.accessToken.expiresIn (above) for
+      # this grant — the P0 revocation-latency bound the token lifetime must
+      # stay within (rule auth.token.lifetime-bound). Required, no default;
+      # keep >= oauth.accessToken.expiresIn or boot fails closed. Secure
+      # default: a tight 900s (15 min) bound, matching accessToken.expiresIn
+      # above — deployers who accept slower revocation can raise this via
+      # OAUTH_GRANTS_DID_REVOCATION_LATENCY_BOUND_SEC.
+      revocationLatencyBoundSec = 900
+      revocationLatencyBoundSec = ${?OAUTH_GRANTS_DID_REVOCATION_LATENCY_BOUND_SEC}
+      # Hard expiry cap for LEGACY_DID_LOGIN@1 tokens (rule
+      # auth.legacy.did-login). The schema's own default is 900s; this
+      # scaffold's oauth.accessToken.expiresIn (above) is also 900s now, so
+      # the two agree out of the box — set explicitly here anyway (rather
+      # than relying on the schema default) so it stays visible and
+      # independently overridable via OAUTH_GRANTS_DID_LEGACY_MAX_TTL_SEC
+      # if a deployer raises accessToken.expiresIn without wanting to loosen
+      # this cap in lockstep.
+      legacyMaxTtlSec = 900
+      legacyMaxTtlSec = ${?OAUTH_GRANTS_DID_LEGACY_MAX_TTL_SEC}
+      # Selecting an OWNER_* authContract requires a ratified owner-migration
+      # contract (auth.migration.enable-gate); default is LEGACY_DID_LOGIN@1.
+      # authContract = "OWNER_AUTHENTICATION_LOGIN@1"
+      # ownerMigrationRatified = true
     }
   }
 }

@@ -52,6 +52,27 @@ Optional peer dependency (required for the `ed25519_raw` and `ed25519_prehash` a
 npm install @noble/ed25519
 ```
 
+## P0 Auth Contract
+
+This package mints tokens under a P0 auth contract (dplaax.spec). Full
+detail — the six token claims, config keys, resolver failure semantics, and
+liveness posture — lives in [the repo README's "P0 Auth Contract"
+section](../../README.md#p0-auth-contract); this is the short version.
+
+`authContract` (`oauth.grants.did.authContract`) selects one of three
+contract ids:
+
+- **`LEGACY_DID_LOGIN@1`** (default) — the pre-existing, relationship-blind
+  message shape. Active today; capped by `legacyMaxTtlSec`.
+- **`OWNER_AUTHENTICATION_LOGIN@1`** / **`OWNER_ASSERTION_CONTROL_LOGIN@1`** —
+  transcript-bearing contracts. **`createDidGrant` throws at construction
+  time** if either is selected: the OWNER validation path
+  (`validateOwnerLogin` in `transcript.mts` — versioned login transcript,
+  three-way `kid` match, relationship check) is implemented and unit-tested
+  but not yet called from the grant's request handler. Selecting OWNER is
+  refused at boot, not silently downgraded, until that wiring lands. Use
+  `LEGACY_DID_LOGIN@1` until then.
+
 ## Public API
 
 ### `oauthDidModule`
@@ -64,20 +85,22 @@ Factory that returns a module (name: `"oauth-did"`). Contributes the DID grant u
 
 Per the v0.5 manifest model, registration is declarative: include this module in `createApp`'s `modules` array to enable DID authentication. The `oauth.grants.did.enabled` config field is accepted for HOCON-config backward compatibility but ignored at runtime — composition decides whether the grant is contributed.
 
-`DidModuleOptions` must supply a DID document resolver in one of two forms, plus an optional `verifierRegistry` for injecting custom algorithms:
+`DidModuleOptions` must supply a DID document resolver in one of two forms, plus optional `verifierRegistry` / `nonceStore` overrides:
 
 ```typescript
 type DidModuleOptions =
-  | { resolver: DidDocumentResolver; verifierRegistry?: VerifierRegistry }
+  | { resolver: DidDocumentResolver; verifierRegistry?: VerifierRegistry; nonceStore?: NonceStore }
   | {
       resolverFactory: (config: Record<string, unknown>) => DidDocumentResolver;
       verifierRegistry?: VerifierRegistry;
+      nonceStore?: NonceStore;
     };
 ```
 
 - **`resolver`** — a pre-built resolver instance
 - **`resolverFactory`** — a factory called with the DID grant config section at init time
 - **`verifierRegistry`** — optional `VerifierRegistry` for registering additional algorithms beyond the built-ins; defaults to a registry pre-populated with the five built-ins
+- **`nonceStore`** — optional `NonceStore` for replay protection; defaults to an in-memory store (see "Nonce Replay Protection" below)
 
 ---
 
@@ -87,6 +110,7 @@ type DidModuleOptions =
 type DidGrantOptions = {
   resolver: DidDocumentResolver;
   verifierRegistry?: VerifierRegistry;
+  nonceStore?: NonceStore;
 };
 
 function createDidGrant(
@@ -125,9 +149,19 @@ const didConfigSchema: z.ZodObject<{
         enabled?: boolean;
         /** @deprecated Use supportedAlgorithms instead. Kept for backward compatibility. */
         algorithm?: string;
-        supportedAlgorithms: string[]; // default: ["ed25519_raw"]
-        messageMaxAgeSec: number;      // default: 300
-        allowedAudiences: string[];    // default: []
+        supportedAlgorithms: string[];      // default: ["ed25519_raw"]
+        messageMaxAgeSec: number;           // default: 300
+        allowedAudiences: string[];         // REQUIRED, non-empty — NO default (fail closed)
+        authContract: AuthContractId;       // default: "LEGACY_DID_LOGIN@1"
+        ownerMigrationRatified: boolean;    // default: false
+        revocationLatencyBoundSec: number;  // REQUIRED, positive integer — NO default (fail closed)
+        legacyMaxTtlSec: number;            // default: 900
+        tokenEndpoint?: string;             // required when authContract is OWNER_*
+        resolver?: {                        // resource-floor bounds passthrough; this package
+          timeoutMs?: number;                // only defines the shape, a resolverFactory (e.g.
+          maxBodyBytes?: number;              // DplaaxDidResolver) supplies its own defaults
+          maxConcurrent?: number;
+        };
       };
     };
   };
@@ -135,6 +169,20 @@ const didConfigSchema: z.ZodObject<{
 ```
 
 Zod schema for the DID grant configuration slice. The shape mirrors the runtime read path (`config.oauth.grants.did.*`) so that `defineModule`'s `configSchema` slot composes correctly against `CoreConfigSchema` and the declared defaults reach the grant factory at boot. `supportedAlgorithms` is the primary field for selecting accepted algorithms; the legacy single-value `algorithm` is still accepted as a backward-compatible alias.
+
+**`allowedAudiences` and `revocationLatencyBoundSec` are required, with no
+default** — an empty/absent audience allowlist used to mean "accept any
+audience" (a fail-open default); both fields now fail closed at parse time,
+and `createDidGrant` itself re-asserts them (so a hand-built config that
+skips `didConfigSchema.parse` doesn't bypass the check either). `expiresIn`
+(from the sibling `oauth.accessToken` slice) must stay ≤
+`revocationLatencyBoundSec` always, and ≤ `legacyMaxTtlSec` specifically
+when `authContract` is `LEGACY_DID_LOGIN@1` — both checked as boot-time
+asserts in `createDidGrant`, since this schema can't see the sibling slice.
+`authContract` / `ownerMigrationRatified` gate the OWNER contracts at the
+schema level (`auth.migration.enable-gate`), but selecting an OWNER
+`authContract` is refused unconditionally by `createDidGrant` regardless of
+that gate — see "P0 Auth Contract" above.
 
 ---
 
@@ -195,8 +243,19 @@ interface ParsedMessage {
   timestamp: string;
   nonce: string;
   audience?: string;
+  /** Signed payload's `verification_method` member, if present. Not enforced here. */
+  verificationMethod?: string;
+  /** JWS protected header's `kid` member, if present. Not enforced here. */
+  headerKid?: string;
 }
 ```
+
+`verificationMethod` / `headerKid` are surfaced only by the JWS-based
+verifiers (`ed25519_jws`, `es256_jws`, `es256k_jws`) — the raw Ed25519
+verifiers have no header/kid concept. Neither is enforced against the
+resolved key by this package today; that three-way match is part of the
+OWNER validation path (`validateOwnerLogin`), which is not yet wired into
+the request handler — see "P0 Auth Contract" above.
 
 ---
 
@@ -228,10 +287,15 @@ const keyStoreModule = defineModule({
   provides: { keyStore: () => keyStore },
 });
 
-// Optional config slice (all fields have sensible defaults):
-//   config.oauth.grants.did.supportedAlgorithms = ["ed25519_raw"]
-//   config.oauth.grants.did.messageMaxAgeSec = 300
-//   config.oauth.grants.did.allowedAudiences = []
+// config.oauth.grants.did — REQUIRED, no default (fail closed):
+//   allowedAudiences: non-empty string[]
+//   revocationLatencyBoundSec: positive integer, >= oauth.accessToken.expiresIn
+// Fields with defaults:
+//   supportedAlgorithms = ["ed25519_raw"]
+//   messageMaxAgeSec = 300
+//   legacyMaxTtlSec = 900
+//   authContract = "LEGACY_DID_LOGIN@1"
+//   ownerMigrationRatified = false
 
 const handle = await createApp({
   modules: [
@@ -267,12 +331,25 @@ if (result.valid) {
 
 ### Nonce Replay Protection
 
-The DID grant uses an in-memory store for nonce replay protection. This has two limitations:
+Replay protection is pluggable via the `NonceStore` interface:
+
+```typescript
+interface NonceStore {
+  /** Returns `false` when `nonce` is a replay within its freshness window. */
+  consume(nonce: string, expiresAtMs: number): Promise<boolean>;
+}
+```
+
+Both `oauthDidModule` and `createDidGrant` accept an optional `nonceStore`.
+When omitted, an in-memory default (`InMemoryNonceStore`) is used, which has
+two limitations:
 
 1. **Process restarts**: Stored nonces are lost on restart, creating a replay window of `messageMaxAgeSec` (default: 300 seconds)
-2. **Multi-instance deployments**: Each instance maintains its own nonce store, so a nonce used on one instance can be replayed on another
+2. **Multi-instance deployments**: Each instance maintains its own in-memory store, so a nonce used on one instance can be replayed on another
 
-For production deployments requiring stronger replay protection, an external nonce store (e.g., Redis) is recommended. A `NonceStore` interface for pluggable backends is planned for a future release.
+For production deployments requiring stronger replay protection, inject a
+shared-store implementation of `NonceStore` (e.g. Redis-backed) via the
+`nonceStore` option.
 
 ## See Also
 

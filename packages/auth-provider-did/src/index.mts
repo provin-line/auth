@@ -13,10 +13,38 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export { createDidGrant, type DidGrantOptions } from "./did.mjs";
+export {
+	AUTHZ_SCOPE_AT_ISSUANCE,
+	createDidGrant,
+	type DidGrantOptions,
+} from "./did.mjs";
 export { type DidModuleOptions, didConfigSchema, oauthDidModule } from "./module.mjs";
+export { InMemoryNonceStore, type NonceStore } from "./nonceStore.mjs";
+export { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/errors.mjs";
 export { type ExtractedKey, extractVerificationKey } from "./resolver/extractKey.mjs";
-export type { DidDocument, DidDocumentResolver, VerificationMethod } from "./resolver/types.mjs";
+export {
+	MethodSelectionError,
+	type RelationshipName,
+	type SelectedMethod,
+	selectVerificationMethod,
+} from "./resolver/selectMethod.mjs";
+export { StrictJsonError, strictJsonParse } from "./resolver/strictJson.mjs";
+export type {
+	DidDocument,
+	DidDocumentResolver,
+	ResolutionResult,
+	VerificationMethod,
+} from "./resolver/types.mjs";
+export {
+	type AuthContractId,
+	DOMAIN_SEPARATION_TAG,
+	type LoginTranscript,
+	parseLoginTranscript,
+	TRANSCRIPT_VERSION,
+	TranscriptError,
+	validateOwnerLogin,
+	type ValidateOwnerLoginInput,
+} from "./transcript.mjs";
 export { detectAlgorithm } from "./verifiers/detect.mjs";
 export { extractEd25519PublicKeyBytes } from "./verifiers/ed25519Utils.mjs";
 export {

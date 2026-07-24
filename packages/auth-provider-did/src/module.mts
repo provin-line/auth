@@ -17,6 +17,7 @@
 import { defineModule, type GrantHandler, type Module } from "@o3co/auth-provider-core";
 import { z } from "zod";
 import { createDidGrant } from "./did.mjs";
+import type { NonceStore } from "./nonceStore.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
 import type { VerifierRegistry } from "./verifiers/registry.mjs";
 
@@ -31,6 +32,15 @@ const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did" as const;
  * `oauth.grants` (not exported as a bare `did` schema) so that `defineModule`'s
  * `configSchema` slot can compose it with `CoreConfigSchema`'s `oauth.grants:
  * z.object({}).passthrough()` without stripping sibling grants' config.
+ *
+ * `did` itself carries NO object-level default (Task 8, config hardening):
+ * `allowedAudiences` and `revocationLatencyBoundSec` are required with no
+ * per-field default either, so a synthesized object-level default could only
+ * be produced by inventing values for a security-relevant allowlist and
+ * lifetime bound. Any deployment that includes `oauthDidModule` in its
+ * `modules` array now MUST configure `oauth.grants.did` explicitly — this is
+ * the fix for the audit finding that an empty/absent audience allowlist
+ * silently meant "accept any audience" (fail-open default).
  */
 export const didConfigSchema = z.object({
 	oauth: z.object({
@@ -49,12 +59,106 @@ export const didConfigSchema = z.object({
 						algorithm: z.string().optional(),
 						supportedAlgorithms: z.array(z.string()).default(["ed25519_raw"]),
 						messageMaxAgeSec: z.coerce.number().default(300),
-						allowedAudiences: z.array(z.string()).default([]),
+						/**
+						 * Audience allowlist for the DID grant. Required, non-empty —
+						 * NO default (fail closed). An empty/absent allowlist used to
+						 * mean "accept any audience"; that fail-open default is the
+						 * audit finding this field now closes at boot time instead of
+						 * at request time.
+						 */
+						allowedAudiences: z.array(z.string().min(1)).min(1),
+						/**
+						 * The P0 auth contract this grant enforces (dplaax.spec).
+						 * `LEGACY_DID_LOGIN@1` — the pre-existing message shape with no
+						 * signed transcript — is the scaffold/default contract. The two
+						 * `OWNER_*` values select transcript-bearing contracts gated by
+						 * `ownerMigrationRatified` below (rule `auth.migration.enable-
+						 * gate`) — but the OWNER validation path (versioned transcript,
+						 * three-way kid match, Fork-Y relationship; see transcript.mts)
+						 * is NOT wired into the request handler yet. `createDidGrant`
+						 * fails closed at construction time for either `OWNER_*` value
+						 * (see the guard in did.mts) until that path is enforced in
+						 * `handle()` — selecting an OWNER_* contract today is a boot-time
+						 * error, not a runtime one. Kept in sync by hand with
+						 * `AuthContractId` in `./transcript.mts` — zod's literal-union
+						 * enum can't reference that type's members directly.
+						 */
+						authContract: z
+							.enum([
+								"LEGACY_DID_LOGIN@1",
+								"OWNER_AUTHENTICATION_LOGIN@1",
+								"OWNER_ASSERTION_CONTROL_LOGIN@1",
+							])
+							.default("LEGACY_DID_LOGIN@1"),
+						/**
+						 * Explicit operator opt-in required before an OWNER_* contract
+						 * may be selected — rule `auth.migration.enable-gate`. Defaults
+						 * to `false` so upgrading this package never silently enables
+						 * the OWNER_* migration path.
+						 */
+						ownerMigrationRatified: z.boolean().default(false),
+						/**
+						 * Upper bound, in seconds, on `oauth.accessToken.expiresIn` for
+						 * this grant — rule `auth.token.lifetime-bound`, enforced as a
+						 * boot-time assert in `createDidGrant` (this schema can't see
+						 * `accessToken.expiresIn`, a sibling config slice). NO default:
+						 * an operator who omits this gets a boot failure rather than an
+						 * implicit, possibly-too-generous bound (fail closed).
+						 */
+						revocationLatencyBoundSec: z.number().int().positive(),
+						/**
+						 * Hard expiry cap, in seconds, for `LEGACY_DID_LOGIN@1` tokens —
+						 * rule `auth.legacy.did-login`, enforced as a boot-time assert
+						 * in `createDidGrant`. The legacy message shape carries no
+						 * signed transcript / replay-binding beyond nonce+timestamp, so
+						 * its tokens are capped more tightly than the general
+						 * `revocationLatencyBoundSec` bound above.
+						 */
+						legacyMaxTtlSec: z.number().int().positive().default(900),
+						/**
+						 * The OAuth token endpoint URL. Required when `authContract` is
+						 * OWNER_*: the login transcript's `token_endpoint` field is
+						 * checked against this (Task 9's `validateOwnerLogin`).
+						 */
+						tokenEndpoint: z.string().min(1).optional(),
+						/**
+						 * Resource-floor bounds (timeout / body-size cap / concurrency)
+						 * passed through to whatever resolver a `resolverFactory` builds
+						 * from this config slice — this package only defines the shape;
+						 * it does not itself construct a bounded transport. All fields
+						 * optional, defaulting to `{}` so a resolver factory can layer
+						 * its own defaults on top (e.g. `DplaaxDidResolver`'s
+						 * `DEFAULT_BOUNDS` in `@provin-line/auth-provider-dplaax-module`).
+						 */
+						resolver: z
+							.object({
+								timeoutMs: z.number().int().positive(),
+								maxBodyBytes: z.number().int().positive(),
+								maxConcurrent: z.number().int().positive(),
+							})
+							.partial()
+							.default({}),
 					})
-					.default({
-						supportedAlgorithms: ["ed25519_raw"],
-						messageMaxAgeSec: 300,
-						allowedAudiences: [],
+					.superRefine((val, ctx) => {
+						const isOwnerContract =
+							val.authContract === "OWNER_AUTHENTICATION_LOGIN@1" ||
+							val.authContract === "OWNER_ASSERTION_CONTROL_LOGIN@1";
+						if (!isOwnerContract) return;
+						if (val.ownerMigrationRatified !== true) {
+							ctx.addIssue({
+								code: "custom",
+								message:
+									"owner contract requires ownerMigrationRatified: true (auth.migration.enable-gate)",
+								path: ["ownerMigrationRatified"],
+							});
+						}
+						if (!val.tokenEndpoint) {
+							ctx.addIssue({
+								code: "custom",
+								message: "owner contract requires tokenEndpoint to be configured",
+								path: ["tokenEndpoint"],
+							});
+						}
 					}),
 			})
 			.passthrough(),
@@ -62,10 +166,11 @@ export const didConfigSchema = z.object({
 });
 
 export type DidModuleOptions =
-	| { resolver: DidDocumentResolver; verifierRegistry?: VerifierRegistry }
+	| { resolver: DidDocumentResolver; verifierRegistry?: VerifierRegistry; nonceStore?: NonceStore }
 	| {
 			resolverFactory: (config: Record<string, unknown>) => DidDocumentResolver;
 			verifierRegistry?: VerifierRegistry;
+			nonceStore?: NonceStore;
 	  };
 
 // Pre-Phase-9 escape hatch — ComponentMap typed-slot inference for grant
@@ -103,7 +208,11 @@ export const oauthDidModule = (options: DidModuleOptions): Module =>
 							keyStore: deps.keyStore,
 							pathResolver: deps.pathResolver,
 						},
-						{ resolver, verifierRegistry: options.verifierRegistry },
+						{
+							resolver,
+							verifierRegistry: options.verifierRegistry,
+							nonceStore: options.nonceStore,
+						},
 					);
 				}) as (deps: AnyDeps) => GrantHandler,
 			},

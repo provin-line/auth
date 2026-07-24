@@ -35,6 +35,7 @@ async function createPrehashSignedRequest(
 	const resolvedKey: ExtractedKey = {
 		format: "jwk",
 		key: { kty: "OKP", crv: "Ed25519", x },
+		id: `${did}#key-1`,
 	};
 
 	const message = JSON.stringify({
@@ -154,6 +155,7 @@ describe("Ed25519PrehashVerifier", () => {
 		const resolvedKey: ExtractedKey = {
 			format: "jwk",
 			key: { kty: "OKP", crv: "Ed25519", x },
+			id: `${did}#key-1`,
 		};
 
 		const result = await verifier.verify({

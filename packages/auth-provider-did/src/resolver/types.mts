@@ -33,8 +33,35 @@ export interface VerificationMethod {
 export interface DidDocument {
 	id: string;
 	verificationMethod?: VerificationMethod[];
+	authentication?: unknown[];
+	assertionMethod?: unknown[];
+	// Unknown members are preserved rather than stripped (auth.resolve.unknown-member):
+	// a resolver must not silently drop DID Document fields it doesn't model yet.
+	[k: string]: unknown;
+}
+
+/**
+ * The full outcome of resolving a DID: the parsed document plus enough
+ * provenance to prove — later, to a third party — exactly which bytes were
+ * served, by whom, and when.
+ */
+export interface ResolutionResult {
+	/** The parsed DID Document. */
+	document: DidDocument;
+	/** The exact bytes the registry served, before JSON parsing. */
+	canonicalBytes: Uint8Array;
+	/** `sha256:<64-hex>` digest computed over `canonicalBytes`. */
+	digest: string;
+	/** The DID string passed to `resolve()`. */
+	requestedDid: string;
+	/** Origin of the connection that served `canonicalBytes`. */
+	finalOrigin: string;
+	/** `registry:<finalOrigin>#<digest>` — a stable pointer to this exact snapshot. */
+	snapshotRef: string;
+	/** RFC 3339 UTC instant at which this resolution was performed. */
+	retrievedAt: string;
 }
 
 export interface DidDocumentResolver {
-	resolve(did: string): Promise<DidDocument>;
+	resolve(did: string): Promise<ResolutionResult>;
 }

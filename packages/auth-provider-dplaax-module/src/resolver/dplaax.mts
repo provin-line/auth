@@ -14,8 +14,22 @@
  * limitations under the License.
  */
 
-import type { DidDocument, DidDocumentResolver } from "@provin-line/auth-provider-did";
+import {
+    type DidDocument,
+    type DidDocumentResolver,
+    ResolutionRejectedError,
+    type ResolutionResult,
+    ResolutionUnavailableError,
+    StrictJsonError,
+    strictJsonParse,
+} from "@provin-line/auth-provider-did";
 import { parseDplaaxDid, requireOwner } from "@provin-line/did-dplaax";
+import {
+    type BoundedFetch,
+    type BoundedFetchOptions,
+    createBoundedFetch,
+    DEFAULT_BOUNDS,
+} from "./boundedFetch.mjs";
 
 export interface DplaaxDidResolverOptions {
     /**
@@ -33,6 +47,17 @@ export interface DplaaxDidResolverOptions {
      * lowercased + trimmed + deduped internally.
      */
     allowedRegistries?: string[];
+    /**
+     * Resource-floor bounds for the transport (timeout / body-size cap /
+     * concurrency). Merged over `DEFAULT_BOUNDS` — callers only need to
+     * override the fields they care about.
+     */
+    bounds?: Partial<BoundedFetchOptions>;
+    /**
+     * Injectable `fetch` implementation, primarily for tests. Defaults to
+     * the global `fetch`.
+     */
+    fetchImpl?: typeof fetch;
 }
 
 /**
@@ -56,6 +81,7 @@ export interface DplaaxDidResolverOptions {
 export class DplaaxDidResolver implements DidDocumentResolver {
     private readonly registryBaseUrl: string;
     private readonly allowedRegistries: Set<string>;
+    private readonly boundedFetch: BoundedFetch;
 
     constructor(
         registryBaseUrl: string,
@@ -83,24 +109,151 @@ export class DplaaxDidResolver implements DidDocumentResolver {
         this.allowedRegistries = new Set(
             [baseHost, ...extra].map((r) => r.trim().toLowerCase()),
         );
+
+        // Built once per instance (not per resolve() call) so the
+        // maxConcurrent semaphore is shared across every request this
+        // resolver makes, per the "resource floor" the transport enforces.
+        this.boundedFetch = createBoundedFetch(
+            { ...DEFAULT_BOUNDS, ...options.bounds },
+            options.fetchImpl,
+        );
     }
 
-    async resolve(did: string): Promise<DidDocument> {
-        const parsed = parseDplaaxDid(did);
+    async resolve(did: string): Promise<ResolutionResult> {
+        // Pre-fetch validation (parse / owner-only / allow-list) must land in
+        // the same two-class taxonomy (errors.mts) as every post-fetch
+        // failure below — every `resolve()` rejection is either
+        // ResolutionUnavailableError or ResolutionRejectedError, never a
+        // plain Error. Callers that `instanceof`-classify (e.g. the
+        // conformance resolve executor, integration/conformance/executors/
+        // resolve.mts) would otherwise crash on an unclassified throw
+        // instead of asserting a FAILED outcome. All three failures here are
+        // definitive rejections (never transient), so they map to
+        // ResolutionRejectedError, not ResolutionUnavailableError.
+        let parsed: ReturnType<typeof parseDplaaxDid>;
+        try {
+            parsed = parseDplaaxDid(did);
+        } catch (err) {
+            throw new ResolutionRejectedError(
+                "malformed-did",
+                err instanceof Error ? err.message : String(err),
+            );
+        }
 
-        requireOwner(parsed);
+        try {
+            requireOwner(parsed);
+        } catch (err) {
+            throw new ResolutionRejectedError(
+                "not-owner-did",
+                err instanceof Error ? err.message : String(err),
+            );
+        }
 
         if (!this.allowedRegistries.has(parsed.registry.toLowerCase())) {
-            throw new Error(
+            throw new ResolutionRejectedError(
+                "registry-not-allowlisted",
                 `registry "${parsed.registry}" not in allow-list for DID: "${did}"`,
             );
         }
 
         const url = `${this.registryBaseUrl}/did/${parsed.accountType}/${parsed.accountId}/did.json`;
-        const res = await fetch(url);
-        if (!res.ok) {
-            throw new Error(`DID resolution failed for "${did}": HTTP ${res.status}`);
+
+        // The bounded transport (timeout / body cap / redirect refusal /
+        // concurrency — Task 3's job) already turned network failures,
+        // timeouts, and an oversized body into the two-class error taxonomy
+        // (errors.mts); it either throws or returns bytes it fully read, so
+        // there's no separate fetch/network try-catch here anymore.
+        const { status, bytes: canonicalBytes, finalOrigin } = await this.boundedFetch(url);
+
+        if (status < 200 || status >= 300) {
+            if (status >= 500) {
+                throw new ResolutionUnavailableError(
+                    "registry-5xx",
+                    `DID resolution failed for "${did}": HTTP ${status}`,
+                );
+            }
+            if (status === 404) {
+                throw new ResolutionRejectedError(
+                    "did-not-found",
+                    `DID resolution failed for "${did}": HTTP ${status}`,
+                );
+            }
+            throw new ResolutionRejectedError(
+                "registry-4xx",
+                `DID resolution failed for "${did}": HTTP ${status}`,
+            );
         }
-        return (await res.json()) as DidDocument;
+
+        // canonicalBytes/digest must be the exact bytes the registry served
+        // (ResolutionResult contract) — boundedFetch hands back the raw
+        // bytes it read off the stream (never a res.text() round-trip: per
+        // WHATWG Fetch, text() strips a leading UTF-8 BOM and replaces
+        // invalid UTF-8 with U+FFFD before returning a string, so
+        // re-encoding that string could silently diverge from the wire
+        // bytes). strictJsonParse's input is decoded from these same
+        // canonicalBytes below, so `document` and the integrity fields can
+        // never drift apart.
+        const digestBuffer = await crypto.subtle.digest("SHA-256", canonicalBytes);
+        const digest = `sha256:${Buffer.from(digestBuffer).toString("hex")}`;
+        const retrievedAt = new Date().toISOString();
+        const text = new TextDecoder().decode(canonicalBytes);
+
+        // Strict decode: `JSON.parse` silently keeps the last of a duplicate
+        // key and ignores trailing data, either of which could smuggle a
+        // tampered/ambiguous document past this resolver. Both are
+        // definitive-rejection outcomes (`ResolutionRejectedError`), not
+        // transient ones — the registry served bytes that were reached, just
+        // not a valid document.
+        let parsedBody: unknown;
+        try {
+            parsedBody = strictJsonParse(text);
+        } catch (err) {
+            if (err instanceof StrictJsonError) {
+                throw new ResolutionRejectedError(
+                    "malformed-document",
+                    `DID resolution failed for "${did}": malformed document (${err.reason}: ${err.message})`,
+                );
+            }
+            throw err;
+        }
+
+        if (
+            typeof parsedBody !== "object" ||
+            parsedBody === null ||
+            Array.isArray(parsedBody) ||
+            typeof (parsedBody as Record<string, unknown>).id !== "string"
+        ) {
+            throw new ResolutionRejectedError(
+                "malformed-document",
+                `DID resolution failed for "${did}": document is not an object with a string "id"`,
+            );
+        }
+        const document = parsedBody as DidDocument;
+
+        // Byte-exact comparison — no normalization (rule auth.resolve.id-equality).
+        // A document whose `id` doesn't match the requested DID is a
+        // definitive rejection: either the registry served the wrong
+        // document, or something upstream tampered with routing/content.
+        if (document.id !== did) {
+            throw new ResolutionRejectedError(
+                "id-mismatch",
+                `DID resolution failed for "${did}": document id "${document.id}" does not match requested DID`,
+            );
+        }
+
+        // finalOrigin came back from boundedFetch (derived from res.url,
+        // falling back to the requested URL's origin for fetch mocks/
+        // environments that leave res.url unset).
+        const snapshotRef = `registry:${finalOrigin}#${digest}`;
+
+        return {
+            document,
+            canonicalBytes,
+            digest,
+            requestedDid: did,
+            finalOrigin,
+            snapshotRef,
+            retrievedAt,
+        };
     }
 }

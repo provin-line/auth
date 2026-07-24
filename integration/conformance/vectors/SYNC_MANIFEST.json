@@ -1,0 +1,9 @@
+{
+  "source": "/Volumes/Workspace/agents/provin_2/scopes/provin.poc/repos/dplaax.spec",
+  "synced_at": "2026-07-17T00:57:04Z",
+  "files": {
+    "auth-grant-kid-mismatch-001.json": "e0edef754cad753670f06c0cc041f37832aa6bb252531894885b5492ce2c55f9",
+    "did-resolution-id-mismatch-001.json": "9dfa85df49eae727b17f8d0fd6d678e632418f35c960abab1ab5655a1ded387c",
+    "did-resolution-unavailable-001.json": "034050b63c25cb31c3477b43f5869d4b2872c4c7f1a7555e58847f1759f27c74"
+  }
+}
