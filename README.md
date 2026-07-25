@@ -206,8 +206,9 @@ bytes are trusted:
 
 ## E2E Tests
 
-Cross-repo E2E tests (including auth integration) live in [provin-line/e2e](https://github.com/provin-line/e2e).
+Cross-repo E2E tests (including auth integration) live in `provin-line/e2e`,
+an internal compose harness (not published).
 
 ## License
 
-Private -- provin-line
+[Apache-2.0](LICENSE). Copyright 2026 1o1 Co. Ltd.

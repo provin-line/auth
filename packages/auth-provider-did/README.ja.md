@@ -30,8 +30,13 @@ RFC 6749 §4.5 は拡張 grant を絶対 URI で識別する。プロトコル�
 
 ## インストール
 
-```bash
-npm install @provin-line/auth-provider-did
+npm には未公開 — git-subdirectory 依存として消費する（pnpm 10.x 構文。
+[create-app.md § 3.3](https://github.com/provin-line/auth/blob/develop/docs/create-app.md) 参照）:
+
+```jsonc
+// package.json
+"@provin-line/auth-provider-did":
+  "github:provin-line/auth#<release-tag>&path:/packages/auth-provider-did"
 ```
 
 オプションの peer dependency（`ed25519_raw` および `ed25519_prehash` アルゴリズム使用時に必要。JWS 系アルゴリズムでは不要）:

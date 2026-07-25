@@ -42,8 +42,13 @@ than overriding this one.
 
 ## Install
 
-```bash
-npm install @provin-line/auth-provider-did
+Not yet published to npm — consume it as a git-subdirectory dependency
+(pnpm 10.x syntax; see [create-app.md § 3.3](https://github.com/provin-line/auth/blob/develop/docs/create-app.md)):
+
+```jsonc
+// package.json
+"@provin-line/auth-provider-did":
+  "github:provin-line/auth#<release-tag>&path:/packages/auth-provider-did"
 ```
 
 Optional peer dependency (required for the `ed25519_raw` and `ed25519_prehash` algorithms; not needed for the JWS algorithms):

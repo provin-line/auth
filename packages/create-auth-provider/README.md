@@ -55,8 +55,9 @@ Options:
 
 ## Generated instance shape
 
-See [spec § 6.1](https://github.com/provin-line/scope/blob/main/scopes/spec.dplaax/.claude/specs/dplaax-create-app.spec.md#61-files-emitted)
-for the complete file list. Provider-specific additions over the common
+See the template directory [`src/template/`](./src/template/) for the
+complete file list — the template is the source of truth
+([create-app.md § 1.1](../../docs/create-app.md)). Provider-specific additions over the common
 skeleton are `config/clients.yaml` (sample template, overwrite per
 deployment) and `keys/` (placeholder directory for signing-key material).
 
