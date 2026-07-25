@@ -117,6 +117,9 @@ network/pipeline topology (lock-step with provin.oss's `cmd/network` +
 ## [0.1.0] - 2026-07-12
 
 Initial internal release — pinned for internal (private) deployment and soak.
+No public tag exists for this line: the repository's public history starts at
+the 0.2 snapshot, and 0.1.x is unsupported at the public cut (see
+SECURITY.md).
 
 ### Added
 
@@ -134,4 +137,3 @@ Initial internal release — pinned for internal (private) deployment and soak.
 
 [Unreleased]: https://github.com/provin-line/auth/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/provin-line/auth/releases/tag/v0.2.0
-[0.1.0]: https://github.com/provin-line/auth/releases/tag/v0.1.0
