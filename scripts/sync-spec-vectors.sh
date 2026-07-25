@@ -31,9 +31,13 @@ if [[ ${#files[@]} -eq 0 ]]; then
 fi
 
 manifest_file="${DEST_DIR}/SYNC_MANIFEST.json"
+# Provenance is machine-independent: the canonical repo id plus the synced
+# commit — never the local checkout path (which leaks a contributor's disk
+# layout into a tracked file).
+src_commit="$(git -C "$DPLAAX_SPEC_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
 {
 	echo "{"
-	printf '  "source": "%s",\n' "$DPLAAX_SPEC_DIR"
+	printf '  "source": "github.com/dplaax/spec@%s",\n' "$src_commit"
 	printf '  "synced_at": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	echo '  "files": {'
 	total=${#files[@]}
