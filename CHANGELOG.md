@@ -182,5 +182,6 @@ SECURITY.md).
   `ghcr.io/provin-line/auth-auth-provider`) by `publish-images.yml` on `v*`
   tags, consumed by the provin.oss quickstart via `AUTH_REF`.
 
-[Unreleased]: https://github.com/provin-line/auth/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/provin-line/auth/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/provin-line/auth/releases/tag/v0.2.1
 [0.2.0]: https://github.com/provin-line/auth/releases/tag/v0.2.0
