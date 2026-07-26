@@ -1,5 +1,5 @@
 {
-	"name": "@provin-line/policy-verifier-dplaax-module",
+	"name": "@provin-line/auth-policy-verifier-dplaax-module",
 	"description": "dPLaaX attribute and rule collectors + module wiring for @o3co/auth.policy-verifier.server",
 	"version": "0.1.0",
 	"license": "Apache-2.0",

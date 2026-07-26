@@ -182,7 +182,7 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 			await readFile(join(outDir, "package.json"), "utf8"),
 		) as { dependencies: Record<string, string> };
 		expect(pkg.dependencies["@provin-line/auth-provider-dplaax-module"]).toBe(
-			"github:provin-line/auth#v1.2.3&path:/packages/auth-provider-dplaax-module",
+			"github:provin-line/auth#v1.2.3&path:/packages/provider-dplaax-module",
 		);
 	});
 
@@ -199,7 +199,7 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 		) as { pnpm: { overrides: Record<string, string> } };
 		expect(pkg.pnpm.overrides).toEqual({
 			"@provin-line/auth-provider-did":
-				"github:provin-line/auth#v1.2.3&path:/packages/auth-provider-did",
+				"github:provin-line/auth#v1.2.3&path:/packages/provider-did",
 			"@provin-line/did-dplaax":
 				"github:provin-line/auth#v1.2.3&path:/packages/did-dplaax",
 		});

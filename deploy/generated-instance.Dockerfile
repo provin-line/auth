@@ -20,7 +20,11 @@
 # overridden at runtime via env (DPLAAX_REGISTRY_BASE_URL) — the image stays
 # deployment-generic.
 
-# GENERATOR: "policy-verifier" | "auth-provider" (selects the create-* CLI,
+# GENERATOR: "policy-verifier" | "provider" — the COMPONENT name. Each
+# namespace adds the prefix its own context does not supply: the directory is
+# packages/create-${GENERATOR} (inside the auth repo), the npm package is
+# @provin-line/create-auth-${GENERATOR}, the image is auth-${GENERATOR}.
+# (selects the create-* CLI,
 # the instance name, and the exposed port).
 ARG GENERATOR=policy-verifier
 ARG AUTH_REF=poc
@@ -46,7 +50,7 @@ RUN --mount=type=secret,id=github_token \
     git clone https://github.com/provin-line/auth.git . \
  && git checkout "${AUTH_REF}" \
  && pnpm install --frozen-lockfile \
- && pnpm --filter "@provin-line/create-${GENERATOR}" build \
+ && pnpm --filter "@provin-line/create-auth-${GENERATOR}" build \
  && node "packages/create-${GENERATOR}/dist/cli.mjs" "${GENERATOR}" \
       --dplaax-module-ref "${AUTH_REF}" --port "${PORT}" \
       ${SCAFFOLD_ARGS} \

@@ -170,14 +170,24 @@ export function buildTokens(
 }
 
 /**
- * `packages/`-dir names of the @provin-line packages the dplaax module pulls
- * in transitively via workspace:*. Baked in like DEFAULT_DEP_VERSIONS —
- * refresh in lockstep with a generator MINOR bump when the module's
- * dependency graph changes (create-app.md § 3.3).
+ * The @provin-line packages the dplaax module pulls in transitively via
+ * workspace:*, each as the pair a consumer-root override needs: the npm NAME to
+ * key the override on, and the `packages/` DIR the git spec must point at.
+ *
+ * They are separate fields because they are separate things. A directory inside
+ * this repository does not need the `auth-` its location already implies; an
+ * npm name in the @provin-line scope does. Deriving one from the other is the
+ * same mistake that once published an image called auth-auth-provider — and
+ * here it would have been worse than cosmetic: the generated scaffold would
+ * have pointed at a `packages/` path that does not exist, so a consumer install
+ * would fail rather than merely read oddly.
+ *
+ * Baked in like DEFAULT_DEP_VERSIONS — refresh in lockstep with a generator
+ * MINOR bump when the module's dependency graph changes (create-app.md § 3.3).
  */
-const TRANSITIVE_PROVIN_PACKAGE_DIRS = [
-	"auth-provider-did",
-	"did-dplaax",
+const TRANSITIVE_PROVIN_PACKAGES = [
+	{ name: "auth-provider-did", dir: "provider-did" },
+	{ name: "did-dplaax", dir: "did-dplaax" },
 ] as const;
 
 /**
@@ -213,10 +223,10 @@ function buildPackageJson(opts: FilledOptions): string {
 	// consumer-root pnpm.overrides pinned to the same git ref. The git-fetched
 	// packages run a `prepare` build, which pnpm ≥10 blocks unless allow-listed
 	// in onlyBuiltDependencies.
-	const transitiveProvinDeps = TRANSITIVE_PROVIN_PACKAGE_DIRS.map(
-		(dir) =>
+	const transitiveProvinDeps = TRANSITIVE_PROVIN_PACKAGES.map(
+		({ name, dir }) =>
 			[
-				`@provin-line/${dir}`,
+				`@provin-line/${name}`,
 				`github:provin-line/auth#${opts.dplaaxModuleRef}&path:/packages/${dir}`,
 			] as const,
 	);

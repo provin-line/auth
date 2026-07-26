@@ -1,11 +1,11 @@
 {
-	"name": "@provin-line/create-policy-verifier",
+	"name": "@provin-line/create-auth-policy-verifier",
 	"description": "Scaffold generator for dPLaaX policy-verifier deployment instances",
 	"version": "0.1.0",
 	"license": "Apache-2.0",
 	"type": "module",
 	"bin": {
-		"create-policy-verifier": "./dist/cli.mjs"
+		"create-auth-policy-verifier": "./dist/cli.mjs"
 	},
 	"exports": {
 		".": {

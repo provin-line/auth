@@ -31,7 +31,7 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
  * the spec repo's own README table remains follow-up work there.)
  * Convention chosen to mirror the mock-registry-response
  * shape `DplaaxDidResolver` actually consumes (a status + body pair), the
- * same shape `packages/auth-provider-dplaax-module/src/__tests__/resolver/
+ * same shape `packages/provider-dplaax-module/src/__tests__/resolver/
  * resolver.test.mts` builds by hand for every test case:
  *
  *   "input": {

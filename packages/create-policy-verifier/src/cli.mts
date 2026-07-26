@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// CLI entry for @provin-line/create-policy-verifier. `main` is exported so unit
+// CLI entry for @provin-line/create-auth-policy-verifier. `main` is exported so unit
 // tests can drive it without spawning a child process; the auto-invocation
 // at the bottom is skipped when this file is imported as a module.
 
@@ -43,7 +43,7 @@ const PACKAGE_VERSION = (
 	) as { version: string }
 ).version;
 
-const HELP_TEXT = `Usage: create-policy-verifier <name> --dplaax-module-ref <tag> [options]
+const HELP_TEXT = `Usage: create-auth-policy-verifier <name> --dplaax-module-ref <tag> [options]
 
 Arguments:
   <name>                       Output directory + package.json name (positional, required).
@@ -52,7 +52,7 @@ Arguments:
 
 Required:
   --dplaax-module-ref <ref>    Git ref pinned for
-                               @provin-line/policy-verifier-dplaax-module.
+                               @provin-line/auth-policy-verifier-dplaax-module.
                                Per create-app.md § 3.3 this MUST be an exact tag,
                                not a moving branch — the CLI does not
                                default to keep the foot-gun closed.
@@ -232,7 +232,7 @@ export async function main(
 		return 0;
 	}
 	if (values.version) {
-		io.stdout.write(`@provin-line/create-policy-verifier ${PACKAGE_VERSION}\n`);
+		io.stdout.write(`@provin-line/create-auth-policy-verifier ${PACKAGE_VERSION}\n`);
 		return 0;
 	}
 

@@ -67,7 +67,7 @@ const handle = await createApp({
 
 `DplaaxDidResolver` accepts only owner DIDs (`did:dplaax:<registry>:<accountType>:<accountId>`). Pipeline and process DIDs are out of scope for OAuth identity authentication and are handled via the Signer API downstream.
 
-`classifyDplaaxDid` exposes the full hierarchy classifier (`"owner" | "pipeline" | "process" | null`) for callers that need the broader vocabulary beyond the owner-only resolver path. Note: `@provin-line/policy-verifier-dplaax-module` currently ships its own private parser for the same did:dplaax grammar; consolidating those two parsers behind this package is tracked as a follow-up.
+`classifyDplaaxDid` exposes the full hierarchy classifier (`"owner" | "pipeline" | "process" | null`) for callers that need the broader vocabulary beyond the owner-only resolver path. Note: `@provin-line/auth-policy-verifier-dplaax-module` currently ships its own private parser for the same did:dplaax grammar; consolidating those two parsers behind this package is tracked as a follow-up.
 
 ## Distribution
 
@@ -77,7 +77,7 @@ This package is **not published to npm**. Consumers reference it via pnpm's git-
 {
   "dependencies": {
     "@provin-line/auth-provider-dplaax-module":
-      "github:provin-line/auth#<release-tag>&path:/packages/auth-provider-dplaax-module"
+      "github:provin-line/auth#<release-tag>&path:/packages/provider-dplaax-module"
   }
 }
 ```

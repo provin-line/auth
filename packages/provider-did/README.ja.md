@@ -36,7 +36,7 @@ npm には未公開 — git-subdirectory 依存として消費する（pnpm 10.x
 ```jsonc
 // package.json
 "@provin-line/auth-provider-did":
-  "github:provin-line/auth#<release-tag>&path:/packages/auth-provider-did"
+  "github:provin-line/auth#<release-tag>&path:/packages/provider-did"
 ```
 
 オプションの peer dependency（`ed25519_raw` および `ed25519_prehash` アルゴリズム使用時に必要。JWS 系アルゴリズムでは不要）:

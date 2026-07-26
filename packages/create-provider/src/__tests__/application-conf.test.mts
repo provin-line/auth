@@ -31,7 +31,7 @@
 // slice outside `oauth.grants.did` — so it never proved the scaffolded
 // provider actually boots. The cross-field lifetime-bound asserts
 // (`auth.token.lifetime-bound`, `auth.legacy.did-login`) live in
-// `createDidGrant` itself (`packages/auth-provider-did/src/did.mts`), not in
+// `createDidGrant` itself (`packages/provider-did/src/did.mts`), not in
 // the schema. The second `describe` block below exercises that REAL boot
 // path: it builds `createDidGrant`'s actual `GrantDependencies` from the
 // rendered template's own `accessToken.expiresIn` / `revocationLatencyBoundSec`

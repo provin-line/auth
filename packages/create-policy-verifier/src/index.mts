@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Public API of @provin-line/create-policy-verifier.
+// Public API of @provin-line/create-auth-policy-verifier.
 //
 // The CLI in `cli.mts` is the consumer-facing entry, but exporting the
 // generator as a library lets tests call it directly without spawning a

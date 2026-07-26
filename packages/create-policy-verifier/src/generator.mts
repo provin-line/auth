@@ -80,7 +80,7 @@ export interface GenerateOptions {
 	readonly packageManager?: string;
 
 	/**
-	 * Git ref for the `@provin-line/policy-verifier-dplaax-module` dep.
+	 * Git ref for the `@provin-line/auth-policy-verifier-dplaax-module` dep.
 	 * Library-only default: `main` — a MOVING ref, acceptable for tests and
 	 * tooling but never for shipped scaffolds; the CLI deliberately requires
 	 * the flag and rejects moving branch names (create-app.md § 3.3 / § 4.1).
@@ -171,7 +171,25 @@ export function buildTokens(
  * refresh in lockstep with a generator MINOR bump when the module's
  * dependency graph changes (create-app.md § 3.3).
  */
-const TRANSITIVE_PROVIN_PACKAGE_DIRS = ["did-dplaax"] as const;
+/**
+ * The @provin-line packages the dplaax module pulls in transitively via
+ * workspace:*, each as the pair a consumer-root override needs: the npm NAME to
+ * key the override on, and the `packages/` DIR the git spec must point at.
+ *
+ * They are separate fields because they are separate things. A directory inside
+ * this repository does not need the `auth-` its location already implies; an
+ * npm name in the @provin-line scope does. Deriving one from the other is the
+ * same mistake that once published an image called auth-auth-provider — and
+ * here it would have been worse than cosmetic: the generated scaffold would
+ * have pointed at a `packages/` path that does not exist, so a consumer install
+ * would fail rather than merely read oddly.
+ *
+ * Baked in like DEFAULT_DEP_VERSIONS — refresh in lockstep with a generator
+ * MINOR bump when the module's dependency graph changes (create-app.md § 3.3).
+ */
+const TRANSITIVE_PROVIN_PACKAGES = [
+	{ name: "did-dplaax", dir: "did-dplaax" },
+] as const;
 
 /**
  * Build the generated `package.json` as a structured object then serialize
@@ -187,7 +205,7 @@ const TRANSITIVE_PROVIN_PACKAGE_DIRS = ["did-dplaax"] as const;
  */
 function buildPackageJson(opts: FilledOptions): string {
 	const dependencies: Record<string, string> = {
-		"@provin-line/policy-verifier-dplaax-module": buildDplaaxModuleDep(
+		"@provin-line/auth-policy-verifier-dplaax-module": buildDplaaxModuleDep(
 			opts.dplaaxModuleRef,
 		),
 		"@o3co/auth.policy-verifier.builtins":
@@ -211,17 +229,17 @@ function buildPackageJson(opts: FilledOptions): string {
 	// consumer-root pnpm.overrides pinned to the same git ref. The git-fetched
 	// packages run a `prepare` build, which pnpm ≥10 blocks unless allow-listed
 	// in onlyBuiltDependencies.
-	const transitiveProvinDeps = TRANSITIVE_PROVIN_PACKAGE_DIRS.map(
-		(dir) =>
+	const transitiveProvinDeps = TRANSITIVE_PROVIN_PACKAGES.map(
+		({ name, dir }) =>
 			[
-				`@provin-line/${dir}`,
+				`@provin-line/${name}`,
 				`github:provin-line/auth#${opts.dplaaxModuleRef}&path:/packages/${dir}`,
 			] as const,
 	);
 	const pnpmConfig = {
 		onlyBuiltDependencies: [
 			...transitiveProvinDeps.map(([name]) => name),
-			"@provin-line/policy-verifier-dplaax-module",
+			"@provin-line/auth-policy-verifier-dplaax-module",
 		].sort(),
 		overrides: Object.fromEntries(transitiveProvinDeps),
 	};

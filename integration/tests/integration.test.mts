@@ -49,7 +49,7 @@ import {
 	buildModules,
 	type DplaaxAppConfig,
 } from "@provin-line/auth-provider-dplaax-module";
-import { dplaaxModule } from "@provin-line/policy-verifier-dplaax-module";
+import { dplaaxModule } from "@provin-line/auth-policy-verifier-dplaax-module";
 import express from "express";
 import { SignJWT } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

@@ -32,7 +32,7 @@ JWT/DID-document layer that depends on the OAuth grant flow.
 ## Why a separate package
 
 Both `@provin-line/auth-provider-dplaax-module` and
-`@provin-line/policy-verifier-dplaax-module` need the same parser. Without
+`@provin-line/auth-policy-verifier-dplaax-module` need the same parser. Without
 this package, either:
 
 - the policy-verifier composition layer would have to depend on the

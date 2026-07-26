@@ -8,7 +8,7 @@ sources of truth before touching the wiring:
   ChainPeerService L2-only rule:
   <https://github.com/provin-line/oss/blob/main/docs/protocol/auth.md>
 - **`@o3co/auth.policy-verifier.server`** runtime docs: <https://github.com/o3co/auth.policy-verifier>
-- **`@provin-line/policy-verifier-dplaax-module`** attribute + rule collectors:
+- **`@provin-line/auth-policy-verifier-dplaax-module`** attribute + rule collectors:
   <https://github.com/provin-line/auth/tree/develop/packages/policy-verifier-dplaax-module>
 
 ## Where to add things
@@ -33,7 +33,7 @@ your deployment's L1 boundary grows.
 ## Regenerating
 
 To pick up newer dPLaaX or o3co framework pins, re-run
-`@provin-line/create-policy-verifier` at the newer release tag and diff the
+`@provin-line/create-auth-policy-verifier` at the newer release tag and diff the
 output against this directory. Hand-edits to deployment payload
 (`config/`, `src/rules/`, `src/collectors/`) survive a regenerate when
 re-applied; framework wiring (`src/main.mts`, `package.json` deps,

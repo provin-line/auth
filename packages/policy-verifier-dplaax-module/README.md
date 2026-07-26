@@ -1,4 +1,4 @@
-# @provin-line/policy-verifier-dplaax-module
+# @provin-line/auth-policy-verifier-dplaax-module
 
 dPLaaX attribute and rule collectors plus module wiring for [`@o3co/auth.policy-verifier.server`](https://www.npmjs.com/package/@o3co/auth.policy-verifier.server). Part of [dplaax.auth](../../README.md).
 
@@ -39,7 +39,7 @@ Register the module on app startup:
 ```ts
 import { builtinCollectorsModule } from "@o3co/auth.policy-verifier.builtins";
 import { createApp } from "@o3co/auth.policy-verifier.server";
-import { dplaaxModule } from "@provin-line/policy-verifier-dplaax-module";
+import { dplaaxModule } from "@provin-line/auth-policy-verifier-dplaax-module";
 
 const app = await createApp({
     pathResolver: import.meta.resolve,
@@ -90,7 +90,7 @@ This package is **not published to npm**. Consumers reference it via pnpm's git-
 ```jsonc
 {
   "dependencies": {
-    "@provin-line/policy-verifier-dplaax-module":
+    "@provin-line/auth-policy-verifier-dplaax-module":
       "github:provin-line/auth#<release-tag>&path:/packages/policy-verifier-dplaax-module"
   }
 }
