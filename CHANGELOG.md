@@ -10,6 +10,21 @@ releases.
 
 ## [Unreleased]
 
+### Changed
+
+- The published auth-provider image is `ghcr.io/provin-line/auth-provider`, no
+  longer `auth-auth-provider`. The old name came from concatenating an `auth-`
+  prefix onto a generator already called `auth-provider`; the image name is now
+  stated explicitly per matrix entry instead of derived, so the prefix appears
+  only where it disambiguates (`auth-policy-verifier` — whose policy verifier is
+  a real question; an auth provider already says auth).
+
+  **Breaking for anyone pinning the old name.** Done now precisely because
+  nobody can be: the packages became public minutes before the rename and no
+  release has been announced. `auth-auth-provider` is deleted rather than left
+  as a stale duplicate — GHCR has no rename or alias, so publishing the correct
+  name and removing the wrong one is the whole of the operation.
+
 P0 auth contract work (dplaax.spec): hardens DID resolution, tightens
 verification-method selection, adds an OWNER-path login transcript
 (validated but not yet wired in), a pluggable nonce store, six signed token
