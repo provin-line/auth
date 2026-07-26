@@ -6,10 +6,15 @@ composition roots of [auth.provider](https://github.com/o3co/auth.provider) and 
 
 See [docs/requirements.md](docs/requirements.md) for what this repository provides.
 
-> **Lineage**: forked from `dplaasio/auth` (the dPLaaS PoC auth stack) at `c23ff3f`,
-> then renamed to the dplaax protocol namespace (`did:dplaax`, the DID
-> grant — now `https://dplaax.dev/oauth/grant-type/did`) and the
-> `@provin-line` npm scope.
+> **Lineage**: this repository's history starts at the public cut, not at the
+> start of the work. The code grew up in a private PoC auth stack for dPLaaS,
+> and was carried over when the project moved to the dplaax protocol namespace
+> (`did:dplaax`, the DID grant — now
+> `https://dplaax.dev/oauth/grant-type/did`) and the `@provin-line` npm scope.
+> That predecessor was retired rather than published, so there is no upstream
+> repository to link to; the earliest commit here is the snapshot the public
+> line begins from. See [CHANGELOG.md](CHANGELOG.md) for what each release
+> since then contains.
 
 ## Instances
 
