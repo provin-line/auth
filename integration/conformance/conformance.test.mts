@@ -58,9 +58,9 @@ const vectors = await loadVectors();
  * ("The JWS protected kid, the signed-payload method id, and the
  * resolver-selected method id MUST be identical; any divergence among the
  * three MUST fail closed" — dplaax.spec rules/auth-grant.yaml).
- * `createDidGrant` (packages/auth-provider-did/src/did.mts) does not
+ * `createDidGrant` (packages/provider-did/src/did.mts) does not
  * perform this three-way check today: `validateOwnerLogin` — the function
- * that implements it (packages/auth-provider-did/src/transcript.mts) — is
+ * that implements it (packages/provider-did/src/transcript.mts) — is
  * exported from the package's public barrel but is never called from
  * `did.mts`'s `handle()`. This is a *deliberate*, reviewed scope boundary:
  * `did.mts` was left untouched with `validateOwnerLogin` extracted as a

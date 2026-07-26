@@ -54,7 +54,7 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
  *   "expect": { "status": 400, "error": "invalid_grant" }
  *   "expect": { "status": 200, "token_claims": { <decoded JWT claims> } }
  *
- * This executor drives `createDidGrant` (packages/auth-provider-did/src/
+ * This executor drives `createDidGrant` (packages/provider-did/src/
  * did.mts) DIRECTLY, the same way the package's own
  * `did.tokenClaims.test.mts` / `did.test.mts` do, rather than assembling
  * the full `buildModules` -> `createApp` -> HTTP router chain
@@ -151,7 +151,7 @@ export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
 
 	// Minimal CoreConfig stub — createDidGrant only reads oauth.grants.did.*
 	// and oauth.accessToken.expiresIn (see did.mts). Cast pattern mirrors
-	// packages/auth-provider-did/src/__tests__/did.tokenClaims.test.mts's
+	// packages/provider-did/src/__tests__/did.tokenClaims.test.mts's
 	// `mockConfig`.
 	const config = {
 		oauth: {

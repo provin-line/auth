@@ -47,7 +47,7 @@ export {
 
 // did:dplaax grammar layer. The parser, classifier, and accountType
 // allow-list live in @provin-line/did-dplaax — a zero-runtime-dep, framework-
-// agnostic package shared with @provin-line/policy-verifier-dplaax-module
+// agnostic package shared with @provin-line/auth-policy-verifier-dplaax-module
 // (auth#19). Re-exported here so downstream consumers keep their existing
 // import path; new consumers MAY import directly from @provin-line/did-dplaax.
 export {

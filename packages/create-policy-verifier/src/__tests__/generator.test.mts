@@ -122,7 +122,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		}
 	});
 
-	it("emits git-subdir form for @provin-line/policy-verifier-dplaax-module", async () => {
+	it("emits git-subdir form for @provin-line/auth-policy-verifier-dplaax-module", async () => {
 		const outDir = join(tmpRoot, "out");
 		await generatePolicyVerifierScaffold({
 			name: "test-scaffold",
@@ -133,7 +133,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		const pkg = JSON.parse(
 			await readFile(join(outDir, "package.json"), "utf8"),
 		) as { dependencies: Record<string, string> };
-		expect(pkg.dependencies["@provin-line/policy-verifier-dplaax-module"]).toBe(
+		expect(pkg.dependencies["@provin-line/auth-policy-verifier-dplaax-module"]).toBe(
 			"github:provin-line/auth#v1.2.3&path:/packages/policy-verifier-dplaax-module",
 		);
 	});
@@ -166,9 +166,10 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		const pkg = JSON.parse(
 			await readFile(join(outDir, "package.json"), "utf8"),
 		) as { pnpm: { onlyBuiltDependencies: string[] } };
+		// Sorted, and the rename moved this one ahead of did-dplaax.
 		expect(pkg.pnpm.onlyBuiltDependencies).toEqual([
+			"@provin-line/auth-policy-verifier-dplaax-module",
 			"@provin-line/did-dplaax",
-			"@provin-line/policy-verifier-dplaax-module",
 		]);
 	});
 

@@ -52,7 +52,7 @@ describe("extractVerificationKey", () => {
 		// The old implementation matched on `vm.controller === did || vm.id.startsWith(did + "#")`,
 		// so an id-prefix match with a mismatched controller used to succeed. The LEGACY branch of
 		// `selectVerificationMethod` this now delegates to only accepts controller-matched
-		// candidates (see packages/auth-provider-did/src/resolver/selectMethod.mts) — that
+		// candidates (see packages/provider-did/src/resolver/selectMethod.mts) — that
 		// fallback is intentionally gone, not merely reordered.
 		const jwk: JsonWebKey = { kty: "EC", crv: "P-256", x: "abc", y: "def" };
 		const doc: DidDocument = {

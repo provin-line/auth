@@ -65,7 +65,7 @@ jobs:
       - name: assert generated manifests are unmutated
         run: |
           ref="$(git rev-parse HEAD)"
-          node packages/create-auth-provider/dist/cli.mjs provider \
+          node packages/create-provider/dist/cli.mjs provider \
             --dplaax-module-ref "$ref" --out "$RUNNER_TEMP/regen/provider" --no-git-init
           node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
             --dplaax-module-ref "$ref" --port 3001 --out "$RUNNER_TEMP/regen/policy-verifier" --no-git-init
@@ -103,7 +103,7 @@ jobs:
       - name: generate, install, build, boot outside the workspace
         run: |
           out="$RUNNER_TEMP/consumer"
-          node packages/create-auth-provider/dist/cli.mjs provider \
+          node packages/create-provider/dist/cli.mjs provider \
             --dplaax-module-ref "$GITHUB_SHA" --out "$out/provider" --no-git-init
           node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
             --dplaax-module-ref "$GITHUB_SHA" --port 3001 --out "$out/policy-verifier" --no-git-init

@@ -15,7 +15,7 @@ HEAD_SHA = $(shell git rev-parse HEAD)
 
 instances:
 	rm -rf instances
-	node packages/create-auth-provider/dist/cli.mjs provider \
+	node packages/create-provider/dist/cli.mjs provider \
 		--dplaax-module-ref $(HEAD_SHA) \
 		--out instances/provider --no-git-init
 	node packages/create-policy-verifier/dist/cli.mjs policy-verifier \

@@ -1,11 +1,11 @@
-# @provin-line/create-policy-verifier
+# @provin-line/create-auth-policy-verifier
 
 Scaffold generator for dPLaaX policy-verifier deployment instances. Part of [dplaax.auth](../../README.md).
 
 This package emits a runnable TypeScript project that boots
 [`@o3co/auth.policy-verifier.server`](https://www.npmjs.com/package/@o3co/auth.policy-verifier.server)
 with the dPLaaX attribute and rule collectors from
-[`@provin-line/policy-verifier-dplaax-module`](../policy-verifier-dplaax-module/README.md) preregistered.
+[`@provin-line/auth-policy-verifier-dplaax-module`](../policy-verifier-dplaax-module/README.md) preregistered.
 The template under `src/template/` is the canonical definition of an
 instance — the repo keeps no standing reference instance.
 
@@ -17,7 +17,7 @@ decision and the consumer-facing pattern.
 ### Monorepo-internal (development)
 
 ```bash
-pnpm --filter @provin-line/create-policy-verifier exec node dist/cli.mjs <name> [options]
+pnpm --filter @provin-line/create-auth-policy-verifier exec node dist/cli.mjs <name> [options]
 ```
 
 ### Clone-then-run (consumer)
@@ -26,7 +26,7 @@ pnpm --filter @provin-line/create-policy-verifier exec node dist/cli.mjs <name> 
 git clone https://github.com/provin-line/auth.git --branch <release-tag>
 cd auth
 pnpm install
-pnpm --filter @provin-line/create-policy-verifier exec node dist/cli.mjs /abs/path/to/<name>
+pnpm --filter @provin-line/create-auth-policy-verifier exec node dist/cli.mjs /abs/path/to/<name>
 ```
 
 ## CLI
@@ -87,7 +87,7 @@ consumer (git-ref resolution, standalone Dockerfile).
 
 ## Distribution
 
-`@provin-line/create-policy-verifier` is **not published to npm**. Consumers
+`@provin-line/create-auth-policy-verifier` is **not published to npm**. Consumers
 clone the `provin-line/auth` repository at a tagged release and run the
 generator via `pnpm --filter` (see Usage above).
 

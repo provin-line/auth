@@ -27,19 +27,23 @@ jobs:
     strategy:
       matrix:
         include:
-          # `image` is stated per entry rather than derived as
-          # auth-${{ matrix.generator }}. That concatenation produced
-          # `auth-auth-provider`, a name that says nothing twice — the doubling
-          # was an artifact of building the string, not a distinction anyone
-          # meant. The prefix still earns its place on the verifier, where
-          # "whose policy?" is a real question; it does not on a provider that
-          # already says auth.
+          # `generator` is the COMPONENT name — provider, policy-verifier — and
+          # every published identifier derives from it. Which prefix a namespace
+          # needs depends on what that namespace already tells you:
+          #
+          #   directory  packages/create-${c}   inside the auth repo, so "auth"
+          #                                     is already given by where it is
+          #   npm        create-auth-${c}       scope is provin-line, not auth
+          #   image      auth-${c}              org is provin-line, not auth
+          #
+          # auth-auth-provider came from breaking that rule once: the component
+          # itself was called auth-provider, so prefixing said nothing twice.
+          # Naming the image per entry hid that; deriving it again requires the
+          # component name to be right, which is the actual fix.
           - generator: policy-verifier
-            image: auth-policy-verifier
             port: "3001"
             scaffold_args: ""
-          - generator: auth-provider
-            image: auth-provider
+          - generator: provider
             port: "3000"
             # Placeholder only — overridden at runtime via
             # DPLAAX_REGISTRY_BASE_URL (the image stays deployment-generic).
@@ -63,7 +67,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
-          images: ghcr.io/provin-line/${{ matrix.image }}
+          images: ghcr.io/provin-line/auth-${{ matrix.generator }}
           tags: |
             type=sha,format=long,prefix=sha-
             type=semver,pattern=v{{major}}.{{minor}}

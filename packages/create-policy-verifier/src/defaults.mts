@@ -32,7 +32,7 @@ export const DEFAULT_DEP_VERSIONS = {
 } as const;
 
 /**
- * Default git-subdirectory ref for `@provin-line/policy-verifier-dplaax-module`.
+ * Default git-subdirectory ref for `@provin-line/auth-policy-verifier-dplaax-module`.
  *
  * **Library-only default**: create-app.md § 3.3 requires the emitted dep to be an
  * exact tag, not a moving branch. The CLI deliberately does NOT fall back
@@ -95,7 +95,7 @@ export const DEFAULT_PORT = 3001;
 export const DEFAULT_LICENSE = "Apache-2.0";
 
 /**
- * Build the `@provin-line/policy-verifier-dplaax-module` dep value for a given
+ * Build the `@provin-line/auth-policy-verifier-dplaax-module` dep value for a given
  * git ref. pnpm 10.x git-subdirectory syntax — NOT npm-compatible.
  *
  * @see https://pnpm.io/10.x/package-sources

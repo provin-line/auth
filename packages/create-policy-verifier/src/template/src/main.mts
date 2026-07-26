@@ -8,7 +8,7 @@ import { createLogger, gracefulShutdown } from "@o3co/auth.utils";
 import { parseFile } from "@o3co/ts.hocon";
 import { validate } from "@o3co/ts.hocon/zod";
 import { resolveConfigPaths } from "./configPath.mjs";
-import { dplaaxModule } from "@provin-line/policy-verifier-dplaax-module";
+import { dplaaxModule } from "@provin-line/auth-policy-verifier-dplaax-module";
 
 const logger = createLogger("dplaax-policy-verifier");
 

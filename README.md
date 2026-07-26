@@ -19,14 +19,14 @@ its own composition roots with the scaffold generators
 
 | Generator | Generates | Default port |
 | --- | --- | --- |
-| [create-auth-provider](packages/create-auth-provider/) | DID-grant-only OAuth provider with `did:dplaax` resolver | 3000 |
+| [create-auth-provider](packages/create-provider/) | DID-grant-only OAuth provider with `did:dplaax` resolver | 3000 |
 | [create-policy-verifier](packages/create-policy-verifier/) | Scope-based ABAC policy engine | 3001 |
 
 ## Packages
 
 | Package | Description |
 | --- | --- |
-| [packages/auth-provider-did](packages/auth-provider-did/) | `@provin-line/auth-provider-did` — DID authentication grant for OAuth 2.0 providers |
+| [packages/provider-did](packages/provider-did/) | `@provin-line/auth-provider-did` — DID authentication grant for OAuth 2.0 providers |
 
 ## Workspace Layout
 
@@ -88,7 +88,7 @@ transcript (`login-transcript-v1`), the three-way kid match between the JWS
 header `kid`, the signed transcript's `verification_method`, and the
 resolver-selected method id, and the Fork-Y (`authentication`) relationship
 check — is implemented and unit-tested (`validateOwnerLogin` in
-`packages/auth-provider-did/src/transcript.mts`), but is **not wired into
+`packages/provider-did/src/transcript.mts`), but is **not wired into
 the request handler** (`did.mts`'s `handle()`, which always runs the LEGACY
 flow). Wiring it in and lifting this guard is tracked as follow-up work.
 Selecting `authContract: OWNER_*` is refused at boot rather than silently

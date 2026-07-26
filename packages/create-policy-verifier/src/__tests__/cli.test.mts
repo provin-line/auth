@@ -56,7 +56,7 @@ describe("CLI main()", () => {
 	it("prints help and exits 0 for --help", async () => {
 		const code = await main(["--help"], io);
 		expect(code).toBe(0);
-		expect(stdout.text()).toMatch(/Usage: create-policy-verifier/);
+		expect(stdout.text()).toMatch(/Usage: create-auth-policy-verifier/);
 		expect(stderr.text()).toBe("");
 	});
 
@@ -69,13 +69,13 @@ describe("CLI main()", () => {
 	it("prints version and exits 0 for --version", async () => {
 		const code = await main(["--version"], io);
 		expect(code).toBe(0);
-		expect(stdout.text()).toMatch(/@provin-line\/create-policy-verifier \d+\.\d+\.\d+/);
+		expect(stdout.text()).toMatch(/@provin-line\/create-auth-policy-verifier \d+\.\d+\.\d+/);
 	});
 
 	it("prints version for -V", async () => {
 		const code = await main(["-V"], io);
 		expect(code).toBe(0);
-		expect(stdout.text()).toMatch(/@provin-line\/create-policy-verifier/);
+		expect(stdout.text()).toMatch(/@provin-line\/create-auth-policy-verifier/);
 	});
 
 	it("returns 2 when <name> is missing", async () => {

@@ -15,7 +15,7 @@
 	"pnpm": {
 		"overrides": {
 			"@provin-line/auth-provider-dplaax-module": "workspace:*",
-			"@provin-line/policy-verifier-dplaax-module": "workspace:*",
+			"@provin-line/auth-policy-verifier-dplaax-module": "workspace:*",
 			"vite": "^8.0.16"
 		}
 	}

@@ -63,7 +63,7 @@ export const DEFAULT_REGISTRY_BASE_URL = "https://registry.dplaax.dev";
  * @see https://pnpm.io/10.x/package-sources
  */
 export function buildDplaaxModuleDep(ref: string): string {
-	return `github:provin-line/auth#${ref}&path:/packages/auth-provider-dplaax-module`;
+	return `github:provin-line/auth#${ref}&path:/packages/provider-dplaax-module`;
 }
 
 /**

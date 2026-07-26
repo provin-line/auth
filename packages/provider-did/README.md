@@ -48,7 +48,7 @@ Not yet published to npm — consume it as a git-subdirectory dependency
 ```jsonc
 // package.json
 "@provin-line/auth-provider-did":
-  "github:provin-line/auth#<release-tag>&path:/packages/auth-provider-did"
+  "github:provin-line/auth#<release-tag>&path:/packages/provider-did"
 ```
 
 Optional peer dependency (required for the `ed25519_raw` and `ed25519_prehash` algorithms; not needed for the JWS algorithms):
