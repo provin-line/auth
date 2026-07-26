@@ -10,7 +10,9 @@ services:
       context: .
       target: runtime
     ports:
-      - "__PORT__:__PORT__"
+      # Loopback only: a generated local-development stack must not publish a
+      # policy decision point to the network by default.
+      - "127.0.0.1:__PORT__:__PORT__"
     environment:
       CONFIG_ENV: development
       HTTP_HOSTNAME: "0.0.0.0"
