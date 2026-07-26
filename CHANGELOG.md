@@ -10,20 +10,52 @@ releases.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-27
+
+A patch number for work that includes contract hardening, deliberately: while
+the version is `0.x` this file already states that even minor releases may
+change the public API, so patch-vs-minor carries no compatibility promise here.
+What the number does buy is a stable consumer pin — provin.oss's quickstart
+tracks the moving `v0.2` tag, and cutting `v0.3` would have forced that pin to
+move for no benefit before the first announcement.
+
 ### Changed
 
 - The published auth-provider image is `ghcr.io/provin-line/auth-provider`, no
-  longer `auth-auth-provider`. The old name came from concatenating an `auth-`
-  prefix onto a generator already called `auth-provider`; the image name is now
-  stated explicitly per matrix entry instead of derived, so the prefix appears
-  only where it disambiguates (`auth-policy-verifier` — whose policy verifier is
-  a real question; an auth provider already says auth).
+  longer `auth-auth-provider`. That name came from concatenating an `auth-`
+  prefix onto a component already called `auth-provider` — it said nothing
+  twice.
 
-  **Breaking for anyone pinning the old name.** Done now precisely because
-  nobody can be: the packages became public minutes before the rename and no
-  release has been announced. `auth-auth-provider` is deleted rather than left
-  as a stale duplicate — GHCR has no rename or alias, so publishing the correct
-  name and removing the wrong one is the whole of the operation.
+  **Breaking for anyone pinning the old name**, done now precisely because
+  nobody can be: the packages became public shortly before the rename and no
+  release had been announced. GHCR has no rename and no alias, so the operation
+  is publish-the-right-name and delete-the-wrong-one.
+
+- One component name now derives every published identifier, with each
+  namespace adding only the prefix its own context does not already supply:
+
+      component   provider | policy-verifier
+      directory   packages/create-${c}    inside this repo — "auth" is given
+                                          by where the file is
+      npm         create-auth-${c}        scope is provin-line, not auth
+      image       auth-${c}               org is provin-line, not auth
+
+  So directories lose a prefix their location already implies
+  (`create-auth-provider` → `create-provider`, `auth-provider-did` →
+  `provider-did`, `auth-provider-dplaax-module` → `provider-dplaax-module`) and
+  two npm names gain one that was missing
+  (`create-auth-policy-verifier`, `auth-policy-verifier-dplaax-module`). This
+  deliberately breaks the directory↔package-name mirror; pnpm resolves by the
+  `name` in `package.json`.
+
+  Every package is unpublished on npm, which is the only reason this is a
+  refactor rather than a breaking change.
+
+  The same conflation was live inside both generators, and there it was not
+  cosmetic: one list served as both npm names and directory paths, so after the
+  rename a generated scaffold would have carried a git spec pointing at a
+  `packages/` path that no longer exists — an install failure, not a cosmetic
+  oddity.
 
 P0 auth contract work (dplaax.spec): hardens DID resolution, tightens
 verification-method selection, adds an OWNER-path login transcript
