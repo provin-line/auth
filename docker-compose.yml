@@ -8,7 +8,11 @@ services:
       args:
         INSTANCE: provider
     ports:
-      - "3000:3000"
+      # Loopback only. This file ships a known development secret (below), so a
+      # default that publishes the issuer on every host interface offers the LAN
+      # a token-minting endpoint whose signing key is in the repository. Reach it
+      # from another machine by overriding this deliberately, never by default.
+      - "127.0.0.1:3000:3000"
     environment:
       OAUTH_JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
       OAUTH_JWT_SECRET: "${JWT_SECRET:-dplaax-dev-secret-change-in-production}"
@@ -22,7 +26,9 @@ services:
       args:
         INSTANCE: policy-verifier
     ports:
-      - "3001:3001"
+      # Loopback only, same reason as the provider above: the PDP shares that
+      # known development secret.
+      - "127.0.0.1:3001:3001"
     environment:
       OAUTH_JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
       OAUTH_JWT_SECRET: "${JWT_SECRET:-dplaax-dev-secret-change-in-production}"
