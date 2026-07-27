@@ -18,7 +18,7 @@ FROM node:24-alpine AS node-base
 ENV HOME=/home/node
 
 RUN apk add --no-cache tini git \
- && npm install -g corepack --force \
+ && npm install -g corepack@0.35.0 --force \
  && corepack enable
 
 WORKDIR /home/node/app

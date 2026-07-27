@@ -34,7 +34,7 @@ ARG SCAFFOLD_ARGS=""
 
 # --- gen: clone provin.auth, build the generator, scaffold the instance ---
 FROM node:24-alpine AS gen
-RUN apk add --no-cache git && npm install -g corepack --force && corepack enable
+RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 WORKDIR /src
 ARG GENERATOR
 ARG AUTH_REF
@@ -58,7 +58,7 @@ RUN --mount=type=secret,id=github_token \
 
 # --- builder: install the instance's deps (git-subdir refs) and compile ---
 FROM node:24-alpine AS builder
-RUN apk add --no-cache git && npm install -g corepack --force && corepack enable
+RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 WORKDIR /app
 COPY --from=gen /instance/ ./
 RUN --mount=type=secret,id=github_token \
