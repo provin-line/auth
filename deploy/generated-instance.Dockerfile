@@ -66,6 +66,25 @@ RUN --mount=type=secret,id=github_token \
       --out /instance --no-git-init
 
 # --- builder: install the instance's deps (git-subdir refs) and compile ---
+#
+# KNOWN GAP — release.lock.frozen-graph. The `pnpm install` below resolves the
+# instance's transitive graph FRESH, at image-build time. The rule forbids
+# exactly that: the published artifact's dependency graph was never the graph
+# anything tested, and it can differ between two builds of the same source.
+# --dplaax-module-ref pins the git deps to a commit (release.pin.source-exact,
+# enforced above), but their own npm dependencies are still resolved here.
+#
+# Not closable inside this file. `pnpm --lockfile-only` in the gen stage would
+# just move the fresh resolution a few lines earlier, still inside the release
+# build. The fix is to generate the lockfile BEFORE the image build, prove it
+# with `pnpm install --frozen-lockfile` + the consumer smoke, then hand that
+# exact instance and lockfile to `docker build` — which restructures the
+# publish workflow, not this stage.
+#
+# Deferred to the next version cut deliberately: that is when publish-images
+# actually runs, so a mistake in the restructure surfaces immediately instead
+# of waiting in a path nothing exercises. Shipping it earlier would repeat what
+# happened to provin.oss's quickstart §2f — documented, unexecuted, wrong.
 FROM node:24-alpine AS builder
 RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 WORKDIR /app
