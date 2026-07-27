@@ -27,7 +27,12 @@
 # (selects the create-* CLI,
 # the instance name, and the exposed port).
 ARG GENERATOR=policy-verifier
-ARG AUTH_REF=poc
+# No default, deliberately. This is both the ref this image is built from and
+# the pin the scaffolded instance carries for its own dependencies, so the
+# generators require a full 40-hex commit SHA here (release.pin.source-exact).
+# A default would have to be a branch name, which is exactly the movable ref
+# that requirement exists to keep out of a published artifact.
+ARG AUTH_REF
 ARG PORT=3001
 # Extra scaffold args (word-split deliberately; placeholder-only values).
 ARG SCAFFOLD_ARGS=""
@@ -41,6 +46,10 @@ ARG AUTH_REF
 ARG PORT
 ARG SCAFFOLD_ARGS
 RUN --mount=type=secret,id=github_token \
+    case "${AUTH_REF}" in \
+      *[!0-9a-f]*|"") echo "AUTH_REF must be a full 40-hex commit SHA, got '${AUTH_REF}'" >&2; exit 1 ;; \
+    esac; \
+    [ "${#AUTH_REF}" = 40 ] || { echo "AUTH_REF must be 40 hex chars, got ${#AUTH_REF}" >&2; exit 1; }; \
     tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
     if [ -n "$tok" ]; then \
       export GIT_CONFIG_COUNT=1 \
