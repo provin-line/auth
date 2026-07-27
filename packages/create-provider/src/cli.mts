@@ -43,7 +43,7 @@ const PACKAGE_VERSION = (
 	) as { version: string }
 ).version;
 
-const HELP_TEXT = `Usage: create-auth-provider <name> --dplaax-module-ref <tag> [options]
+const HELP_TEXT = `Usage: create-auth-provider <name> --dplaax-module-ref <sha> [options]
 
 Arguments:
   <name>                       Output directory + package.json name (positional, required).
@@ -51,13 +51,19 @@ Arguments:
                                the output directory uses the last segment.
 
 Required:
-  --dplaax-module-ref <ref>    Git ref pinned for
+  --dplaax-module-ref <sha>    Full 40-hex commit SHA pinning
                                @provin-line/auth-provider-dplaax-module.
-                               Per create-app.md § 3.3 this MUST be an exact tag,
-                               not a moving branch — the CLI does not
-                               default to keep the foot-gun closed.
+                               Branches and tags both move, so neither
+                               identifies the bytes an instance was
+                               generated from. No default: the flag is
+                               required so the pin is always a choice.
 
 Options:
+  --allow-unpinned-ref         Accept a branch or tag for
+                               --dplaax-module-ref. Local iteration only:
+                               the generated instance is not publishable,
+                               because its dependency graph can change
+                               under a name that did not.
   --description <text>         package.json description and README opener
                                (default: "dPLaaX auth.provider instance").
   --port <n>                   Default http.port in config/application.conf
@@ -107,23 +113,21 @@ function parsePort(raw: string): number | null {
 }
 
 /**
- * Known moving git refs we reject for `--dplaax-module-ref` per create-app.md § 3.3
- * (exact tag required). The list is intentionally conservative — operators
- * who use custom tag conventions (`release/...`, `v0.1.0`, SHAs) are
- * unaffected. Adding "HEAD" guards against tooling that resolves it
- * server-side to whatever commit happens to be current.
+ * A pin is a full 40-hex commit SHA, or it is not a pin.
+ *
+ * This replaced a denylist of familiar branch names (main, develop, …). A
+ * denylist cannot be a pin discipline: it only rejects the moving refs someone
+ * thought to enumerate, while `release/2026-07`, `my-feature` and every tag —
+ * all equally movable — sailed through. `release.pin.source-exact` says so
+ * outright, so the check is now the positive form.
+ *
+ * Lowercase only: git resolves object ids in lowercase, and accepting the
+ * uppercase spelling would make one commit have two pin strings.
  */
-const KNOWN_MOVING_REFS = new Set([
-	"main",
-	"master",
-	"develop",
-	"dev",
-	"head",
-	"trunk",
-]);
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
 
-function isLikelyMovingRef(ref: string): boolean {
-	return KNOWN_MOVING_REFS.has(ref.toLowerCase());
+export function isExactCommitSha(ref: string): boolean {
+	return COMMIT_SHA.test(ref);
 }
 
 /**
@@ -235,6 +239,7 @@ function parseCliArgs(argv: readonly string[]) {
 			"package-manager": { type: "string" as const },
 			out: { type: "string" as const },
 			"dplaax-module-ref": { type: "string" as const },
+			"allow-unpinned-ref": { type: "boolean" as const },
 			help: { type: "boolean" as const, short: "h" },
 			version: { type: "boolean" as const, short: "V" },
 		},
@@ -330,20 +335,25 @@ export async function main(
 		return 2;
 	}
 
-	// create-app.md § 3.3 forbids moving refs (branches) for the dPLaaX-module dep:
-	// pin must be an exact tag. The CLI both requires an explicit value
-	// AND rejects known branch names so a typo or omitted flag cannot
-	// silently ship a moving-target scaffold.
+	// A published release's source dependency resolves to a commit SHA or the
+	// artifact's dependency graph is not pinned at all (release.pin.source-exact).
+	// --allow-unpinned-ref is the mode boundary: local iteration against a branch
+	// is legitimate, publishing from one is not, so the escape is explicit and
+	// says in its own name what it gives up.
 	const dplaaxModuleRef = values["dplaax-module-ref"];
 	if (dplaaxModuleRef === undefined || dplaaxModuleRef === "") {
 		io.stderr.write(
-			`Error: --dplaax-module-ref is required (create-app.md § 3.3: exact tag, not a moving branch).\n\n${HELP_TEXT}`,
+			`Error: --dplaax-module-ref is required (a full 40-hex commit SHA).\n\n${HELP_TEXT}`,
 		);
 		return 2;
 	}
-	if (isLikelyMovingRef(dplaaxModuleRef)) {
+	if (!isExactCommitSha(dplaaxModuleRef) && values["allow-unpinned-ref"] !== true) {
 		io.stderr.write(
-			`Error: --dplaax-module-ref "${dplaaxModuleRef}" is a moving branch; create-app.md § 3.3 requires an exact tag or commit SHA.\n`,
+			`Error: --dplaax-module-ref "${dplaaxModuleRef}" is not a commit SHA.\n` +
+				`A pin must be a full 40-hex lowercase commit id; branches and tags both move, ` +
+				`so neither identifies the bytes this instance was generated from.\n` +
+				`For local iteration, pass --allow-unpinned-ref to accept it anyway — ` +
+				`the result is not publishable.\n`,
 		);
 		return 2;
 	}

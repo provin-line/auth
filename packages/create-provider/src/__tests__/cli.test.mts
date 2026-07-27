@@ -114,22 +114,89 @@ describe("CLI main()", () => {
 		expect(stderr.text()).toMatch(/--dplaax-module-ref is required/);
 	});
 
-	it("returns 2 when --dplaax-module-ref is a known moving branch (main)", async () => {
+	// A pin is a full commit SHA or it is not a pin. The predecessor of these
+	// tests rejected a denylist of familiar branch names, which is the shape
+	// release.pin.source-exact names as insufficient: any branch is movable,
+	// and so is any tag.
+	it.each(["main", "DEVELOP", "trunk"])(
+		"returns 2 when --dplaax-module-ref is the branch %s",
+		async (ref) => {
+			const code = await main(
+				["foo", "--no-git-init", "--dplaax-module-ref", ref],
+				io,
+			);
+			expect(code).toBe(2);
+			expect(stderr.text()).toMatch(/not a commit SHA/);
+		},
+	);
+
+	// The case the denylist could never catch: names it had never heard of.
+	it.each(["v0.1.0", "release/2026-07", "my-feature", "HEAD~1", "deadbeef"])(
+		"returns 2 for the unlisted movable ref %s",
+		async (ref) => {
+			const code = await main(
+				["foo", "--no-git-init", "--dplaax-module-ref", ref],
+				io,
+			);
+			expect(code).toBe(2);
+			expect(stderr.text()).toMatch(/not a commit SHA/);
+		},
+	);
+
+	it("names --allow-unpinned-ref as the way out", async () => {
 		const code = await main(
 			["foo", "--no-git-init", "--dplaax-module-ref", "main"],
 			io,
 		);
 		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/moving branch/);
+		expect(stderr.text()).toMatch(/--allow-unpinned-ref/);
 	});
 
-	it("returns 2 when --dplaax-module-ref is develop (case-insensitive)", async () => {
+	it("rejects a 39-hex ref: length is part of being a SHA", async () => {
 		const code = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "DEVELOP"],
+			["foo", "--no-git-init", "--dplaax-module-ref", "a".repeat(39)],
 			io,
 		);
 		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/moving branch/);
+		expect(stderr.text()).toMatch(/not a commit SHA/);
+	});
+
+	it("rejects an uppercase 40-hex ref: git resolves lowercase object ids", async () => {
+		const code = await main(
+			["foo", "--no-git-init", "--dplaax-module-ref", "A".repeat(40)],
+			io,
+		);
+		expect(code).toBe(2);
+		expect(stderr.text()).toMatch(/not a commit SHA/);
+	});
+
+	// The escape has to actually work, or the rejection above is just a wall.
+	it("accepts a branch under --allow-unpinned-ref", async () => {
+		const code = await main(
+			[
+				"@provin-line/auth-provider",
+				"--no-git-init",
+				"--dplaax-module-ref",
+				"main",
+				"--allow-unpinned-ref",
+				"--out",
+				join(tmpRoot, "unpinned"),
+			],
+			io,
+		);
+		expect(code).toBe(0);
+		expect(stderr.text()).toBe("");
+	});
+
+	// …and must not become a blanket bypass: it licenses an unpinned ref,
+	// not a missing one.
+	it("still requires the flag's value under --allow-unpinned-ref", async () => {
+		const code = await main(
+			["foo", "--no-git-init", "--allow-unpinned-ref"],
+			io,
+		);
+		expect(code).toBe(2);
+		expect(stderr.text()).toMatch(/--dplaax-module-ref is required/);
 	});
 
 	it("returns 2 when --registry-base-url is not a URL", async () => {
@@ -138,7 +205,7 @@ describe("CLI main()", () => {
 				"foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--registry-base-url",
 				"not a url",
 				"--out",
@@ -156,7 +223,7 @@ describe("CLI main()", () => {
 				"foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--registry-base-url",
 				"ftp://example.test",
 				"--out",
@@ -174,7 +241,7 @@ describe("CLI main()", () => {
 				"foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--registry-base-url",
 				'https://example.test/"injected"',
 				"--out",
@@ -192,7 +259,7 @@ describe("CLI main()", () => {
 				"foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--license",
 				"MIT",
 				"--out",
@@ -210,7 +277,7 @@ describe("CLI main()", () => {
 				"@provin-line/auth-provider",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--out",
 				join(tmpRoot, "out"),
 			],
@@ -227,7 +294,7 @@ describe("CLI main()", () => {
 				"@provin-line/auth-provider",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 			],
 			io,
 		);
@@ -241,7 +308,7 @@ describe("CLI main()", () => {
 				"foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--package-manager",
 				"npm",
 				"--out",
@@ -259,7 +326,7 @@ describe("CLI main()", () => {
 				"foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--package-manager",
 				"yarn",
 				"--out",
@@ -276,7 +343,7 @@ describe("CLI main()", () => {
 				"foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--package-manager",
 				"pnpm",
 				"--out",
@@ -293,7 +360,7 @@ describe("CLI main()", () => {
 				"../../etc/foo",
 				"--no-git-init",
 				"--dplaax-module-ref",
-				"v0.1.0",
+				"1111111111111111111111111111111111111111",
 				"--out",
 				join(tmpRoot, "out"),
 			],
@@ -305,7 +372,7 @@ describe("CLI main()", () => {
 
 	it("returns 2 when <name> starts with a dot", async () => {
 		const code = await main(
-			[".foo", "--no-git-init", "--dplaax-module-ref", "v0.1.0"],
+			[".foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111"],
 			io,
 		);
 		expect(code).toBe(2);
@@ -314,7 +381,7 @@ describe("CLI main()", () => {
 
 	it("returns 2 when <name> contains uppercase letters", async () => {
 		const code = await main(
-			["Foo", "--no-git-init", "--dplaax-module-ref", "v0.1.0"],
+			["Foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111"],
 			io,
 		);
 		expect(code).toBe(2);
@@ -323,7 +390,7 @@ describe("CLI main()", () => {
 
 	it("returns 2 when <name> is a scoped name with empty pkg segment", async () => {
 		const code = await main(
-			["@scope/", "--no-git-init", "--dplaax-module-ref", "v0.1.0"],
+			["@scope/", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111"],
 			io,
 		);
 		expect(code).toBe(2);
@@ -333,7 +400,7 @@ describe("CLI main()", () => {
 	it("returns 1 with ExistingDirectoryNonEmptyError message on populated target", async () => {
 		const out = join(tmpRoot, "scaffold");
 		const first = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "v0.1.0", "--out", out],
+			["foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111", "--out", out],
 			io,
 		);
 		expect(first).toBe(0);
@@ -341,7 +408,7 @@ describe("CLI main()", () => {
 		const stdout2 = new CaptureStream();
 		const stderr2 = new CaptureStream();
 		const second = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "v0.1.0", "--out", out],
+			["foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111", "--out", out],
 			{ stdout: stdout2, stderr: stderr2, cwd: tmpRoot },
 		);
 		expect(second).toBe(1);
