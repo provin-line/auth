@@ -213,6 +213,7 @@ function makeBootConfig(overrides: {
 	revocationLatencyBoundSec?: number;
 	legacyMaxTtlSec?: number;
 	allowedAudiences?: string[];
+	tokenEndpoint?: string;
 }): GrantDependencies["config"] {
 	return {
 		oauth: {
@@ -228,6 +229,7 @@ function makeBootConfig(overrides: {
 					...(overrides.legacyMaxTtlSec !== undefined
 						? { legacyMaxTtlSec: overrides.legacyMaxTtlSec }
 						: {}),
+					...(overrides.tokenEndpoint !== undefined ? { tokenEndpoint: overrides.tokenEndpoint } : {}),
 				},
 			},
 		},
@@ -265,25 +267,22 @@ describe("createDidGrant — boot-time lifetime-bound asserts", () => {
 		);
 	});
 
-	it("does NOT reach the legacyMaxTtlSec check for a non-LEGACY authContract — the OWNER fail-closed guard (see below) throws first", () => {
-		// Was: "does NOT apply legacyMaxTtlSec when authContract is not
-		// LEGACY_DID_LOGIN@1", asserting `.not.toThrow()`. Superseded by the
-		// Option-B fail-closed stopgap: the only non-LEGACY values are the two
-		// OWNER_* contracts, and constructing a grant with either now throws
-		// unconditionally (OWNER path isn't wired into the handler yet) before
-		// the legacyMaxTtlSec bound is ever evaluated. This test still pins
-		// that outcome for this exact fixture; the OWNER-guard behavior itself
-		// is covered by the "OWNER authContract fail-closed guard" describe
-		// block below.
+	it("does NOT apply legacyMaxTtlSec when authContract is not LEGACY_DID_LOGIN@1", () => {
+		// The OWNER path is now wired in (the Option-B construction-time
+		// stopgap was removed once `handle()` enforced `validateOwnerLogin` —
+		// see "OWNER authContract — no longer refused at construction" below),
+		// so an OWNER contract with a valid `tokenEndpoint` constructs
+		// successfully even though `legacyMaxTtlSec` (900) is below `expiresIn`
+		// (3600) — that bound is `LEGACY_DID_LOGIN@1`-only (rule
+		// `auth.legacy.did-login`).
 		const config = makeBootConfig({
 			expiresIn: 3600,
 			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
 			revocationLatencyBoundSec: 7200,
 			legacyMaxTtlSec: 900,
+			tokenEndpoint: "https://issuer.example/token",
 		});
-		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
-			/OWNER/,
-		);
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
 	});
 
 	it("succeeds when expiresIn is within both bounds", () => {
@@ -305,38 +304,59 @@ describe("createDidGrant — boot-time lifetime-bound asserts", () => {
 	});
 });
 
-// ─── OWNER authContract fail-closed guard (Option-B stopgap) ───────────────
+// ─── OWNER authContract — no longer refused at construction ────────────────
 //
 // The OWNER validation path (`validateOwnerLogin` in transcript.mts —
-// versioned transcript, three-way kid match, Fork-Y relationship) is built
-// and unit-tested but NOT wired into `createDidGrant`'s request handler,
-// which always runs the LEGACY (relationship-blind) flow. Selecting an
-// OWNER contract would otherwise mint a token LABELED OWNER_* while only
-// LEGACY validation ran — a token that misrepresents its own assurance
-// level. Until the OWNER path is wired in, grant construction must refuse
-// to build with an OWNER authContract at all (fail closed at boot, not at
-// request time).
+// versioned transcript, three-way kid match, Fork-Y relationship) is now
+// wired into `createDidGrant`'s request handler (`handle()`'s step 5b), so
+// selecting an OWNER `authContract` no longer refuses at construction time
+// (the former Option-B stopgap). The one boot-time requirement that
+// remains is `tokenEndpoint`: `validateOwnerLogin` needs it to check the
+// transcript's `token_endpoint` field, so a hand-built config that selects
+// an OWNER contract without one still fails closed at construction — see
+// `did.owner.test.mts` for the request-handling behavior itself (transcript
+// parsing, three-way kid match, relationship enforcement, audience-required).
 
-describe("createDidGrant — OWNER authContract fail-closed guard (Option-B stopgap)", () => {
-	it("throws when authContract is OWNER_AUTHENTICATION_LOGIN@1 (OWNER path not wired into the handler)", () => {
+describe("createDidGrant — OWNER authContract no longer refuses at construction", () => {
+	it("does NOT throw for authContract OWNER_AUTHENTICATION_LOGIN@1 when tokenEndpoint is configured", () => {
+		const config = makeBootConfig({
+			expiresIn: 3600,
+			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
+			revocationLatencyBoundSec: 3600,
+			tokenEndpoint: "https://issuer.example/token",
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
+	});
+
+	it("does NOT throw for authContract OWNER_ASSERTION_CONTROL_LOGIN@1 when tokenEndpoint is configured", () => {
+		const config = makeBootConfig({
+			expiresIn: 3600,
+			authContract: "OWNER_ASSERTION_CONTROL_LOGIN@1",
+			revocationLatencyBoundSec: 3600,
+			tokenEndpoint: "https://issuer.example/token",
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
+	});
+
+	it("throws when authContract is OWNER_AUTHENTICATION_LOGIN@1 and tokenEndpoint is missing (fail closed)", () => {
 		const config = makeBootConfig({
 			expiresIn: 3600,
 			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
 			revocationLatencyBoundSec: 3600,
 		});
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
-			/OWNER/,
+			/tokenEndpoint/,
 		);
 	});
 
-	it("throws when authContract is OWNER_ASSERTION_CONTROL_LOGIN@1 (OWNER path not wired into the handler)", () => {
+	it("throws when authContract is OWNER_ASSERTION_CONTROL_LOGIN@1 and tokenEndpoint is missing (fail closed)", () => {
 		const config = makeBootConfig({
 			expiresIn: 3600,
 			authContract: "OWNER_ASSERTION_CONTROL_LOGIN@1",
 			revocationLatencyBoundSec: 3600,
 		});
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
-			/OWNER/,
+			/tokenEndpoint/,
 		);
 	});
 
