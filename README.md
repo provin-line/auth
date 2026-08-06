@@ -211,8 +211,13 @@ bytes are trusted:
 
 ## E2E Tests
 
-Cross-repo E2E tests (including auth integration) live in `provin-line/e2e`,
-an internal compose harness (not published).
+Cross-repo E2E scenarios live in [`provin-line/e2e`](https://github.com/provin-line/e2e)
+(public). They run every node against `cmd/pdpstub` (allow-all) with a fixed
+harness bearer, so they cover the node's credential gate and wireauth-signed
+peer calls — never JWT issuance or a policy-decision deny. The real
+three-layer auth stack (auth.provider + o3co policy-verifier) is exercised by
+`provin-line/oss`'s `deploy/quickstart`, which is today's only working
+verification path for auth integration.
 
 ## License
 
