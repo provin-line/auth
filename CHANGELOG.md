@@ -10,6 +10,70 @@ releases.
 
 ## [Unreleased]
 
+### Added
+
+- The OWNER login contracts (`OWNER_AUTHENTICATION_LOGIN@1`,
+  `OWNER_ASSERTION_CONTROL_LOGIN@1`) are now wired into the DID grant's
+  request handler. `handle()` dispatches on the configured `authContract`:
+  `LEGACY_DID_LOGIN@1` is unchanged; either `OWNER_*` value now requires and
+  enforces a versioned login transcript (`login-transcript-v1`, now eleven
+  required fields — see Changed, below) — the three-way match between the
+  JWS header `kid`, the transcript's `verification_method`, and the
+  resolver-selected method id (`auth.grant.kid-match`), explicitly checked
+  against the crypto-verified method too; the Fork-Y relationship check
+  (`authentication` for `OWNER_AUTHENTICATION_LOGIN@1`, `assertionMethod`
+  for `OWNER_ASSERTION_CONTROL_LOGIN@1`); and a required `audience` claim.
+  A minted OWNER token always carries `aud` and its actually-enforced
+  `auth_contract_id`. Three boot-time asserts on `createDidGrant`, all
+  mirroring the existing `allowedAudiences` / `revocationLatencyBoundSec`
+  fail-closed style, now gate an OWNER `authContract`:
+  `oauth.grants.did.tokenEndpoint` must be configured;
+  `ownerMigrationRatified` must be `true` (rule `auth.migration.enable-gate`
+  — re-asserts what `didConfigSchema` already requires at parse time, for a
+  hand-built config that skips it); and every configured
+  `supportedAlgorithms` entry must be header-bearing (JWS-family —
+  `ed25519_raw` / `ed25519_prehash` sign no JWS protected header at all, so
+  the three-way kid match is unsatisfiable on them; this includes the
+  `didConfigSchema` default of `["ed25519_raw"]`). See
+  [README.md § P0 Auth Contract](README.md#p0-auth-contract).
+
+### Changed
+
+- `login-transcript-v1` (unreleased) gains an eleventh required field,
+  `did`, alongside the existing `subject_did` — `validateOwnerLogin` now
+  also checks `transcript.did === transcript.subject_did`. `did` is the
+  field name every built-in signature verifier's own internal payload-binding
+  check already reads (`parsedMessage.did !== did`); the transcript needed
+  its own copy under that exact name so a real signed request can satisfy
+  both that check and `parseLoginTranscript`'s field requirements from a
+  single signed payload — previously, no signed payload could actually be
+  simultaneously valid for both, so the wired-in Added item above shipped
+  correct only against test fixtures that added the field without it being
+  part of the documented schema.
+
+### Security
+
+- Removed the OWNER contract fail-closed construction-time stopgap
+  introduced in `[0.2.1]`: `createDidGrant` no longer refuses to construct a
+  grant for an `OWNER_*` `authContract`, now that the OWNER validation path
+  is enforced in the request handler (see Added, above). A DID Document
+  with more than one controller-matched `verificationMethod` is still
+  rejected on the OWNER path (`MethodSelectionError`
+  "ambiguous-legacy-selection", inherited from the shared crypto-key
+  selection step) — genuine multi-key-per-DID OWNER selection remains
+  unsupported and is tracked as follow-up work.
+- `ed25519Raw.mts` / `ed25519Prehash.mts` now strip any `headerKid` member a
+  signed payload tries to smuggle in, rather than let it flow through to
+  `parsedMessage.headerKid` unfiltered. Neither raw-signature format has a
+  JWS protected header — `headerKid` must only ever come from a real one
+  (`jws.mts`) — so an unfiltered pass-through would have let a signed
+  top-level `headerKid` payload member satisfy the OWNER path's three-way
+  kid match without any protected header at all, including under the
+  `supportedAlgorithms` default. Closed at both layers: the verifiers no
+  longer trust the payload's own `headerKid`, and `createDidGrant` now
+  additionally refuses at boot to configure a non-header-bearing algorithm
+  for an OWNER `authContract` in the first place (see Added, above).
+
 ## [0.2.1] - 2026-07-27
 
 A patch number for work that includes contract hardening, deliberately: while

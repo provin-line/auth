@@ -26,10 +26,16 @@ import { ResolutionRejectedError, ResolutionUnavailableError } from "./resolver/
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
 import {
 	type RelationshipName,
+	type SelectedMethod,
 	selectVerificationMethod,
 } from "./resolver/selectMethod.mjs";
 import type { DidDocumentResolver } from "./resolver/types.mjs";
-import type { AuthContractId } from "./transcript.mjs";
+import {
+	type AuthContractId,
+	parseLoginTranscript,
+	TranscriptError,
+	validateOwnerLogin,
+} from "./transcript.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
 import { createDefaultVerifierRegistry } from "./verifiers/factory.mjs";
 import type { VerifierRegistry } from "./verifiers/registry.mjs";
@@ -62,7 +68,7 @@ export const AUTHZ_SCOPE_AT_ISSUANCE =
 interface EvaluationInput {
 	/** `resolution.digest` — `"sha256:<64hex>"`, prefixed (see `keyDigest` below for the bare-hex counterpart). */
 	documentDigest: string;
-	/** Selected method id, from the `extractVerificationKey` result's `.id`. */
+	/** Selected method id — the OWNER-certified method on the OWNER path, `extractVerificationKey`'s result's `.id` on LEGACY. */
 	methodId: string;
 	/**
 	 * sha256 hex over the canonical JSON of the selected verification
@@ -72,12 +78,50 @@ interface EvaluationInput {
 	 * `resolution.digest`.
 	 */
 	keyDigest: string;
-	/** LEGACY path (the only path this handler runs today) => `"legacy"`. */
+	/** The DID Document relationship the OWNER path certified the key against, or `"legacy"` on the relationship-blind LEGACY path. */
 	relationship: RelationshipName | "legacy";
 	/** `resolution.snapshotRef`. */
 	lifecycleStateRef: string;
 	/** `resolution.retrievedAt`. */
 	lifecycleFreshnessRef: string;
+}
+
+/**
+ * Algorithms whose signed envelope carries a JWS protected header — the
+ * only place a `kid` can legitimately come from (`ed25519Raw.mts` /
+ * `ed25519Prehash.mts` explicitly strip any `headerKid` member a signed
+ * payload tries to smuggle in, rather than trust it; `jws.mts`'s
+ * `JwsVerifier` is the only verifier that ever sets it, from the real
+ * protected header). An OWNER contract's three-way kid match (rule
+ * `auth.grant.kid-match`) is unsatisfiable without one, so every configured
+ * `supportedAlgorithms` entry must be in this set when `authContract` is
+ * OWNER_* — checked at boot (see the guard below), not left to fail one
+ * request at a time.
+ */
+const OWNER_COMPATIBLE_ALGORITHMS: ReadonlySet<string> = new Set([
+	"ed25519_jws",
+	"es256_jws",
+	"es256k_jws",
+]);
+
+/**
+ * OWNER contract -> required DID Document relationship. Rule (see
+ * `AuthContractId`'s doc comment in `transcript.mts`): "the two `OWNER_*`
+ * values are transcript-bearing contracts distinguished by which DID
+ * Document relationship the signing key must appear in (`authentication`
+ * vs `assertionMethod`)". `OWNER_AUTHENTICATION_LOGIN@1` is the Fork-Y
+ * (`authentication`) contract; `OWNER_ASSERTION_CONTROL_LOGIN@1` is the
+ * `assertionMethod` counterpart.
+ */
+function ownerRelationshipFor(
+	contract: "OWNER_AUTHENTICATION_LOGIN@1" | "OWNER_ASSERTION_CONTROL_LOGIN@1",
+): RelationshipName {
+	switch (contract) {
+		case "OWNER_AUTHENTICATION_LOGIN@1":
+			return "authentication";
+		case "OWNER_ASSERTION_CONTROL_LOGIN@1":
+			return "assertionMethod";
+	}
 }
 
 /**
@@ -106,11 +150,12 @@ async function sha256Hex(input: string): Promise<string> {
  * message: that message is resolver-authored and already meant for a
  * client to see.
  *
- * Anything else reaching here — `MethodSelectionError`, `TranscriptError`
- * (not yet reachable on the LEGACY-only path this handler runs today;
- * folded into the mapping now so a future OWNER-path caller gets it for
- * free), or any other unclassified error — is also FAILED and maps to 400
- * `invalid_grant`, but is genuinely unexpected: don't echo its `.message`
+ * Anything else reaching here — `MethodSelectionError` (LEGACY or OWNER
+ * method-selection rejection), `TranscriptError` (OWNER-path transcript
+ * rejection — malformed transcript, three-way kid mismatch, relationship
+ * violation, audience/issuer/token_endpoint mismatch), or any other
+ * unclassified error — is also FAILED and maps to 400 `invalid_grant`, but
+ * is genuinely unexpected: don't echo its `.message`
  * into the client-facing `errorDescription` (it may carry internal detail
  * never meant for a client — stack context, raw document content, etc.);
  * use a generic description instead. Neither outcome mints a token: callers
@@ -178,27 +223,33 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 	// that omits it fails the same way rather than silently skipping the
 	// bound check below.
 	const revocationLatencyBoundSec = didConfig?.revocationLatencyBoundSec as number | undefined;
-
-	// Fail-closed stopgap (Option B): the OWNER validation path
-	// (`validateOwnerLogin` in transcript.mts — versioned transcript,
-	// three-way kid match, Fork-Y relationship) is built and unit-tested but
-	// NOT wired into the `handle()` request flow below, which always runs the
-	// LEGACY (relationship-blind) checks. Selecting an OWNER contract here
-	// would otherwise mint a token LABELED OWNER_* (`auth_contract_id` claim,
-	// see step 11 of `handle()`) while only LEGACY validation ran — a token
-	// that misrepresents its own assurance level. Refuse at construction
-	// time, before any request is served, rather than let a mislabeled
-	// OWNER token be minted. Remove this guard once the OWNER path is
-	// actually enforced in `handle()`.
-	if (
-		authContract === "OWNER_AUTHENTICATION_LOGIN@1" ||
-		authContract === "OWNER_ASSERTION_CONTROL_LOGIN@1"
-	) {
+	const isOwnerAuthContract =
+		authContract === "OWNER_AUTHENTICATION_LOGIN@1" || authContract === "OWNER_ASSERTION_CONTROL_LOGIN@1";
+	// Required for `validateOwnerLogin`'s `expectedTokenEndpoint` check on the
+	// OWNER path (`ValidateOwnerLoginInput.expectedTokenEndpoint`, transcript.mts).
+	// `didConfigSchema.superRefine` (module.mts) already requires this at parse
+	// time for an OWNER `authContract`; the guard below closes the same hole
+	// for a hand-built config that skips `didConfigSchema.parse` (fail closed,
+	// no default — mirrors the `allowedAudiences` / `revocationLatencyBoundSec`
+	// guards above/below).
+	const tokenEndpoint = didConfig?.tokenEndpoint as string | undefined;
+	if (isOwnerAuthContract && !tokenEndpoint) {
 		throw new Error(
-			`authContract '${authContract}' selects the OWNER login contract, but the OWNER validation path ` +
-				"(versioned transcript, three-way kid match, Fork-Y relationship) is not yet wired into the " +
-				"request handler. Refusing to construct a grant that would mint an OWNER-labeled token while " +
-				"performing only LEGACY validation. Use LEGACY_DID_LOGIN@1 until the OWNER path is enforced.",
+			`did grant config: oauth.grants.did.tokenEndpoint is required when authContract is "${authContract}" ` +
+				"— fail closed, no default",
+		);
+	}
+	// Rule `auth.migration.enable-gate`. `didConfigSchema.superRefine`
+	// (module.mts) already requires this at parse time for an OWNER
+	// `authContract`; re-asserted here for a hand-built config that skips
+	// `didConfigSchema.parse` (fail closed, no default — the removed Option-B
+	// construction-time stopgap incidentally enforced this too, since it
+	// refused every OWNER `authContract` unconditionally; this guard keeps
+	// that enforcement now that the stopgap itself is gone).
+	if (isOwnerAuthContract && didConfig?.ownerMigrationRatified !== true) {
+		throw new Error(
+			`did grant config: oauth.grants.did.ownerMigrationRatified must be true when authContract is ` +
+				`"${authContract}" (rule auth.migration.enable-gate) — fail closed, no default`,
 		);
 	}
 
@@ -239,6 +290,29 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			throw new Error(
 				`Invalid DID grant algorithm: "${alg}". Supported: ${verifierRegistry.algorithms().join(", ")}`,
 			);
+		}
+	}
+
+	// Converged review finding: `ed25519_raw` / `ed25519_prehash` sign a bare
+	// JSON message with no protected header at all — `parsedMessage.headerKid`
+	// can only ever be `undefined` for them (enforced by both verifiers
+	// stripping any `headerKid` a signed payload tries to smuggle in), so an
+	// OWNER contract's three-way kid match (rule `auth.grant.kid-match`) can
+	// never be satisfied on those algorithms. Fail closed at boot rather than
+	// let an OWNER-configured grant accept requests that can only ever be
+	// rejected — this also covers the `didConfigSchema` default
+	// (`supportedAlgorithms: ["ed25519_raw"]`), which would otherwise silently
+	// leave a freshly-configured OWNER contract unusable end-to-end.
+	if (isOwnerAuthContract) {
+		for (const alg of supportedAlgorithms) {
+			if (!OWNER_COMPATIBLE_ALGORITHMS.has(alg)) {
+				throw new Error(
+					`did grant config: authContract "${authContract}" requires every configured ` +
+						"supportedAlgorithms entry to be header-bearing (one of: " +
+						`${[...OWNER_COMPATIBLE_ALGORITHMS].join(", ")}); got "${alg}" — fail closed, ` +
+						"rule auth.grant.kid-match",
+				);
+			}
 		}
 	}
 
@@ -384,6 +458,82 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 
 			const { parsedMessage } = verification;
 
+			// 5b. OWNER path only: parse the signed payload as a versioned login
+			// transcript (`login-transcript-v1`) and enforce it — rule
+			// `auth.transcript.*` / `auth.grant.kid-match` / `auth.forky.*`. The
+			// same JSON payload the verifier already parsed into `parsedMessage`
+			// doubles as the transcript payload — no parallel wire format;
+			// `parsedMessage.did` and `LoginTranscript.did` are literally the
+			// same wire field (any further members beyond the eleven the
+			// transcript requires still ride along untyped, per
+			// `parseLoginTranscript`'s `additionalProperties: true`
+			// tolerance). `selectVerificationMethod` here is a SEPARATE call
+			// from step 3's bare (methodId-less) selection: step 3 only ever
+			// needs to find "a" controller-matched key to hand the crypto
+			// verifier above; THIS call certifies that the transcript's
+			// self-declared `verification_method` is the exact method id,
+			// that it belongs to `did`, and that it is *string*-referenced in
+			// the required relationship array (`authentication` for
+			// `OWNER_AUTHENTICATION_LOGIN@1`, `assertionMethod` for
+			// `OWNER_ASSERTION_CONTROL_LOGIN@1` — see `ownerRelationshipFor`).
+			// A document with more than one controller-matched key already
+			// fails at step 3 (`MethodSelectionError` "ambiguous-legacy-
+			// selection") before reaching here — genuine multi-key-per-DID
+			// OWNER selection is not yet supported; narrow, pre-existing,
+			// fail-closed limitation, not a new gap this step opens.
+			let ownerSelected: SelectedMethod | undefined;
+			let ownerRelationship: RelationshipName | undefined;
+			if (isOwnerAuthContract) {
+				try {
+					const transcript = parseLoginTranscript(parsedMessage);
+					const relationship = ownerRelationshipFor(authContract);
+					ownerSelected = selectVerificationMethod(didDocument, {
+						did,
+						methodId: transcript.verification_method,
+						relationship,
+					});
+					// Defense in depth: `ownerSelected` (methodId-based, just
+					// above) and `resolvedKey` (step 3, bare/controller-matched)
+					// are structurally guaranteed to name the same method TODAY
+					// — step 3 requires exactly one controller-matched candidate,
+					// so `ownerSelected`'s methodId-based lookup can only succeed
+					// by finding that same candidate, or fail closed. Asserted
+					// explicitly rather than left as an unchecked coincidence
+					// because CHANGELOG.md flags genuine multi-key-per-DID OWNER
+					// selection as tracked follow-up work: once step 3 stops being
+					// a single-candidate bottleneck, this is the line that will
+					// actually enforce "the minted verification_method claim is
+					// the same key that produced the crypto verification" — not
+					// just an emergent side effect of today's limitation.
+					if (ownerSelected.id !== resolvedKey.id) {
+						throw new TranscriptError(
+							"verification_method",
+							`OWNER-selected method "${ownerSelected.id}" does not match the crypto-verified method "${resolvedKey.id}"`,
+						);
+					}
+					validateOwnerLogin({
+						transcript,
+						parsedMessage,
+						selected: ownerSelected,
+						did,
+						expectedContract: authContract,
+						// `ctx.issuer` is the same value the LEGACY path already feeds
+						// straight into `generateToken`'s `issuer` option below — an
+						// absent `ctx.issuer` becomes `""`, which can never equal a
+						// transcript's required non-empty `issuer` field, so this
+						// fails closed rather than needing a separate presence check.
+						expectedIssuer: issuer ?? "",
+						// Guaranteed non-empty here — the boot-time guard above throws
+						// otherwise for an OWNER authContract.
+						expectedTokenEndpoint: tokenEndpoint ?? "",
+						allowedAudiences,
+					});
+					ownerRelationship = relationship;
+				} catch (err) {
+					return { result: mapResolutionFailure(err) };
+				}
+			}
+
 			// 6. Validate nonce and timestamp presence
 			if (!parsedMessage.nonce || !parsedMessage.timestamp) {
 				return {
@@ -427,7 +577,14 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			// guaranteed non-empty here — the boot-time guard above throws
 			// otherwise (audit-5) — so the only remaining case that skips this
 			// check is a request that carries no audience claim at all
-			// (unchanged, out of scope for audit-5).
+			// (unchanged, out of scope for audit-5). On the OWNER path this
+			// branch is defense in depth, not the primary enforcement point:
+			// `audience` is one of the transcript's eleven required non-empty
+			// fields (`parseLoginTranscript`), so an OWNER request with no
+			// audience claim was already rejected in step 5b above, and
+			// `validateOwnerLogin` re-checks `transcript.audience` (== this
+			// same `verification.audience`, same underlying JSON payload)
+			// against the same `allowedAudiences` allowlist.
 			// Note: the nonce is already consumed at this point (step 8), so a
 			// request that fails the audience check still burns its nonce — a
 			// deliberate change from the pre-NonceStore code, which stored the
@@ -435,6 +592,11 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			// into one call placed at the old check position to preserve error
 			// precedence (replay is reported before audience); the trade-off is
 			// audience-rejected requests can no longer retry with the same nonce.
+			// Asymmetry vs. the OWNER path: step 5b's transcript rejections
+			// (malformed transcript, kid mismatch, relationship violation, bad
+			// audience/issuer/token_endpoint) run BEFORE step 8's nonce
+			// consumption, so they never burn the nonce — only a LEGACY
+			// audience failure reaches this post-consume position.
 			if (verification.audience) {
 				if (!allowedAudiences.includes(verification.audience)) {
 					return {
@@ -450,14 +612,17 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			// 10. Assemble the single EvaluationInput this decision is bound to
 			// (rule auth.resolve.single-input-binding) — every token claim below
 			// reads from this one object rather than being re-derived piecemeal.
+			// On the OWNER path, `methodId`/`keyDigest` come from step 5b's
+			// relationship-certified `ownerSelected` (not step 3's bare
+			// selection) so the minted `verification_method` claim reflects the
+			// method that was actually checked against the required
+			// relationship array; step 3's structurally-equal `resolvedKey`/
+			// `selected` stays the source on the LEGACY path (unchanged).
 			const input: EvaluationInput = {
 				documentDigest: resolution.digest,
-				methodId: resolvedKey.id,
-				keyDigest: await sha256Hex(JSON.stringify(selected.method)),
-				// The only path this handler runs today (Task 9 scope) — the
-				// OWNER path's `selectVerificationMethod(doc, { did, methodId,
-				// relationship: "authentication" })` call is future work.
-				relationship: "legacy",
+				methodId: ownerSelected ? ownerSelected.id : resolvedKey.id,
+				keyDigest: await sha256Hex(JSON.stringify(ownerSelected ? ownerSelected.method : selected.method)),
+				relationship: ownerRelationship ?? "legacy",
 				lifecycleStateRef: resolution.snapshotRef,
 				lifecycleFreshnessRef: resolution.retrievedAt,
 			};

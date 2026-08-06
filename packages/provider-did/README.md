@@ -70,13 +70,22 @@ contract ids:
 - **`LEGACY_DID_LOGIN@1`** (default) — the pre-existing, relationship-blind
   message shape. Active today; capped by `legacyMaxTtlSec`.
 - **`OWNER_AUTHENTICATION_LOGIN@1`** / **`OWNER_ASSERTION_CONTROL_LOGIN@1`** —
-  transcript-bearing contracts. **`createDidGrant` throws at construction
-  time** if either is selected: the OWNER validation path
-  (`validateOwnerLogin` in `transcript.mts` — versioned login transcript,
-  three-way `kid` match, relationship check) is implemented and unit-tested
-  but not yet called from the grant's request handler. Selecting OWNER is
-  refused at boot, not silently downgraded, until that wiring lands. Use
-  `LEGACY_DID_LOGIN@1` until then.
+  transcript-bearing contracts, active and wired into the grant's request
+  handler. The signed request payload must be a versioned login transcript
+  (`login-transcript-v1`, `validateOwnerLogin` in `transcript.mts`): all
+  eleven transcript fields required (including `did`, which must equal the
+  transcript's own `subject_did`), the JWS header `kid` / transcript
+  `verification_method` / resolver-selected method id must three-way match,
+  and the method must be *string*-referenced in the required DID Document
+  relationship (`authentication` for `OWNER_AUTHENTICATION_LOGIN@1`,
+  `assertionMethod` for `OWNER_ASSERTION_CONTROL_LOGIN@1`). `audience` is
+  required (one of the transcript's eleven mandatory fields), unlike LEGACY.
+  Requires `ownerMigrationRatified: true`, `tokenEndpoint` configured, and
+  every configured `supportedAlgorithms` entry to be header-bearing
+  (JWS-family: `ed25519_jws` / `es256_jws` / `es256k_jws`) — `ed25519_raw` /
+  `ed25519_prehash` sign no JWS protected header at all, so the three-way
+  kid match can never be satisfied on them; `createDidGrant` refuses to
+  construct an OWNER grant configured with a non-header-bearing algorithm.
 
 ## Public API
 
@@ -255,12 +264,22 @@ interface ParsedMessage {
 }
 ```
 
-`verificationMethod` / `headerKid` are surfaced only by the JWS-based
-verifiers (`ed25519_jws`, `es256_jws`, `es256k_jws`) — the raw Ed25519
-verifiers have no header/kid concept. Neither is enforced against the
-resolved key by this package today; that three-way match is part of the
-OWNER validation path (`validateOwnerLogin`), which is not yet wired into
-the request handler — see "P0 Auth Contract" above.
+`headerKid` is set only by the JWS-based verifiers (`ed25519_jws`,
+`es256_jws`, `es256k_jws`), from the real JWS protected header. The raw
+Ed25519 verifiers (`ed25519_raw`, `ed25519_prehash`) sign a bare JSON
+message with no protected header at all — `headerKid` stays `undefined`
+for them by construction, and they explicitly strip any `headerKid` member
+a signed payload tries to smuggle in rather than trust it, so a raw-path
+request can never forge a three-way kid match. An OWNER `authContract`'s
+boot-time guard additionally requires every configured
+`supportedAlgorithms` entry to be header-bearing (JWS-family) in the first
+place — see "P0 Auth Contract" above — so a raw-path request cannot even
+reach the OWNER path's signature-verification step in a correctly
+configured deployment; the verifier-level stripping is defense in depth for
+a hand-built `verifierRegistry` that bypasses that guard. On the LEGACY
+path `headerKid` / `verificationMethod` are surfaced but not enforced
+against the resolved key. On the OWNER path both feed the three-way match
+enforced by `validateOwnerLogin` — see "P0 Auth Contract" above.
 
 ---
 

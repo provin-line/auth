@@ -73,15 +73,19 @@ export const didConfigSchema = z.object({
 						 * signed transcript — is the scaffold/default contract. The two
 						 * `OWNER_*` values select transcript-bearing contracts gated by
 						 * `ownerMigrationRatified` below (rule `auth.migration.enable-
-						 * gate`) — but the OWNER validation path (versioned transcript,
-						 * three-way kid match, Fork-Y relationship; see transcript.mts)
-						 * is NOT wired into the request handler yet. `createDidGrant`
-						 * fails closed at construction time for either `OWNER_*` value
-						 * (see the guard in did.mts) until that path is enforced in
-						 * `handle()` — selecting an OWNER_* contract today is a boot-time
-						 * error, not a runtime one. Kept in sync by hand with
-						 * `AuthContractId` in `./transcript.mts` — zod's literal-union
-						 * enum can't reference that type's members directly.
+						 * gate`) and wired into the request handler (`did.mts`'s
+						 * `handle()`, step 5b): versioned transcript
+						 * (`parseLoginTranscript`), three-way kid match, Fork-Y
+						 * relationship (`authentication` / `assertionMethod`; see
+						 * transcript.mts). `createDidGrant` still fails closed at
+						 * construction time for either `OWNER_*` value when
+						 * `ownerMigrationRatified` is not `true`, `tokenEndpoint` is
+						 * absent, or any configured `supportedAlgorithms` entry is not
+						 * header-bearing (JWS-family — the three-way kid match needs a
+						 * real JWS protected header; see the guards in did.mts). Kept in
+						 * sync by hand with `AuthContractId` in `./transcript.mts` —
+						 * zod's literal-union enum can't reference that type's members
+						 * directly.
 						 */
 						authContract: z
 							.enum([

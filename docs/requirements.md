@@ -28,12 +28,13 @@ see [create-app.md](create-app.md).
 > candidate or reject; relationship-blind, and the request's JWS `kid` is
 > surfaced but not enforced) and accepts audience-absent requests. The
 > strict OWNER profile (exact method-id + three-way `kid` match +
-> authentication-relationship binding) is built but not wired into the
-> request handler — constructing a provider with an `OWNER_*` contract
-> refuses fail-closed; the spec's migration gate
-> (`auth.migration.enable-gate`) keeps Fork-Y enrollment disabled
-> regardless. The top-level README ("P0 Auth Contract" → "Contract ids")
-> and CHANGELOG `[0.2.0]` state exactly what runs today.
+> relationship binding — `authentication` for `OWNER_AUTHENTICATION_LOGIN@1`,
+> `assertionMethod` for `OWNER_ASSERTION_CONTROL_LOGIN@1`) is wired into the
+> request handler and requires an `audience` claim on every request; an
+> operator must still explicitly ratify the spec's migration gate
+> (`ownerMigrationRatified: true`, `auth.migration.enable-gate`) before an
+> `OWNER_*` contract even parses. The top-level README ("P0 Auth Contract" →
+> "Contract ids") states exactly what runs today.
 
 ### 2.1 Authentication (provider) — Required
 
