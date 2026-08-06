@@ -179,4 +179,44 @@ describe("Ed25519RawVerifier", () => {
 			expect(result.errorDescription).toContain("did");
 		}
 	});
+
+	// Security regression (converged review finding): this verifier has no
+	// JWS protected header at all — `headerKid` can only legitimately come
+	// from one (see `jws.mts`). A signed payload that smuggles its own
+	// top-level `headerKid` member must not let that value flow through to
+	// `parsedMessage.headerKid` — otherwise an OWNER contract's three-way
+	// kid match (`auth.grant.kid-match`) could be satisfied from
+	// attacker-controlled payload data instead of a real protected header.
+	it("never surfaces a headerKid forged from the signed payload's own headerKid member", async () => {
+		const verifier = new Ed25519RawVerifier();
+		const publicKeyBytes = await ed.getPublicKeyAsync(privateKey);
+		const x = Buffer.from(publicKeyBytes).toString("base64url");
+		const resolvedKey: ExtractedKey = {
+			format: "jwk",
+			key: { kty: "OKP", crv: "Ed25519", x },
+			id: `${did}#key-1`,
+		};
+
+		const message = JSON.stringify({
+			did,
+			timestamp: new Date().toISOString(),
+			nonce: crypto.randomUUID(),
+			// Attacker-controlled: tries to forge a kid via payload data since
+			// there is no protected header to carry a real one.
+			headerKid: `${did}#key-1`,
+		});
+		const messageBytes = new TextEncoder().encode(message);
+		const signatureBytes = await ed.signAsync(messageBytes, privateKey);
+
+		const result = await verifier.verify({
+			body: { signature: Buffer.from(signatureBytes).toString("base64"), message },
+			did,
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(true);
+		if (result.valid) {
+			expect(result.parsedMessage.headerKid).toBeUndefined();
+		}
+	});
 });

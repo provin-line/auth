@@ -62,10 +62,17 @@ export class Ed25519RawVerifier implements SignatureVerifier {
 			return { valid: false, error: "invalid_request", errorDescription: "message is required" };
 		}
 
-		// 2. Parse message as JSON
+		// 2. Parse message as JSON. `headerKid` is explicitly stripped rather
+		// than trusted: this format has no JWS protected header at all, so
+		// `headerKid` can only ever legitimately come from `jws.mts`'s
+		// `JwsVerifier` (rule `auth.grant.kid-match`) — an attacker-controlled
+		// top-level `headerKid` member in the signed payload must not be able
+		// to forge a match for the OWNER path's three-way kid check.
 		let parsedMessage: ParsedMessage;
 		try {
-			parsedMessage = JSON.parse(body.message) as ParsedMessage;
+			const rawParsed = JSON.parse(body.message) as Record<string, unknown>;
+			delete rawParsed.headerKid;
+			parsedMessage = rawParsed as unknown as ParsedMessage;
 		} catch {
 			return {
 				valid: false,
