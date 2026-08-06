@@ -93,12 +93,16 @@ validation path (`validateOwnerLogin` in
 `packages/provider-did/src/transcript.mts`) against the request:
 
 1. **Versioned login transcript.** The signed request payload is parsed as
-   a `login-transcript-v1` transcript (`parseLoginTranscript`) — all ten
+   a `login-transcript-v1` transcript (`parseLoginTranscript`) — all eleven
    fields required, non-empty, and `domain_separation_tag` pinned to
    `dplaax-owner-login-v1` so a transcript signed for a different purpose
    (e.g. a future delegation flow) cannot be replayed here. A request whose
    signed payload is not a valid transcript — including the pre-existing
-   LEGACY message shape — is rejected.
+   LEGACY message shape — is rejected. The transcript carries both `did`
+   (the field name every built-in signature verifier's own internal binding
+   check reads off the signed payload) and `subject_did` (this transcript's
+   own name for the authenticated subject); the two must agree, or the
+   request is rejected.
 2. **Exact method-id selection + relationship check.** The transcript's
    self-declared `verification_method` is looked up via
    `selectVerificationMethod(doc, { did, methodId, relationship })`, where
@@ -106,12 +110,22 @@ validation path (`validateOwnerLogin` in
    and `assertionMethod` for `OWNER_ASSERTION_CONTROL_LOGIN@1` (Fork-Y). A
    method that exists but isn't *string*-referenced in the required
    relationship array is rejected — an embedded/inline method object never
-   satisfies this (rule `auth.forky.authentication-login`).
+   satisfies this (rule `auth.forky.authentication-login`). This
+   methodId-based selection must also agree with the DID document's
+   controller-matched key that actually produced the crypto verification
+   (checked explicitly, not left as an unchecked coincidence) — today the
+   two are structurally guaranteed to name the same method, since the
+   crypto-verification step (shared with LEGACY) rejects any DID Document
+   with more than one controller-matched `verificationMethod` before this
+   check is ever reached; see the multi-key limitation below.
 3. **Three-way kid match.** The JWS protected header's `kid`, the
    transcript's own `verification_method` field, and the resolver-selected
    method id must all agree, or the request is rejected (rule
-   `auth.grant.kid-match`).
-4. **Audience required.** `audience` is one of the transcript's ten
+   `auth.grant.kid-match`). This requires a real JWS protected header:
+   `ed25519_raw` / `ed25519_prehash` sign a bare JSON message with no header
+   at all, so `createDidGrant` refuses to construct an OWNER grant
+   configured with either of them — see Config keys below.
+4. **Audience required.** `audience` is one of the transcript's eleven
    required fields, so an OWNER request that omits it is rejected before
    any other transcript check runs — unlike LEGACY (see "Audience-absent
    requests" below). A minted OWNER token always carries `aud`.
@@ -126,12 +140,12 @@ ambiguous (`MethodSelectionError` "ambiguous-legacy-selection") before the
 OWNER-specific relationship check ever runs. Genuine multi-key-per-DID
 OWNER selection is tracked as follow-up work.
 
-(An `OWNER_*` `authContract` also requires `ownerMigrationRatified: true`
-at the config-schema level, and `tokenEndpoint` both at the config-schema
-level and as a `createDidGrant` boot-time assert — a hand-built config that
-selects an OWNER contract without a `tokenEndpoint` fails closed at
-construction, mirroring the `allowedAudiences` / `revocationLatencyBoundSec`
-asserts below.)
+(An `OWNER_*` `authContract` also requires `ownerMigrationRatified: true`,
+`tokenEndpoint`, and an all-JWS-family `supportedAlgorithms` — each
+enforced both at the config-schema level and as a `createDidGrant`
+boot-time assert; a hand-built config that selects an OWNER contract
+without any of them fails closed at construction, mirroring the
+`allowedAudiences` / `revocationLatencyBoundSec` asserts below.)
 
 ### Token claims
 
@@ -159,8 +173,9 @@ freshness cache behind them.
 | `revocationLatencyBoundSec` | **Required, no default** | `oauth.accessToken.expiresIn` must be ≤ this bound, or grant construction throws |
 | `legacyMaxTtlSec` | Default `900` | For `LEGACY_DID_LOGIN@1`, `expiresIn` must also be ≤ this bound |
 | `authContract` | Default `LEGACY_DID_LOGIN@1` | See Contract ids above |
-| `ownerMigrationRatified` | Default `false` | Must be `true` before an `OWNER_*` `authContract` even parses (rule `auth.migration.enable-gate`) |
+| `ownerMigrationRatified` | Default `false` | Must be `true` before an `OWNER_*` `authContract` even parses (rule `auth.migration.enable-gate`); also re-asserted at `createDidGrant` boot time |
 | `tokenEndpoint` | Required when `authContract` is `OWNER_*` | Checked against the transcript's `token_endpoint` field; required both at config-schema parse time and as a `createDidGrant` boot-time assert |
+| `supportedAlgorithms` | Default `["ed25519_raw"]` | When `authContract` is `OWNER_*`, every entry must be header-bearing (JWS-family: `ed25519_jws` / `es256_jws` / `es256k_jws`) — `createDidGrant` refuses to construct otherwise, including under the default |
 
 The `create-auth-provider` scaffold ships secure-by-default: its generated
 `application.conf` sets `oauth.accessToken.expiresIn`,
