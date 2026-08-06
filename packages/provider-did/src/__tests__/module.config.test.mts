@@ -214,6 +214,8 @@ function makeBootConfig(overrides: {
 	legacyMaxTtlSec?: number;
 	allowedAudiences?: string[];
 	tokenEndpoint?: string;
+	ownerMigrationRatified?: boolean;
+	supportedAlgorithms?: string[];
 }): GrantDependencies["config"] {
 	return {
 		oauth: {
@@ -230,11 +232,33 @@ function makeBootConfig(overrides: {
 						? { legacyMaxTtlSec: overrides.legacyMaxTtlSec }
 						: {}),
 					...(overrides.tokenEndpoint !== undefined ? { tokenEndpoint: overrides.tokenEndpoint } : {}),
+					...(overrides.ownerMigrationRatified !== undefined
+						? { ownerMigrationRatified: overrides.ownerMigrationRatified }
+						: {}),
+					...(overrides.supportedAlgorithms !== undefined
+						? { supportedAlgorithms: overrides.supportedAlgorithms }
+						: {}),
 				},
 			},
 		},
 		// biome-ignore lint/suspicious/noExplicitAny: hand-built boot-config fixture, same pattern as did.test.mts's mockConfig
 	} as any;
+}
+
+/** A minimal fully-valid OWNER boot config — every OWNER-only requirement satisfied. */
+function makeValidOwnerBootConfig(
+	authContract: string,
+	overrides: Partial<Parameters<typeof makeBootConfig>[0]> = {},
+) {
+	return makeBootConfig({
+		expiresIn: 3600,
+		authContract,
+		revocationLatencyBoundSec: 3600,
+		tokenEndpoint: "https://issuer.example/token",
+		ownerMigrationRatified: true,
+		supportedAlgorithms: ["ed25519_jws"],
+		...overrides,
+	});
 }
 
 describe("createDidGrant — boot-time lifetime-bound asserts", () => {
@@ -271,16 +295,12 @@ describe("createDidGrant — boot-time lifetime-bound asserts", () => {
 		// The OWNER path is now wired in (the Option-B construction-time
 		// stopgap was removed once `handle()` enforced `validateOwnerLogin` —
 		// see "OWNER authContract — no longer refused at construction" below),
-		// so an OWNER contract with a valid `tokenEndpoint` constructs
-		// successfully even though `legacyMaxTtlSec` (900) is below `expiresIn`
-		// (3600) — that bound is `LEGACY_DID_LOGIN@1`-only (rule
-		// `auth.legacy.did-login`).
-		const config = makeBootConfig({
-			expiresIn: 3600,
-			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
+		// so a fully-valid OWNER contract constructs successfully even though
+		// `legacyMaxTtlSec` (900) is below `expiresIn` (3600) — that bound is
+		// `LEGACY_DID_LOGIN@1`-only (rule `auth.legacy.did-login`).
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1", {
 			revocationLatencyBoundSec: 7200,
 			legacyMaxTtlSec: 900,
-			tokenEndpoint: "https://issuer.example/token",
 		});
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
 	});
@@ -310,57 +330,156 @@ describe("createDidGrant — boot-time lifetime-bound asserts", () => {
 // versioned transcript, three-way kid match, Fork-Y relationship) is now
 // wired into `createDidGrant`'s request handler (`handle()`'s step 5b), so
 // selecting an OWNER `authContract` no longer refuses at construction time
-// (the former Option-B stopgap). The one boot-time requirement that
-// remains is `tokenEndpoint`: `validateOwnerLogin` needs it to check the
-// transcript's `token_endpoint` field, so a hand-built config that selects
-// an OWNER contract without one still fails closed at construction — see
-// `did.owner.test.mts` for the request-handling behavior itself (transcript
-// parsing, three-way kid match, relationship enforcement, audience-required).
+// (the former Option-B stopgap). Three boot-time requirements remain,
+// mirroring the existing `allowedAudiences` / `revocationLatencyBoundSec`
+// fail-closed style — a hand-built config that selects an OWNER contract
+// without any of them still fails closed at construction:
+//   - `tokenEndpoint`: `validateOwnerLogin` checks the transcript's
+//     `token_endpoint` field against it.
+//   - `ownerMigrationRatified: true`: rule `auth.migration.enable-gate` —
+//     `didConfigSchema`'s `superRefine` already enforces this at parse
+//     time; this re-asserts it for a hand-built config that skips
+//     `didConfigSchema.parse`.
+//   - Every configured `supportedAlgorithms` entry must be header-bearing
+//     (JWS-family) — see "OWNER authContract requires header-bearing
+//     supportedAlgorithms" below (rule `auth.grant.kid-match`).
+// See `did.owner.test.mts` for the request-handling behavior itself
+// (transcript parsing, three-way kid match, relationship enforcement,
+// audience-required).
 
 describe("createDidGrant — OWNER authContract no longer refuses at construction", () => {
-	it("does NOT throw for authContract OWNER_AUTHENTICATION_LOGIN@1 when tokenEndpoint is configured", () => {
-		const config = makeBootConfig({
-			expiresIn: 3600,
-			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
-			revocationLatencyBoundSec: 3600,
-			tokenEndpoint: "https://issuer.example/token",
-		});
+	it("does NOT throw for authContract OWNER_AUTHENTICATION_LOGIN@1 when fully configured", () => {
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1");
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
 	});
 
-	it("does NOT throw for authContract OWNER_ASSERTION_CONTROL_LOGIN@1 when tokenEndpoint is configured", () => {
-		const config = makeBootConfig({
-			expiresIn: 3600,
-			authContract: "OWNER_ASSERTION_CONTROL_LOGIN@1",
-			revocationLatencyBoundSec: 3600,
-			tokenEndpoint: "https://issuer.example/token",
-		});
+	it("does NOT throw for authContract OWNER_ASSERTION_CONTROL_LOGIN@1 when fully configured", () => {
+		const config = makeValidOwnerBootConfig("OWNER_ASSERTION_CONTROL_LOGIN@1");
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
 	});
 
 	it("throws when authContract is OWNER_AUTHENTICATION_LOGIN@1 and tokenEndpoint is missing (fail closed)", () => {
-		const config = makeBootConfig({
-			expiresIn: 3600,
-			authContract: "OWNER_AUTHENTICATION_LOGIN@1",
-			revocationLatencyBoundSec: 3600,
-		});
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1", { tokenEndpoint: undefined });
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
 			/tokenEndpoint/,
 		);
 	});
 
 	it("throws when authContract is OWNER_ASSERTION_CONTROL_LOGIN@1 and tokenEndpoint is missing (fail closed)", () => {
-		const config = makeBootConfig({
-			expiresIn: 3600,
-			authContract: "OWNER_ASSERTION_CONTROL_LOGIN@1",
-			revocationLatencyBoundSec: 3600,
-		});
+		const config = makeValidOwnerBootConfig("OWNER_ASSERTION_CONTROL_LOGIN@1", { tokenEndpoint: undefined });
 		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
 			/tokenEndpoint/,
 		);
 	});
 
 	it("does NOT throw for authContract LEGACY_DID_LOGIN@1 (the default) with otherwise-valid config", () => {
+		const config = makeBootConfig({
+			expiresIn: 3600,
+			authContract: "LEGACY_DID_LOGIN@1",
+			revocationLatencyBoundSec: 3600,
+			legacyMaxTtlSec: 3600,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
+	});
+});
+
+// ─── OWNER authContract requires ownerMigrationRatified (item 3) ───────────
+//
+// The removed Option-B stopgap incidentally enforced `auth.migration.
+// enable-gate` for a hand-built config too (any OWNER `authContract` threw
+// unconditionally). The wired-in replacement guards must not silently drop
+// that enforcement — `didConfigSchema`'s `superRefine` already requires
+// `ownerMigrationRatified: true` at parse time; this pins the same
+// fail-closed re-assert `createDidGrant` performs for a config that skips
+// `didConfigSchema.parse` (mirroring `allowedAudiences` / `tokenEndpoint`).
+
+describe("createDidGrant — OWNER authContract requires ownerMigrationRatified", () => {
+	it("throws when authContract is OWNER_AUTHENTICATION_LOGIN@1 and ownerMigrationRatified is not true (fail closed)", () => {
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1", {
+			ownerMigrationRatified: undefined,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/ownerMigrationRatified/,
+		);
+	});
+
+	it("throws when ownerMigrationRatified is explicitly false", () => {
+		const config = makeValidOwnerBootConfig("OWNER_ASSERTION_CONTROL_LOGIN@1", {
+			ownerMigrationRatified: false,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/ownerMigrationRatified/,
+		);
+	});
+
+	it("does NOT require ownerMigrationRatified for LEGACY_DID_LOGIN@1", () => {
+		const config = makeBootConfig({
+			expiresIn: 3600,
+			authContract: "LEGACY_DID_LOGIN@1",
+			revocationLatencyBoundSec: 3600,
+			legacyMaxTtlSec: 3600,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
+	});
+});
+
+// ─── OWNER authContract requires header-bearing supportedAlgorithms (item 1a) ──
+//
+// Converged review finding: `ed25519_raw` / `ed25519_prehash` sign a bare
+// JSON message with no protected header at all, so `parsedMessage.headerKid`
+// can only ever be `undefined` for them (enforced in `ed25519Raw.mts` /
+// `ed25519Prehash.mts` — see their own test files for the payload-forgery
+// regression this closes). An OWNER contract's three-way kid match (rule
+// `auth.grant.kid-match`) is therefore unsatisfiable on those algorithms —
+// this boot-time guard makes that a fail-closed construction error instead
+// of a request that can simply never succeed, including under the
+// `didConfigSchema` default `supportedAlgorithms: ["ed25519_raw"]`.
+
+describe("createDidGrant — OWNER authContract requires header-bearing supportedAlgorithms", () => {
+	it("throws when authContract is OWNER_* and supportedAlgorithms includes ed25519_raw", () => {
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1", {
+			supportedAlgorithms: ["ed25519_raw"],
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/header-bearing/,
+		);
+	});
+
+	it("throws when authContract is OWNER_* and supportedAlgorithms includes ed25519_prehash", () => {
+		const config = makeValidOwnerBootConfig("OWNER_ASSERTION_CONTROL_LOGIN@1", {
+			supportedAlgorithms: ["ed25519_prehash"],
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/header-bearing/,
+		);
+	});
+
+	it("throws when authContract is OWNER_* and supportedAlgorithms is omitted (defaults to ed25519_raw)", () => {
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1", {
+			supportedAlgorithms: undefined,
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/header-bearing/,
+		);
+	});
+
+	it("throws when only ONE of several configured supportedAlgorithms is not header-bearing", () => {
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1", {
+			supportedAlgorithms: ["ed25519_jws", "ed25519_raw"],
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).toThrow(
+			/header-bearing/,
+		);
+	});
+
+	it("does NOT throw when supportedAlgorithms is all JWS-family (ed25519_jws, es256_jws, es256k_jws)", () => {
+		const config = makeValidOwnerBootConfig("OWNER_AUTHENTICATION_LOGIN@1", {
+			supportedAlgorithms: ["ed25519_jws", "es256_jws", "es256k_jws"],
+		});
+		expect(() => createDidGrant({ config, keyStore: mockKeyStore }, { resolver: mockResolver })).not.toThrow();
+	});
+
+	it("does NOT restrict supportedAlgorithms for LEGACY_DID_LOGIN@1 (ed25519_raw stays the default)", () => {
 		const config = makeBootConfig({
 			expiresIn: 3600,
 			authContract: "LEGACY_DID_LOGIN@1",
