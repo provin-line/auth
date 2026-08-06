@@ -70,13 +70,16 @@ contract ids:
 - **`LEGACY_DID_LOGIN@1`** (default) — the pre-existing, relationship-blind
   message shape. Active today; capped by `legacyMaxTtlSec`.
 - **`OWNER_AUTHENTICATION_LOGIN@1`** / **`OWNER_ASSERTION_CONTROL_LOGIN@1`** —
-  transcript-bearing contracts. **`createDidGrant` throws at construction
-  time** if either is selected: the OWNER validation path
-  (`validateOwnerLogin` in `transcript.mts` — versioned login transcript,
-  three-way `kid` match, relationship check) is implemented and unit-tested
-  but not yet called from the grant's request handler. Selecting OWNER is
-  refused at boot, not silently downgraded, until that wiring lands. Use
-  `LEGACY_DID_LOGIN@1` until then.
+  transcript-bearing contracts, active and wired into the grant's request
+  handler. The signed request payload must be a versioned login transcript
+  (`login-transcript-v1`, `validateOwnerLogin` in `transcript.mts`): all ten
+  transcript fields required, the JWS header `kid` / transcript
+  `verification_method` / resolver-selected method id must three-way match,
+  and the method must be *string*-referenced in the required DID Document
+  relationship (`authentication` for `OWNER_AUTHENTICATION_LOGIN@1`,
+  `assertionMethod` for `OWNER_ASSERTION_CONTROL_LOGIN@1`). `audience` is
+  required (one of the transcript's ten mandatory fields), unlike LEGACY.
+  Requires `ownerMigrationRatified: true` and `tokenEndpoint` configured.
 
 ## Public API
 
@@ -257,10 +260,11 @@ interface ParsedMessage {
 
 `verificationMethod` / `headerKid` are surfaced only by the JWS-based
 verifiers (`ed25519_jws`, `es256_jws`, `es256k_jws`) — the raw Ed25519
-verifiers have no header/kid concept. Neither is enforced against the
-resolved key by this package today; that three-way match is part of the
-OWNER validation path (`validateOwnerLogin`), which is not yet wired into
-the request handler — see "P0 Auth Contract" above.
+verifiers have no header/kid concept, so they can never satisfy the OWNER
+path's three-way match (see below). On the LEGACY path neither field is
+enforced against the resolved key. On the OWNER path, `verificationMethod`
+and `headerKid` (via `parsedMessage`) feed the three-way match enforced by
+`validateOwnerLogin` — see "P0 Auth Contract" above.
 
 ---
 

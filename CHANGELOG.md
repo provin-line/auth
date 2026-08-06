@@ -10,6 +10,36 @@ releases.
 
 ## [Unreleased]
 
+### Added
+
+- The OWNER login contracts (`OWNER_AUTHENTICATION_LOGIN@1`,
+  `OWNER_ASSERTION_CONTROL_LOGIN@1`) are now wired into the DID grant's
+  request handler. `handle()` dispatches on the configured `authContract`:
+  `LEGACY_DID_LOGIN@1` is unchanged; either `OWNER_*` value now requires and
+  enforces a versioned login transcript (`login-transcript-v1`) — the
+  three-way match between the JWS header `kid`, the transcript's
+  `verification_method`, and the resolver-selected method id
+  (`auth.grant.kid-match`); the Fork-Y relationship check (`authentication`
+  for `OWNER_AUTHENTICATION_LOGIN@1`, `assertionMethod` for
+  `OWNER_ASSERTION_CONTROL_LOGIN@1`); and a required `audience` claim. A
+  minted OWNER token always carries `aud` and its actually-enforced
+  `auth_contract_id`. `oauth.grants.did.tokenEndpoint` is now also asserted
+  at `createDidGrant`'s boot time for an OWNER `authContract` (mirroring the
+  existing `allowedAudiences` / `revocationLatencyBoundSec` asserts). See
+  [README.md § P0 Auth Contract](README.md#p0-auth-contract).
+
+### Security
+
+- Removed the OWNER contract fail-closed construction-time stopgap
+  introduced in `[0.2.1]`: `createDidGrant` no longer refuses to construct a
+  grant for an `OWNER_*` `authContract`, now that the OWNER validation path
+  is enforced in the request handler (see Added, above). A DID Document
+  with more than one controller-matched `verificationMethod` is still
+  rejected on the OWNER path (`MethodSelectionError`
+  "ambiguous-legacy-selection", inherited from the shared crypto-key
+  selection step) — genuine multi-key-per-DID OWNER selection remains
+  unsupported and is tracked as follow-up work.
+
 ## [0.2.1] - 2026-07-27
 
 A patch number for work that includes contract hardening, deliberately: while
