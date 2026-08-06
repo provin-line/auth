@@ -34,6 +34,7 @@ const REQUIRED_FIELDS = [
 	"issuer",
 	"token_endpoint",
 	"audience",
+	"did",
 	"subject_did",
 	"verification_method",
 	"nonce",
@@ -48,6 +49,7 @@ function validPayload(overrides: Record<string, unknown> = {}): Record<string, u
 		issuer: "https://issuer.example",
 		token_endpoint: "https://issuer.example/token",
 		audience: "https://relying-party.example",
+		did: "did:dplaax:u:alice",
 		subject_did: "did:dplaax:u:alice",
 		verification_method: "did:dplaax:u:alice#key-1",
 		nonce: "nonce-abc-123",
@@ -216,6 +218,13 @@ describe("validateOwnerLogin", () => {
 	it("rejects when transcript.subject_did does not equal the authenticating did", () => {
 		const input = { ...baseInput(), did: "did:dplaax:u:mallory" };
 		expectTranscriptError(() => validateOwnerLogin(input), "subject_did");
+	});
+
+	it("rejects when transcript.did does not equal transcript.subject_did", () => {
+		const base = baseInput();
+		const tampered: LoginTranscript = { ...base.transcript, did: "did:dplaax:u:mallory" };
+		const input: ValidateOwnerLoginInput = { ...base, transcript: tampered };
+		expectTranscriptError(() => validateOwnerLogin(input), "did");
 	});
 
 	it("rejects when transcript.auth_contract_id does not equal the configured contract", () => {

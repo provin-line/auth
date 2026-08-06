@@ -50,9 +50,18 @@ const AUTH_CONTRACT_IDS: readonly AuthContractId[] = [
 
 /**
  * The OWNER-path login transcript: the payload an OWNER_* grant request
- * signs. All ten members are required, non-empty strings; unknown extra
+ * signs. All eleven members are required, non-empty strings; unknown extra
  * members are tolerated (`additionalProperties: true` in the spec schema)
  * and simply ride along on the parsed object.
+ *
+ * `did` and `subject_did` are deliberately both present and required to
+ * agree (`validateOwnerLogin` checks `did === subject_did`): `did` is the
+ * field name every built-in signature verifier's own internal binding
+ * check reads off the signed payload (`parsedMessage.did !== did` in
+ * `ed25519Raw.mts` / `ed25519Prehash.mts` / `jws.mts`), while `subject_did`
+ * is this transcript's own name for the authenticated subject. The
+ * transcript is unreleased (`login-transcript-v1` has not shipped), so this
+ * shape can still change; a future revision may collapse the two.
  */
 export interface LoginTranscript {
 	transcript_version: typeof TRANSCRIPT_VERSION;
@@ -61,6 +70,8 @@ export interface LoginTranscript {
 	issuer: string;
 	token_endpoint: string;
 	audience: string;
+	/** Must equal `subject_did` (`validateOwnerLogin` checks this) — see the interface doc comment above for why both exist. */
+	did: string;
 	subject_did: string;
 	verification_method: string;
 	nonce: string;
@@ -74,6 +85,7 @@ const REQUIRED_STRING_FIELDS = [
 	"issuer",
 	"token_endpoint",
 	"audience",
+	"did",
 	"subject_did",
 	"verification_method",
 	"nonce",
@@ -128,7 +140,7 @@ export class TranscriptError extends Error {
 
 /**
  * Validates `payload` (already JSON-parsed by the caller — this does NOT
- * re-stringify or re-parse) against the `LoginTranscript` schema: all ten
+ * re-stringify or re-parse) against the `LoginTranscript` schema: all eleven
  * fields present as non-empty strings, `transcript_version` and
  * `domain_separation_tag` equal to their pinned consts, `auth_contract_id`
  * in the `AuthContractId` enum, and `timestamp` both RFC3339-shaped and
@@ -217,15 +229,17 @@ export interface ValidateOwnerLoginInput {
  * `parseLoginTranscript` already satisfies this; re-checked so the contract
  * holds even for a hand-constructed/cast `LoginTranscript` that bypassed the
  * parser — rule `auth.transcript.domain-separation`, closes login/delegation
- * cross-replay); `subject_did === did`; `auth_contract_id === expectedContract`;
- * `issuer === expectedIssuer`; `token_endpoint === expectedTokenEndpoint`;
- * `audience ∈ allowedAudiences`; and the three-way method match
- * `parsedMessage.headerKid === transcript.verification_method === selected.id`
- * (rule `auth.grant.kid-match`).
+ * cross-replay); `subject_did === did`; `transcript.did === subject_did`
+ * (the transcript's own two identity fields must agree with each other, not
+ * just with the caller's `did` — see `LoginTranscript`'s doc comment for why
+ * both exist); `auth_contract_id === expectedContract`; `issuer ===
+ * expectedIssuer`; `token_endpoint === expectedTokenEndpoint`; `audience ∈
+ * allowedAudiences`; and the three-way method match `parsedMessage.headerKid
+ * === transcript.verification_method === selected.id` (rule
+ * `auth.grant.kid-match`).
  *
- * Not yet wired into `createDidGrant`'s handler — the config field that
- * selects the OWNER path (`authContract`) lands in Task 8; Task 8/9 call
- * this once that gate exists.
+ * Wired into `createDidGrant`'s handler — `did.mts`'s `handle()` calls this
+ * (its step 5b) once `authContract` selects an OWNER_* contract.
  *
  * Throws `TranscriptError` naming the first field that fails. Returns
  * nothing on success.
@@ -248,6 +262,10 @@ export function validateOwnerLogin(input: ValidateOwnerLoginInput): void {
 
 	if (transcript.subject_did !== did) {
 		throw new TranscriptError("subject_did", `must equal the authenticating DID "${did}"`);
+	}
+
+	if (transcript.did !== transcript.subject_did) {
+		throw new TranscriptError("did", `must equal subject_did "${transcript.subject_did}"`);
 	}
 
 	if (transcript.auth_contract_id !== expectedContract) {
