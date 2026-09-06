@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { CollectorContext, VerifierPayload } from "@o3co/auth.policy-verifier.core";
+import type { CollectorContext } from "@o3co/auth.policy-verifier.core";
 import { SubjectDidTypeRuleCollector } from "../../rules/SubjectDidTypeRuleCollector.mjs";
 import { ATTR_SUBJECT_DID_TYPE } from "../../keys.mjs";
 
 function makeContext(resource: string, action: string): CollectorContext {
   return {
-    payload: { token: "dummy", tokenType: "Bearer" } satisfies VerifierPayload,
+    subject: {},
+    signal: new AbortController().signal,
     resource: { raw: resource, resourceType: resource.split(".")[0] ?? resource },
     action,
   };

@@ -32,8 +32,8 @@
 		"@provin-line/auth-provider-did": "workspace:*",
 		"@provin-line/did-dplaax": "workspace:*",
 		"@noble/ed25519": "^3.0.1",
-		"@o3co/auth-provider-core": "^0.5.3",
-		"@o3co/auth-provider-oauth": "^0.5.3",
+		"@o3co/auth-provider-core": "^0.12.0",
+		"@o3co/auth-provider-oauth": "^0.12.0",
 		"zod": "^4.5.4"
 	},
 	"devDependencies": {

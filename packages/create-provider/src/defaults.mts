@@ -14,13 +14,14 @@
 //
 // These constants are the dependency baseline of the canonical template
 // (originally the pre-M4 reference instance's package.json — 2026-05-28 snapshot, provin-line/auth
-// commit 21fe40c). When the baseline upgrades, refresh this file in
-// lockstep with a generator MINOR bump (see create-app.md § 3.3).
+// commit 21fe40c; auth baseline refreshed 2026-09-06 to the released
+// auth.provider 0.12.0 with generator 0.2.0). When the baseline upgrades,
+// refresh this file in lockstep with a generator MINOR bump (see create-app.md § 3.3).
 
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */
 export const DEFAULT_DEP_VERSIONS = {
 	// Framework (o3co) — runtime
-	"@o3co/auth-provider-core": "0.5.3",
+	"@o3co/auth-provider-core": "0.12.0",
 	"@o3co/ts.hocon": "0.1.5",
 	// Runtime — non-o3co
 	express: "5.2.1",
