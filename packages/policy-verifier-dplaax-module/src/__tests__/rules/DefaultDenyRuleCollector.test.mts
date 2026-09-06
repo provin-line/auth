@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { CollectorContext, VerifierPayload } from "@o3co/auth.policy-verifier.core";
+import type { CollectorContext } from "@o3co/auth.policy-verifier.core";
 import { evaluate } from "@o3co/auth.policy-verifier.core";
 import { DefaultDenyRuleCollector } from "../../rules/DefaultDenyRuleCollector.mjs";
 
 function makeContext(resource: string, action: string): CollectorContext {
   return {
-    payload: { token: "dummy", tokenType: "Bearer" } satisfies VerifierPayload,
+    subject: {},
+    signal: new AbortController().signal,
     resource: { raw: resource, resourceType: resource.split(".")[0] ?? resource },
     action,
   };
@@ -77,7 +78,7 @@ describe("DefaultDenyRuleCollector", () => {
       verify: () => true,
     };
     const decision = evaluate(new Map(), [passingRule, ...denyRules]);
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       decision: "deny",
       code: "undeclared_resource_action",
       message: expect.stringContaining("nonexistent"),
@@ -93,7 +94,7 @@ describe("DefaultDenyRuleCollector", () => {
       verify: () => true,
     };
     const decision = evaluate(new Map(), [passingRule, ...denyRules]);
-    expect(decision).toEqual({ decision: "allow" });
+    expect(decision).toMatchObject({ decision: "allow" });
   });
 });
 

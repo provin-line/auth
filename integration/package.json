@@ -11,9 +11,9 @@
 	},
 	"devDependencies": {
 		"@noble/ed25519": "^3.1.0",
-		"@o3co/auth-provider-core": "^0.5.3",
-		"@o3co/auth.policy-verifier.builtins": "^0.3.1",
-		"@o3co/auth.policy-verifier.server": "^0.3.1",
+		"@o3co/auth-provider-core": "^0.12.0",
+		"@o3co/auth.policy-verifier.builtins": "^0.8.1",
+		"@o3co/auth.policy-verifier.server": "^0.8.1",
 		"@provin-line/auth-provider-did": "workspace:*",
 		"@provin-line/auth-provider-dplaax-module": "workspace:*",
 		"@provin-line/auth-policy-verifier-dplaax-module": "workspace:*",
@@ -22,6 +22,7 @@
 		"express": "^5.2.1",
 		"jose": "^6.2.2",
 		"typescript": "^5.9.3",
-		"vitest": "^4.1.4"
+		"vitest": "^4.1.4",
+		"@o3co/auth.policy-verifier.core": "^0.8.1"
 	}
 }

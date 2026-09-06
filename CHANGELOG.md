@@ -10,6 +10,36 @@ releases.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Generated instances never logged NDJSON.** Both scaffolds took their logger
+  from `@o3co/auth.utils`, which treats pino as an *optional* peer and falls
+  back to `console` when the import fails — and the generator never emitted
+  pino, so every instance created by `create-provider` or
+  `create-policy-verifier` logged bare `[name] …` console lines that no
+  aggregator parses. The scaffold now ships its own `src/logger.mts` on pino
+  (a direct runtime dependency, exact-pinned like the rest), honouring
+  `logging.level` from the application config with `LOG_LEVEL` as the
+  environment override, and serialising `err` so an Error keeps its stack.
+
+- **Generated instances could hang on SIGTERM and always exited zero.** The
+  same package's `gracefulShutdown` called `server.close()` with no deadline,
+  so one stuck request meant the process never exited on its own and the
+  orchestrator's SIGKILL cut it down mid-flight; cleanup failures went to
+  `console.error`. The scaffold now ships `src/shutdown.mts` with the contract
+  auth.provider (#290), auth.proxy (#81) and auth.policy-verifier (#210) each
+  adopted: drain for `drainTimeoutMs` (default 10s), bound `cleanup` by
+  `cleanupTimeoutMs`, force-close past the deadline and exit non-zero, log
+  through the instance logger, and yield the loop once before exiting so the
+  last lines flush. Both files come with tests that run under the instance's
+  own `pnpm run test`.
+
+### Changed
+
+- **`@o3co/auth.utils` is no longer emitted into generated `package.json`.**
+  Its two helpers live in the scaffold (above). This was the package's last
+  consumer across the auth family.
+
 ### Added
 
 - The OWNER login contracts (`OWNER_AUTHENTICATION_LOGIN@1`,
@@ -38,6 +68,35 @@ releases.
   [README.md § P0 Auth Contract](README.md#p0-auth-contract).
 
 ### Changed
+
+- **The auth baseline is the released upstream, not a 0.3.x / 0.5.x pin with a
+  compatibility shim.** Every workspace package now requires
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.8.1` and
+  `@o3co/auth-provider-{core,oauth}` `^0.12.0` — the versions published on
+  2026-09-06 — and the generators emit the same as exact pins
+  (`DEFAULT_DEP_VERSIONS`: 0.8.1 / 0.12.0), with both generators bumped to
+  0.2.0 per create-app.md § 3.3. The dual-path shim that let the collectors
+  read `payload` or `subject` and reach `readUntrustedRequestContext` by
+  reflection (`collectors/context.mts`) is removed: collectors read
+  `context.subject` and call `readUntrustedRequestContext` directly, and the
+  policy-verifier template and the integration test import
+  `builtinKeyResolversModule` rather than probing for it. The code had already
+  crossed the intervening upstream BREAKING changes (o3co/auth's
+  `provin-compatibility` job builds this workspace against those exact
+  revisions); what changes here is that the released-0.3.x branch of each
+  dual path is gone. `@o3co/ts.hocon` stays at its current pin — its 0.1 → 1.x
+  move is a separate migration.
+
+- Refresh vulnerable transitive lockfile entries: js-yaml 4.3.2, qs 6.16.0,
+  nanoid 3.3.18 and brace-expansion 5.0.9. CI audits the dependency graph.
+- Prepare generated instances for current upstream auth while retaining released
+  dependency pins: align Zod 4.5.4, wire separated JWKS/key-resolver modules,
+  update required configuration and support verified subject bags plus explicitly
+  untrusted request context.
+- Generated Verifiers now require an explicit Owner DID rule on the declared
+  surface instead of relying on empty-rule allow. Scopeless DID tokens skip only
+  the scope group; undeclared operations and non-Owner subjects remain denied.
+  See [upstream compatibility](docs/upstream-compatibility.md) for migration.
 
 - `login-transcript-v1` (unreleased) gains an eleventh required field,
   `did`, alongside the existing `subject_did` — `validateOwnerLogin` now

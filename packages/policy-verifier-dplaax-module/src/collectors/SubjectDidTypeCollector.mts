@@ -58,7 +58,7 @@ export function parseDIDType(did: string): DIDType | null {
 
 /**
  * AttributeCollector that derives the did:dplaax DID type from
- * `payload.sub` and stores it under ATTR_SUBJECT_DID_TYPE.
+ * verified `subject.sub` and stores it under ATTR_SUBJECT_DID_TYPE.
  *
  * The name reflects what this collector actually reads: the subject
  * field of the JWT. If a future collector needs to derive a DID type
@@ -74,7 +74,7 @@ export function parseDIDType(did: string): DIDType | null {
 export class SubjectDidTypeCollector implements AttributeCollector {
   async collect(context: CollectorContext): Promise<Attributes> {
     const attrs: Attributes = new Map();
-    const sub = context.payload.sub;
+    const sub = context.subject.sub;
     if (typeof sub !== "string" || sub.length === 0) return attrs;
     const type = parseDIDType(sub);
     if (type !== null) {

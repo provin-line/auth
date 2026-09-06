@@ -19,6 +19,7 @@ import {
 	oauthDidModule,
 } from "@provin-line/auth-provider-did";
 import type { AppConfig, Module } from "@o3co/auth-provider-core";
+import * as core from "@o3co/auth-provider-core";
 import { oauthModule } from "@o3co/auth-provider-oauth";
 
 import {
@@ -73,6 +74,8 @@ export interface DplaaxBuildModulesOverrides {
 	readonly nonceStore?: NonceStore;
 }
 
+const jwksModule = Reflect.get(core, "jwksModule") as Module | undefined;
+
 /**
  * Compose the dPLaaX auth-provider module list from `config`.
  *
@@ -97,6 +100,8 @@ export function buildModules(
 		overrides.keyStoreModule ?? keyStoreModule,
 		overrides.clientRepositoryModule ?? clientRepositoryModule,
 		overrides.codeRepositoryModule ?? inMemoryCodeRepositoryModule,
+		// Current core owns JWKS separately; released 0.5.x OAuth publishes it.
+		...(jwksModule ? [jwksModule] : []),
 		// `oauthModule` types `config` as the full upstream `AppConfig`.
 		// dPLaaX deliberately omits the session / federation / rateLimit /
 		// cors sections (see `DplaaxAppConfigBase` Pick above); the upstream

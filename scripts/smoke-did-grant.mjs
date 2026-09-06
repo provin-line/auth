@@ -126,7 +126,7 @@ const child = spawn("node", ["dist/main.mjs"], {
 	env: {
 		...process.env,
 		OAUTH_JWT_ALGORITHM: "HS256",
-		OAUTH_JWT_SECRET: "smoke-only-secret",
+		OAUTH_JWT_SECRET: "smoke.only.secret.at.least.32.bytes.long",
 		OAUTH_JWT_ISSUER: "https://smoke.invalid",
 		HTTP_PORT: String(port),
 		// The DID grant is not OIDC; allow the non-OIDC token path.

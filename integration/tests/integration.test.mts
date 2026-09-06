@@ -23,8 +23,8 @@
  * Test cases:
  *   1. DID auth → JWT issuance succeeds
  *   2. JWT introspection returns active=true
- *   3. Policy verification with DID-issued token: 3a pins upstream 0.3.x
- *      default-allow on empty rules (declared surface); 3b scope-mismatch
+ *   3. Policy verification with DID-issued token: 3a no-scope token passes
+ *      only through an explicit owner-identity rule; 3b scope-mismatch
  *      deny; 3c undeclared (resource, action) → DefaultDenyRuleCollector
  *      fail-closed deny
  *   4. Policy verification with manually crafted JWT with scope → 200 allow
@@ -34,7 +34,11 @@ import crypto, { createSecretKey } from "node:crypto";
 import type http from "node:http";
 import * as ed from "@noble/ed25519";
 import { builtinCollectorsModule } from "@o3co/auth.policy-verifier.builtins";
-import { createApp as createPolicyVerifierApp } from "@o3co/auth.policy-verifier.server";
+import {
+	AppConfigSchema,
+	builtinKeyResolversModule,
+	createApp as createPolicyVerifierApp,
+} from "@o3co/auth.policy-verifier.server";
 import {
 	type AppConfig,
 	createApp,
@@ -57,8 +61,9 @@ import { makeMockResolution } from "./utils.mjs";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
-const JWT_SECRET = "integration-test-secret-32chars-long";
-const JWT_ISSUER = "test-issuer";
+const JWT_SECRET = "integration.test.secret.at.least.32.bytes.long";
+const JWT_ISSUER = "https://issuer.test.invalid";
+const JWT_AUDIENCE = "https://policy-verifier.test.local";
 const JWT_KID = "test-key";
 const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 const TEST_CLIENT_ID = "dplaax-test-public-client";
@@ -152,8 +157,11 @@ beforeAll(async () => {
 	//    the actual registry baseUrl points at 127.0.0.1:<mockPort>.
 	const registryBaseUrl = `http://127.0.0.1:${mockRegistryPort}`;
 	const config: DplaaxAppConfig = {
-		http: { port: 0, trustProxy: false },
+		http: { port: 0, trustProxy: false, readinessTimeoutMs: 2000 },
+		logging: { level: "silent" },
+		audit: { sink: { type: "none" } },
 		oauth: {
+			revocation: { subject: "unsupported", accessToken: "unsupported" },
 			jwt: {
 				issuer: JWT_ISSUER,
 				legacyTypAccept: false,
@@ -178,14 +186,8 @@ beforeAll(async () => {
 				did: {
 					supportedAlgorithms: ["ed25519_raw"],
 					messageMaxAgeSec: 300,
-					// Task 8 (auth-provider-did): `allowedAudiences` is required
-					// and must be non-empty (fail closed — an empty/absent
-					// allowlist used to mean "accept any audience"). This
-					// integration flow never sends an `audience` in the DID
-					// grant request (see buildDidTokenRequest below), so the
-					// allowlist's actual contents are inert here; the value
-					// below is a placeholder satisfying the schema.
-					allowedAudiences: ["https://policy-verifier.test.local"],
+					// Bind DID issuance to the same audience enforced by the verifier.
+					allowedAudiences: [JWT_AUDIENCE],
 					// `revocationLatencyBoundSec` is required, no default (fail
 					// closed). `legacyMaxTtlSec` is raised to match
 					// `accessToken.expiresIn` (3600s below) since `authContract`
@@ -288,21 +290,31 @@ beforeAll(async () => {
 	authProviderPort = authResult.port;
 
 	// 7. Start policy-verifier (in-process)
-	const pvConfig = {
-		http: { hostname: "127.0.0.1", port: 0, pathPrefix: "" },
+	const pvConfig = AppConfigSchema.parse({
+		http: { hostname: "127.0.0.1", port: 3001, pathPrefix: "" },
 		oauth: {
 			jwt: {
 				algorithm: "HS256" as const,
 				secret: JWT_SECRET,
-				validate: true,
+				mode: "verify",
+				issuer: JWT_ISSUER,
+				audience: JWT_AUDIENCE,
 			},
 		},
 		attribute: {
-			collectors: [{ collector: "PayloadScopeCollector" }],
+			collectors: [
+				{ collector: "PayloadScopeCollector" },
+				{ collector: "SubjectDidCollector" },
+				{ collector: "SubjectDidTypeCollector" },
+			],
 		},
 		rule: {
 			collectors: [
-				{ collector: "ResourceActionScopeRuleCollector" },
+				{ collector: "ResourceActionScopeRuleCollector", scopeless: "skip" },
+				{ collector: "SubjectDidTypeRuleCollector", rules: [
+					{ resource: "registry.project", action: "read", allowedTypes: ["owner"] },
+					{ resource: "registry", action: "read", allowedTypes: ["owner"] },
+				] },
 				{
 					// Fail-closed default (mirrors the scaffold config): only the
 					// pairs the tests below exercise are declared; everything else
@@ -316,12 +328,16 @@ beforeAll(async () => {
 			],
 		},
 		resource: { parser: "DotNotationResourceParser" },
-	};
+	});
 
 	const pvApp = await createPolicyVerifierApp({
 		pathResolver: import.meta.resolve,
 		config: pvConfig,
-		modules: [builtinCollectorsModule, dplaaxModule],
+		modules: [
+        builtinCollectorsModule,
+        builtinKeyResolversModule,
+        dplaaxModule,
+    ],
 	});
 
 	const pvResult = await listenOnFreePort(pvApp);
@@ -355,6 +371,7 @@ async function buildDidTokenRequest(): Promise<{
 }> {
 	const message = JSON.stringify({
 		did: testDid,
+		audience: JWT_AUDIENCE,
 		timestamp: new Date().toISOString(),
 		nonce: crypto.randomBytes(16).toString("hex"),
 	});
@@ -415,21 +432,10 @@ describe("DID auth → JWT → policy verification", () => {
 		expect(body.sub).toBe(testDid);
 	});
 
-	it("Test 3a: DID-issued no-scope token → policy-verifier ALLOWS (pins policy-verifier 0.3.x default-allow on empty rules)", async () => {
-		// With `auth.policy-verifier` >= 0.3, `ResourceActionScopeRuleCollector`
-		// produces ZERO rules when the token has no `scope` claim, and
-		// `evaluate()` returns `{ decision: "allow" }` for the empty-rules
-		// case. The pre-0.3 build denied this case. Pin the new behaviour
-		// explicitly so a future flip back to deny-by-default is caught.
-		//
-		// SECURITY NOTE: callers MUST NOT rely on the DID grant to gate
-		// scope-protected actions. Either inject a non-empty `scope` at
-		// DID-token issue time, or keep the requested (resource, action)
-		// OUT of DefaultDenyRuleCollector's declared surface so it fails
-		// closed (Test 3c). This request stays allowed only because
-		// registry.project/read is declared in the surface configured in
-		// beforeAll — the pin covers the upstream 0.3.x empty-rules default,
-		// not a recommended deployment posture.
+	it("Test 3a: DID-issued no-scope token → policy-verifier passes an explicit owner-identity rule", async () => {
+		// A scopeless DID token passes an explicit owner-identity rule.
+		// Registry ACLs remain authoritative for resource permissions.
+
 		const res = await fetch(policyVerifierUrl("/verify"), {
 			method: "POST",
 			headers: {
@@ -454,10 +460,11 @@ describe("DID auth → JWT → policy verification", () => {
 		// so `evaluate()` returns deny.
 		const secretKey = createSecretKey(Buffer.from(JWT_SECRET));
 		const mismatchedToken = await new SignJWT({ scope: "write:other-resource" })
-			.setProtectedHeader({ alg: "HS256", kid: JWT_KID })
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
 			.setIssuedAt()
 			.setExpirationTime("1h")
 			.setIssuer(JWT_ISSUER)
+			.setAudience(JWT_AUDIENCE)
 			.setSubject(testDid)
 			.sign(secretKey);
 
@@ -479,12 +486,8 @@ describe("DID auth → JWT → policy verification", () => {
 	});
 
 	it("Test 3c: undeclared (resource, action) → 403 deny (DefaultDenyRuleCollector fail-closed)", async () => {
-		// The scope collector abstains for a no-scope token and evaluate()
-		// allows on zero rules (pinned by Test 3a), so without a fail-closed
-		// default a request surface nobody configured would pass silently.
-		// DefaultDenyRuleCollector is wired into this verifier with a surface
-		// declaring only the pairs the other tests exercise — anything else
-		// must come back 403 regardless of token contents.
+		// Undeclared operations fail closed regardless of the authenticated DID.
+
 		const res = await fetch(policyVerifierUrl("/verify"), {
 			method: "POST",
 			headers: {
@@ -507,10 +510,11 @@ describe("DID auth → JWT → policy verification", () => {
 		// Craft a JWT with scope="read:registry" to prove the verification pipeline works
 		const secretKey = createSecretKey(Buffer.from(JWT_SECRET));
 		const scopedToken = await new SignJWT({ scope: "read:registry" })
-			.setProtectedHeader({ alg: "HS256", kid: JWT_KID })
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
 			.setIssuedAt()
 			.setExpirationTime("1h")
 			.setIssuer(JWT_ISSUER)
+			.setAudience(JWT_AUDIENCE)
 			.setSubject(testDid)
 			.sign(secretKey);
 
@@ -532,5 +536,40 @@ describe("DID auth → JWT → policy verification", () => {
 		).toBe(200);
 		const body = (await res.json()) as { decision: string };
 		expect(body.decision).toBe("allow");
+	});
+
+	it.each([
+		["a non-DID subject", "user-123"],
+		["a pipeline DID", `${testDid}:pipeline:child`],
+	])("rejects %s even on the declared surface", async (_label, subject) => {
+		const token = await new SignJWT({})
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
+			.setIssuedAt().setExpirationTime("1h")
+			.setIssuer(JWT_ISSUER).setAudience(JWT_AUDIENCE).setSubject(subject)
+			.sign(createSecretKey(Buffer.from(JWT_SECRET)));
+		const res = await fetch(policyVerifierUrl("/verify"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+			body: JSON.stringify({ resource: "registry.project", action: "read" }),
+		});
+		expect(res.status).toBe(403);
+		expect(await res.json()).toMatchObject({ decision: "deny" });
+	});
+
+	it.each([
+		["issuer", "https://wrong-issuer.invalid", JWT_AUDIENCE],
+		["audience", JWT_ISSUER, "https://wrong-api.invalid"],
+	])("current verifier rejects a token for the wrong %s", async (_label, issuer, audience) => {
+		const token = await new SignJWT({})
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
+			.setIssuedAt().setExpirationTime("1h")
+			.setIssuer(issuer).setAudience(audience).setSubject(testDid)
+			.sign(createSecretKey(Buffer.from(JWT_SECRET)));
+		const res = await fetch(policyVerifierUrl("/verify"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+			body: JSON.stringify({ resource: "registry.project", action: "read" }),
+		});
+		expect(res.status).toBe(401);
 	});
 });

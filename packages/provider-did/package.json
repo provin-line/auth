@@ -29,9 +29,9 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@o3co/auth-provider-core": "^0.5.3",
+		"@o3co/auth-provider-core": "^0.12.0",
 		"jose": "^6.2.2",
-		"zod": "^4.3.6"
+		"zod": "^4.5.4"
 	},
 	"peerDependencies": {
 		"@noble/ed25519": "^3.0.1"

@@ -203,9 +203,9 @@ function buildPackageJson(opts: FilledOptions): string {
 			opts.dplaaxModuleRef,
 		),
 		"@o3co/auth-provider-core": DEFAULT_DEP_VERSIONS["@o3co/auth-provider-core"],
-		"@o3co/auth.utils": DEFAULT_DEP_VERSIONS["@o3co/auth.utils"],
 		"@o3co/ts.hocon": DEFAULT_DEP_VERSIONS["@o3co/ts.hocon"],
 		express: DEFAULT_DEP_VERSIONS.express,
+		pino: DEFAULT_DEP_VERSIONS.pino,
 		// Direct dep so the ed25519_raw DID-grant verifier's
 		// import.meta.resolve("@noble/ed25519") resolves from the instance root.
 		"@noble/ed25519": DEFAULT_DEP_VERSIONS["@noble/ed25519"],
@@ -235,7 +235,8 @@ function buildPackageJson(opts: FilledOptions): string {
 			...transitiveProvinDeps.map(([name]) => name),
 			"@provin-line/auth-provider-dplaax-module",
 		].sort(),
-		overrides: Object.fromEntries(transitiveProvinDeps),
+		// Zod schema objects cross package boundaries; align their minor version.
+		overrides: { ...Object.fromEntries(transitiveProvinDeps), zod: "4.5.4" },
 	};
 
 	const manifest = {

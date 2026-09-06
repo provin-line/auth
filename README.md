@@ -5,6 +5,8 @@ dPLaaX protocol: libraries plus scaffold generators that produce per-deployment
 composition roots of [auth.provider](https://github.com/o3co/auth.provider) and [auth.policy-verifier](https://github.com/o3co/auth.policy-verifier).
 
 See [docs/requirements.md](docs/requirements.md) for what this repository provides.
+See [upstream compatibility](docs/upstream-compatibility.md) before adopting
+current auth-family candidate builds in an existing generated deployment.
 
 > **Lineage**: this repository's history starts at the public cut, not at the
 > start of the work. The code grew up in a private PoC auth stack for dPLaaS,

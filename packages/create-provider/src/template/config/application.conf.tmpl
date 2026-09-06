@@ -1,11 +1,25 @@
 http {
   port = __PORT__
   port = ${?HTTP_PORT}
+  readinessTimeoutMs = 2000
+  readinessTimeoutMs = ${?HTTP_READINESS_TIMEOUT_MS}
   trustProxy = false
   trustProxy = ${?HTTP_TRUST_PROXY}
 }
 
+logging {
+  level = "info"
+  level = ${?LOG_LEVEL}
+}
+
+# This minimal composition does not persist audit events.
+audit.sink.type = "none"
+
 oauth {
+  # DID-only: lifecycle is checked at issuance; existing tokens expire by TTL.
+  # This composition has no password/session store or subject revocation service.
+  revocation.subject = "unsupported"
+  revocation.accessToken = "unsupported"
   jwt {
     issuer = ${?OAUTH_JWT_ISSUER}
     legacyTypAccept = false
