@@ -214,8 +214,8 @@ function buildPackageJson(opts: FilledOptions): string {
 			DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.core"],
 		"@o3co/auth.policy-verifier.server":
 			DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.server"],
-		"@o3co/auth.utils": DEFAULT_DEP_VERSIONS["@o3co/auth.utils"],
 		"@o3co/ts.hocon": DEFAULT_DEP_VERSIONS["@o3co/ts.hocon"],
+		pino: DEFAULT_DEP_VERSIONS.pino,
 	};
 	const devDependencies: Record<string, string> = {
 		"@types/node": DEFAULT_DEP_VERSIONS["@types/node"],

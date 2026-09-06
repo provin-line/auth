@@ -21,10 +21,13 @@
 export const DEFAULT_DEP_VERSIONS = {
 	// Framework (o3co) — runtime
 	"@o3co/auth-provider-core": "0.5.3",
-	"@o3co/auth.utils": "0.0.4",
 	"@o3co/ts.hocon": "0.1.5",
 	// Runtime — non-o3co
 	express: "5.2.1",
+	// The scaffold's own logger writes NDJSON through pino (see src/logger.mts);
+	// it used to reach pino only as @o3co/auth.utils' optional peer, which was
+	// never emitted here, so instances silently logged through console.
+	pino: "10.3.1",
 	// The ed25519_raw DID-grant verifier resolves this via the instance's
 	// import.meta.resolve, so it must be a DIRECT runtime dep of the instance
 	// (auth-provider-did declares it only as an optional peer).

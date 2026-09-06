@@ -23,8 +23,12 @@ export const DEFAULT_DEP_VERSIONS = {
 	"@o3co/auth.policy-verifier.server": "0.3.1",
 	"@o3co/auth.policy-verifier.builtins": "0.3.1",
 	"@o3co/auth.policy-verifier.core": "0.3.1",
-	"@o3co/auth.utils": "0.0.4",
 	"@o3co/ts.hocon": "0.1.5",
+	// Runtime — non-o3co
+	// The scaffold's own logger writes NDJSON through pino (see src/logger.mts);
+	// it used to reach pino only as @o3co/auth.utils' optional peer, which was
+	// never emitted here, so instances silently logged through console.
+	pino: "10.3.1",
 	// Dev
 	"@types/node": "25.6.0",
 	typescript: "5.9.3",

@@ -104,6 +104,33 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		expect(conf).toMatch(/^\s*port = 4242$/m);
 	});
 
+	it("does not emit @o3co/auth.utils — its helpers ship inside the scaffold", async () => {
+		// auth.policy-verifier's own standalone template moved logger and
+		// shutdown in-tree (#210); a generated instance follows the same shape.
+		const outDir = join(tmpRoot, "out");
+		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
+			dependencies: Record<string, string>;
+			devDependencies: Record<string, string>;
+		};
+		expect(pkg.dependencies).not.toHaveProperty("@o3co/auth.utils");
+		expect(pkg.devDependencies).not.toHaveProperty("@o3co/auth.utils");
+	});
+
+	it("emits pino as a runtime dependency, so the instance logs NDJSON rather than console", async () => {
+		// @o3co/auth.utils took pino as an *optional* peer and fell back to
+		// console; the generator never emitted pino, so every generated instance
+		// logged bare `[name] …` lines. The in-tree logger depends on pino directly.
+		const outDir = join(tmpRoot, "out");
+		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
+			dependencies: Record<string, string>;
+		};
+		// A literal, not DEFAULT_DEP_VERSIONS.pino: sharing the oracle with the
+		// implementation would let a missing key pass as undefined === undefined.
+		expect(pkg.dependencies.pino).toBe("10.3.1");
+	});
+
 	it("emits exact-pin dep versions (no caret)", async () => {
 		const outDir = join(tmpRoot, "out");
 		await generatePolicyVerifierScaffold({
