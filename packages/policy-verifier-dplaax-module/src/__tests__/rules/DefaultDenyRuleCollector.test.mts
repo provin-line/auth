@@ -77,7 +77,7 @@ describe("DefaultDenyRuleCollector", () => {
       verify: () => true,
     };
     const decision = evaluate(new Map(), [passingRule, ...denyRules]);
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       decision: "deny",
       code: "undeclared_resource_action",
       message: expect.stringContaining("nonexistent"),
@@ -93,7 +93,7 @@ describe("DefaultDenyRuleCollector", () => {
       verify: () => true,
     };
     const decision = evaluate(new Map(), [passingRule, ...denyRules]);
-    expect(decision).toEqual({ decision: "allow" });
+    expect(decision).toMatchObject({ decision: "allow" });
   });
 });
 

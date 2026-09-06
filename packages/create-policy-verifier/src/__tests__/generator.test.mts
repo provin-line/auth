@@ -150,6 +150,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 			await readFile(join(outDir, "package.json"), "utf8"),
 		) as { pnpm: { overrides: Record<string, string> } };
 		expect(pkg.pnpm.overrides).toEqual({
+			zod: "4.5.4",
 			"@provin-line/did-dplaax":
 				"github:provin-line/auth#v1.2.3&path:/packages/did-dplaax",
 		});

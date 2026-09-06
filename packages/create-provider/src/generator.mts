@@ -235,7 +235,8 @@ function buildPackageJson(opts: FilledOptions): string {
 			...transitiveProvinDeps.map(([name]) => name),
 			"@provin-line/auth-provider-dplaax-module",
 		].sort(),
-		overrides: Object.fromEntries(transitiveProvinDeps),
+		// Zod schema objects cross package boundaries; align their minor version.
+		overrides: { ...Object.fromEntries(transitiveProvinDeps), zod: "4.5.4" },
 	};
 
 	const manifest = {
