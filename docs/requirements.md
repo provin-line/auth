@@ -115,6 +115,6 @@ Upstream packages composed by this repository:
 
 - Provider: `@o3co/auth-provider-core`, `@o3co/auth-provider-oauth`, `@provin-line/auth-provider-did`
 - Policy-verifier: `@o3co/auth.policy-verifier.server`, `@o3co/auth.policy-verifier.builtins`, `@o3co/auth.policy-verifier.core`
-- Shared: `@o3co/auth.utils`, `@o3co/ts.hocon`
+- Shared: `@o3co/ts.hocon`; generated instances log through `pino` directly (their logger and shutdown ship inside the scaffold)
 
 Version constraints follow each service's `package.json`.

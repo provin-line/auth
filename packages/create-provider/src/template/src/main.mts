@@ -19,14 +19,13 @@ import {
 	DplaaxConfigSchema,
 	type DplaaxAppConfig,
 } from "@provin-line/auth-provider-dplaax-module";
-import { createLogger, gracefulShutdown } from "@o3co/auth.utils";
 import { type AppConfig, createApp } from "@o3co/auth-provider-core";
 import { parseFile } from "@o3co/ts.hocon";
 import { validate } from "@o3co/ts.hocon/zod";
 import express from "express";
 import { resolveConfigPaths } from "./configPath.mjs";
-
-const logger = createLogger("auth-provider");
+import { createAppLogger } from "./logger.mjs";
+import { installGracefulShutdown } from "./shutdown.mjs";
 
 const env = process.env.CONFIG_ENV || process.env.NODE_ENV || "development";
 const configDir = new URL("../config/", import.meta.url);
@@ -44,6 +43,14 @@ const config: DplaaxAppConfig = validate(
 	parseFile(envConfPath).withFallback(parseFile(applicationConfPath)),
 	DplaaxConfigSchema,
 ) as unknown as DplaaxAppConfig;
+
+// The HOCON carries `logging.level`, but `DplaaxAppConfig` does not declare it
+// (and a released module pin may predate it), so read it defensively and let
+// the logger fall back to LOG_LEVEL / "info".
+const logger = createAppLogger(
+	"auth-provider",
+	(config as { logging?: { level?: string } }).logging?.level,
+);
 
 await (async (): Promise<void> => {
 	const app = express();
@@ -73,5 +80,5 @@ await (async (): Promise<void> => {
 		);
 	});
 
-	gracefulShutdown(server, () => handle.dispose());
+	installGracefulShutdown(server, { logger, cleanup: () => handle.dispose() });
 })();

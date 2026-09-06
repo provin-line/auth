@@ -10,6 +10,36 @@ releases.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Generated instances never logged NDJSON.** Both scaffolds took their logger
+  from `@o3co/auth.utils`, which treats pino as an *optional* peer and falls
+  back to `console` when the import fails — and the generator never emitted
+  pino, so every instance created by `create-provider` or
+  `create-policy-verifier` logged bare `[name] …` console lines that no
+  aggregator parses. The scaffold now ships its own `src/logger.mts` on pino
+  (a direct runtime dependency, exact-pinned like the rest), honouring
+  `logging.level` from the application config with `LOG_LEVEL` as the
+  environment override, and serialising `err` so an Error keeps its stack.
+
+- **Generated instances could hang on SIGTERM and always exited zero.** The
+  same package's `gracefulShutdown` called `server.close()` with no deadline,
+  so one stuck request meant the process never exited on its own and the
+  orchestrator's SIGKILL cut it down mid-flight; cleanup failures went to
+  `console.error`. The scaffold now ships `src/shutdown.mts` with the contract
+  auth.provider (#290), auth.proxy (#81) and auth.policy-verifier (#210) each
+  adopted: drain for `drainTimeoutMs` (default 10s), bound `cleanup` by
+  `cleanupTimeoutMs`, force-close past the deadline and exit non-zero, log
+  through the instance logger, and yield the loop once before exiting so the
+  last lines flush. Both files come with tests that run under the instance's
+  own `pnpm run test`.
+
+### Changed
+
+- **`@o3co/auth.utils` is no longer emitted into generated `package.json`.**
+  Its two helpers live in the scaffold (above). This was the package's last
+  consumer across the auth family.
+
 ### Added
 
 - The OWNER login contracts (`OWNER_AUTHENTICATION_LOGIN@1`,

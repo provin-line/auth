@@ -122,6 +122,34 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 		expect(conf).toMatch(/baseUrl = "https:\/\/registry\.example\.test"/);
 	});
 
+	it("does not emit @o3co/auth.utils — its helpers ship inside the scaffold", async () => {
+		// auth.proxy (#81) and auth.policy-verifier (#210) moved logger and
+		// shutdown in-tree; a generated instance follows the same shape so its
+		// SIGTERM behaviour is readable from the code it deploys.
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
+			dependencies: Record<string, string>;
+			devDependencies: Record<string, string>;
+		};
+		expect(pkg.dependencies).not.toHaveProperty("@o3co/auth.utils");
+		expect(pkg.devDependencies).not.toHaveProperty("@o3co/auth.utils");
+	});
+
+	it("emits pino as a runtime dependency, so the instance logs NDJSON rather than console", async () => {
+		// @o3co/auth.utils took pino as an *optional* peer and fell back to
+		// console; the generator never emitted pino, so every generated instance
+		// logged bare `[name] …` lines. The in-tree logger depends on pino directly.
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
+			dependencies: Record<string, string>;
+		};
+		// A literal, not DEFAULT_DEP_VERSIONS.pino: sharing the oracle with the
+		// implementation would let a missing key pass as undefined === undefined.
+		expect(pkg.dependencies.pino).toBe("10.3.1");
+	});
+
 	it("emits exact-pin dep versions (no caret)", async () => {
 		const outDir = join(tmpRoot, "out");
 		await generateAuthProviderScaffold({
