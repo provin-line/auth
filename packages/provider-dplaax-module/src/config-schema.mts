@@ -37,6 +37,9 @@ import { z } from "zod";
  * `DplaaxAppConfig`.
  */
 export const DplaaxConfigSchema = CoreConfigSchema.extend({
+	// CoreConfigSchema does not own the audit module slice. Preserve the
+	// DID-only composition's explicit absence declaration for boot validation.
+	audit: z.object({ sink: z.object({ type: z.literal("none") }) }).optional(),
 	endpoints: z.object({
 		login: z.object({
 			url: z.string().min(1),

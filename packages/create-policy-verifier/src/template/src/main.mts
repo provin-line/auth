@@ -1,3 +1,5 @@
+import * as verifierServer from "@o3co/auth.policy-verifier.server";
+import type { Module as VerifierModule } from "@o3co/auth.policy-verifier.core";
 import { fileURLToPath } from "node:url";
 import { builtinCollectorsModule } from "@o3co/auth.policy-verifier.builtins";
 import {
@@ -9,6 +11,9 @@ import { parseFile } from "@o3co/ts.hocon";
 import { validate } from "@o3co/ts.hocon/zod";
 import { resolveConfigPaths } from "./configPath.mjs";
 import { dplaaxModule } from "@provin-line/auth-policy-verifier-dplaax-module";
+
+// Released 0.3.x resolves keys internally; current server requires this module.
+const keyResolversModule = Reflect.get(verifierServer, "builtinKeyResolversModule") as VerifierModule | undefined;
 
 const logger = createLogger("dplaax-policy-verifier");
 
@@ -25,7 +30,11 @@ const config = validate(
 const app = await createApp({
     pathResolver: import.meta.resolve,
     config,
-    modules: [builtinCollectorsModule, dplaaxModule],
+    modules: [
+        builtinCollectorsModule,
+        ...(keyResolversModule ? [keyResolversModule] : []),
+        dplaaxModule,
+    ],
 });
 
 const server = app.listen(config.http.port, config.http.hostname, () => {

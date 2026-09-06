@@ -8,6 +8,7 @@ overrides:
   '@provin-line/auth-provider-dplaax-module': workspace:*
   '@provin-line/auth-policy-verifier-dplaax-module': workspace:*
   vite: ^8.0.16
+  zod: 4.5.4
 
 importers:
 
@@ -26,6 +27,9 @@ importers:
         specifier: ^0.5.3
         version: 0.5.3(express@5.2.1)
       '@o3co/auth.policy-verifier.builtins':
+        specifier: ^0.3.1
+        version: 0.3.1
+      '@o3co/auth.policy-verifier.core':
         specifier: ^0.3.1
         version: 0.3.1
       '@o3co/auth.policy-verifier.server':
@@ -156,8 +160,8 @@ importers:
         specifier: ^6.2.2
         version: 6.2.2
       zod:
-        specifier: ^4.3.6
-        version: 4.3.6
+        specifier: 4.5.4
+        version: 4.5.4
     devDependencies:
       '@noble/ed25519':
         specifier: ^3.0.1
@@ -196,8 +200,8 @@ importers:
         specifier: workspace:*
         version: link:../did-dplaax
       zod:
-        specifier: ^4.3.6
-        version: 4.3.6
+        specifier: 4.5.4
+        version: 4.5.4
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -1130,8 +1134,8 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  zod@4.3.6:
-    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
 snapshots:
 
@@ -1189,7 +1193,7 @@ snapshots:
       bcrypt: 6.0.0
       jose: 6.2.2
       js-yaml: 4.3.0
-      zod: 4.3.6
+      zod: 4.5.4
     optionalDependencies:
       express: 5.2.1
 
@@ -1199,7 +1203,7 @@ snapshots:
       accepts: 2.0.0
       express: 5.2.1
       jose: 6.2.2
-      zod: 4.3.6
+      zod: 4.5.4
 
   '@o3co/auth.policy-verifier.builtins@0.3.1':
     dependencies:
@@ -1213,7 +1217,7 @@ snapshots:
       '@o3co/auth.utils': 0.0.2(express@5.2.1)
       express: 5.2.1
       jose: 6.2.2
-      zod: 4.3.6
+      zod: 4.5.4
     transitivePeerDependencies:
       - pino
       - supports-color
@@ -1974,4 +1978,4 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  zod@4.3.6: {}
+  zod@4.5.4: {}

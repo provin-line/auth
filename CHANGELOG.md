@@ -39,6 +39,15 @@ releases.
 
 ### Changed
 
+- Prepare generated instances for current upstream auth while retaining released
+  dependency pins: align Zod 4.5.4, wire separated JWKS/key-resolver modules,
+  update required configuration and support verified subject bags plus explicitly
+  untrusted request context.
+- Generated Verifiers now require an explicit Owner DID rule on the declared
+  surface instead of relying on empty-rule allow. Scopeless DID tokens skip only
+  the scope group; undeclared operations and non-Owner subjects remain denied.
+  See [upstream compatibility](docs/upstream-compatibility.md) for migration.
+
 - `login-transcript-v1` (unreleased) gains an eleventh required field,
   `did`, alongside the existing `subject_did` — `validateOwnerLogin` now
   also checks `transcript.did === transcript.subject_did`. `did` is the

@@ -21,8 +21,9 @@ fi
 
 # Minimal boot config: HS256 needs only a secret; issuer satisfies OIDC wiring.
 export OAUTH_JWT_ALGORITHM=HS256
-export OAUTH_JWT_SECRET=smoke-only-secret
+export OAUTH_JWT_SECRET=smoke.only.secret.at.least.32.bytes.long
 export OAUTH_JWT_ISSUER=https://smoke.invalid
+export OAUTH_JWT_AUDIENCE=https://smoke-api.invalid
 export HTTP_PORT="$port"
 
 # `exec` so $! is the node PID itself, not a subshell wrapper — otherwise
