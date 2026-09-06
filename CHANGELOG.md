@@ -69,6 +69,24 @@ releases.
 
 ### Changed
 
+- **The auth baseline is the released upstream, not a 0.3.x / 0.5.x pin with a
+  compatibility shim.** Every workspace package now requires
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.8.1` and
+  `@o3co/auth-provider-{core,oauth}` `^0.12.0` — the versions published on
+  2026-09-06 — and the generators emit the same as exact pins
+  (`DEFAULT_DEP_VERSIONS`: 0.8.1 / 0.12.0), with both generators bumped to
+  0.2.0 per create-app.md § 3.3. The dual-path shim that let the collectors
+  read `payload` or `subject` and reach `readUntrustedRequestContext` by
+  reflection (`collectors/context.mts`) is removed: collectors read
+  `context.subject` and call `readUntrustedRequestContext` directly, and the
+  policy-verifier template and the integration test import
+  `builtinKeyResolversModule` rather than probing for it. The code had already
+  crossed the intervening upstream BREAKING changes (o3co/auth's
+  `provin-compatibility` job builds this workspace against those exact
+  revisions); what changes here is that the released-0.3.x branch of each
+  dual path is gone. `@o3co/ts.hocon` stays at its current pin — its 0.1 → 1.x
+  move is a separate migration.
+
 - Refresh vulnerable transitive lockfile entries: js-yaml 4.3.2, qs 6.16.0,
   nanoid 3.3.18 and brace-expansion 5.0.9. CI audits the dependency graph.
 - Prepare generated instances for current upstream auth while retaining released

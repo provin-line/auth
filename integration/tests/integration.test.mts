@@ -23,20 +23,22 @@
  * Test cases:
  *   1. DID auth → JWT issuance succeeds
  *   2. JWT introspection returns active=true
- *   3. Policy verification with DID-issued token: 3a pins upstream 0.3.x
- *      default-allow on empty rules (declared surface); 3b scope-mismatch
+ *   3. Policy verification with DID-issued token: 3a no-scope token passes
+ *      only through an explicit owner-identity rule; 3b scope-mismatch
  *      deny; 3c undeclared (resource, action) → DefaultDenyRuleCollector
  *      fail-closed deny
  *   4. Policy verification with manually crafted JWT with scope → 200 allow
  */
 
-import * as verifierServer from "@o3co/auth.policy-verifier.server";
-import type { Module as VerifierModule } from "@o3co/auth.policy-verifier.core";
 import crypto, { createSecretKey } from "node:crypto";
 import type http from "node:http";
 import * as ed from "@noble/ed25519";
 import { builtinCollectorsModule } from "@o3co/auth.policy-verifier.builtins";
-import { AppConfigSchema, createApp as createPolicyVerifierApp } from "@o3co/auth.policy-verifier.server";
+import {
+	AppConfigSchema,
+	builtinKeyResolversModule,
+	createApp as createPolicyVerifierApp,
+} from "@o3co/auth.policy-verifier.server";
 import {
 	type AppConfig,
 	createApp,
@@ -58,9 +60,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makeMockResolution } from "./utils.mjs";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
-
-// Released 0.3.x resolves keys internally; current server requires this module.
-const keyResolversModule = Reflect.get(verifierServer, "builtinKeyResolversModule") as VerifierModule | undefined;
 
 const JWT_SECRET = "integration.test.secret.at.least.32.bytes.long";
 const JWT_ISSUER = "https://issuer.test.invalid";
@@ -336,7 +335,7 @@ beforeAll(async () => {
 		config: pvConfig,
 		modules: [
         builtinCollectorsModule,
-        ...(keyResolversModule ? [keyResolversModule] : []),
+        builtinKeyResolversModule,
         dplaaxModule,
     ],
 	});
@@ -557,7 +556,7 @@ describe("DID auth → JWT → policy verification", () => {
 		expect(await res.json()).toMatchObject({ decision: "deny" });
 	});
 
-	it.skipIf(!Reflect.has(verifierServer, "JWT_MODE_MIGRATION_MESSAGE")).each([
+	it.each([
 		["issuer", "https://wrong-issuer.invalid", JWT_AUDIENCE],
 		["audience", JWT_ISSUER, "https://wrong-api.invalid"],
 	])("current verifier rejects a token for the wrong %s", async (_label, issuer, audience) => {

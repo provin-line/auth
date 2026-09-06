@@ -19,7 +19,7 @@ import type {
   CollectorContext,
 } from "@o3co/auth.policy-verifier.core";
 import { ATTR_SUBSCRIBER_DID } from "../keys.mjs";
-import { untrustedRequestFields } from "./context.mjs";
+import { readUntrustedRequestContext } from "@o3co/auth.policy-verifier.core";
 
 /**
  * AttributeCollector that promotes the untrusted request field `subscriber_did`
@@ -33,7 +33,7 @@ import { untrustedRequestFields } from "./context.mjs";
 export class SubscriberDidCollector implements AttributeCollector {
   async collect(context: CollectorContext): Promise<Attributes> {
     const attrs: Attributes = new Map();
-    const value = untrustedRequestFields(context)?.subscriber_did;
+    const value = readUntrustedRequestContext(context.requestContext)?.subscriber_did;
     if (typeof value === "string" && value.length > 0) {
       attrs.set(ATTR_SUBSCRIBER_DID, value);
     }

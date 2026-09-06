@@ -24,7 +24,6 @@ import type {
   CollectorContext,
 } from "@o3co/auth.policy-verifier.core";
 import { ATTR_SUBJECT_DID_TYPE } from "../keys.mjs";
-import { subjectClaims } from "./context.mjs";
 
 export const DID_TYPES = ["owner", "pipeline", "process"] as const;
 export type DIDType = (typeof DID_TYPES)[number];
@@ -59,7 +58,7 @@ export function parseDIDType(did: string): DIDType | null {
 
 /**
  * AttributeCollector that derives the did:dplaax DID type from
- * verified `subject.sub` (legacy `payload.sub`) and stores it under ATTR_SUBJECT_DID_TYPE.
+ * verified `subject.sub` and stores it under ATTR_SUBJECT_DID_TYPE.
  *
  * The name reflects what this collector actually reads: the subject
  * field of the JWT. If a future collector needs to derive a DID type
@@ -75,7 +74,7 @@ export function parseDIDType(did: string): DIDType | null {
 export class SubjectDidTypeCollector implements AttributeCollector {
   async collect(context: CollectorContext): Promise<Attributes> {
     const attrs: Attributes = new Map();
-    const sub = subjectClaims(context).sub;
+    const sub = context.subject.sub;
     if (typeof sub !== "string" || sub.length === 0) return attrs;
     const type = parseDIDType(sub);
     if (type !== null) {

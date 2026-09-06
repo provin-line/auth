@@ -14,15 +14,16 @@
 //
 // These constants are the dependency baseline of the canonical template
 // (originally the pre-M4 reference instance's package.json — 2026-05-28 snapshot, provin-line/auth
-// commit 220f52f). When the baseline upgrades, refresh this file in lockstep
-// with a generator MINOR bump (see create-app.md § 3.3).
+// commit 220f52f; auth baseline refreshed 2026-09-06 to the released
+// auth.policy-verifier 0.8.1 with generator 0.2.0). When the baseline upgrades,
+// refresh this file in lockstep with a generator MINOR bump (see create-app.md § 3.3).
 
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */
 export const DEFAULT_DEP_VERSIONS = {
 	// Framework (o3co) — runtime
-	"@o3co/auth.policy-verifier.server": "0.3.1",
-	"@o3co/auth.policy-verifier.builtins": "0.3.1",
-	"@o3co/auth.policy-verifier.core": "0.3.1",
+	"@o3co/auth.policy-verifier.server": "0.8.1",
+	"@o3co/auth.policy-verifier.builtins": "0.8.1",
+	"@o3co/auth.policy-verifier.core": "0.8.1",
 	"@o3co/ts.hocon": "0.1.5",
 	// Runtime — non-o3co
 	// The scaffold's own logger writes NDJSON through pino (see src/logger.mts);

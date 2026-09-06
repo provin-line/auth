@@ -19,10 +19,9 @@ import type {
   CollectorContext,
 } from "@o3co/auth.policy-verifier.core";
 import { ATTR_SUBJECT_DID } from "../keys.mjs";
-import { subjectClaims } from "./context.mjs";
 
 /**
- * AttributeCollector that promotes verified `subject.sub` (legacy `payload.sub`) to ATTR_SUBJECT_DID when
+ * AttributeCollector that promotes verified `subject.sub` to ATTR_SUBJECT_DID when
  * it conforms to the W3C DID syntax: `did:<method>:<method-specific-id>`.
  *
  * If `sub` is absent, empty, or not a DID, nothing is emitted. Downstream
@@ -36,7 +35,7 @@ import { subjectClaims } from "./context.mjs";
 export class SubjectDidCollector implements AttributeCollector {
   async collect(context: CollectorContext): Promise<Attributes> {
     const attrs: Attributes = new Map();
-    const sub = subjectClaims(context).sub;
+    const sub = context.subject.sub;
     if (typeof sub !== "string" || sub.length === 0) return attrs;
     if (!isDid(sub)) return attrs;
     attrs.set(ATTR_SUBJECT_DID, sub);

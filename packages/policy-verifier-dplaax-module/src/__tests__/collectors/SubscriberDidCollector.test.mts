@@ -1,17 +1,16 @@
 import { describe, expect, it } from "vitest";
-import * as core from "@o3co/auth.policy-verifier.core";
-import type { CollectorContext, VerifierPayload } from "@o3co/auth.policy-verifier.core";
+import { markUntrustedRequestContext } from "@o3co/auth.policy-verifier.core";
+import type { CollectorContext } from "@o3co/auth.policy-verifier.core";
 import { SubscriberDidCollector } from "../../collectors/SubscriberDidCollector.mjs";
 import { ATTR_SUBSCRIBER_DID } from "../../keys.mjs";
 
 function makeContext(requestContext?: Record<string, unknown>): CollectorContext {
-  const mark = Reflect.get(core, "markUntrustedRequestContext") as
-    ((raw: Record<string, unknown>) => unknown) | undefined;
   return {
-    payload: { token: "dummy", tokenType: "Bearer" } satisfies VerifierPayload,
+    subject: {},
+    signal: new AbortController().signal,
     resource: { raw: "test:1", resourceType: "test", resourceId: "1" },
     action: "read",
-    requestContext: requestContext && mark ? mark(requestContext) : requestContext,
+    requestContext: requestContext ? markUntrustedRequestContext(requestContext) : undefined,
   } as CollectorContext;
 }
 
