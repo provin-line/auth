@@ -39,6 +39,8 @@ releases.
 
 ### Changed
 
+- Refresh vulnerable transitive lockfile entries: js-yaml 4.3.2, qs 6.16.0,
+  nanoid 3.3.18 and brace-expansion 5.0.9. CI audits the dependency graph.
 - Prepare generated instances for current upstream auth while retaining released
   dependency pins: align Zod 4.5.4, wire separated JWKS/key-resolver modules,
   update required configuration and support verified subject bags plus explicitly
