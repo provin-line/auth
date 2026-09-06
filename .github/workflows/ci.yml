@@ -21,6 +21,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - run: pnpm audit --audit-level=moderate
+
       # pnpm's frozen install tolerates stale extra importers, so assert the
       # invariant directly: the committed lockfile must never contain the
       # local-only instances/* importers (see Makefile clean-instances).
