@@ -21,7 +21,7 @@ import type {
 import { ATTR_SUBJECT_DID } from "../keys.mjs";
 
 /**
- * AttributeCollector that promotes `payload.sub` to ATTR_SUBJECT_DID when
+ * AttributeCollector that promotes verified `subject.sub` to ATTR_SUBJECT_DID when
  * it conforms to the W3C DID syntax: `did:<method>:<method-specific-id>`.
  *
  * If `sub` is absent, empty, or not a DID, nothing is emitted. Downstream
@@ -35,7 +35,7 @@ import { ATTR_SUBJECT_DID } from "../keys.mjs";
 export class SubjectDidCollector implements AttributeCollector {
   async collect(context: CollectorContext): Promise<Attributes> {
     const attrs: Attributes = new Map();
-    const sub = context.payload.sub;
+    const sub = context.subject.sub;
     if (typeof sub !== "string" || sub.length === 0) return attrs;
     if (!isDid(sub)) return attrs;
     attrs.set(ATTR_SUBJECT_DID, sub);

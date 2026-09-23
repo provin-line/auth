@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { CollectorContext, VerifierPayload } from "@o3co/auth.policy-verifier.core";
+import type { CollectorContext } from "@o3co/auth.policy-verifier.core";
 import { SubscriberIdentityCheckRuleCollector } from "../../rules/SubscriberIdentityCheckRuleCollector.mjs";
 import { ATTR_SUBJECT_DID, ATTR_SUBSCRIBER_DID } from "../../keys.mjs";
 
 function makeContext(resource: string, action: string): CollectorContext {
   return {
-    payload: { token: "dummy", tokenType: "Bearer" } satisfies VerifierPayload,
+    subject: {},
+    signal: new AbortController().signal,
     resource: { raw: resource, resourceType: resource.split(".")[0] ?? resource },
     action,
-    // intentionally omit requestContext and payload.sub — this RuleCollector
+    // intentionally omit requestContext and subject.sub — this RuleCollector
     // must not read either. Rules receive their data via attrs.
   };
 }

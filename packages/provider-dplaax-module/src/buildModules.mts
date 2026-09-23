@@ -18,12 +18,19 @@ import {
 	type NonceStore,
 	oauthDidModule,
 } from "@provin-line/auth-provider-did";
-import type { AppConfig, Module } from "@o3co/auth-provider-core";
+import {
+	type AppConfig,
+	type Module,
+	memoryAccessTokenDenylistModule,
+} from "@o3co/auth-provider-core";
+import * as core from "@o3co/auth-provider-core";
 import { oauthModule } from "@o3co/auth-provider-oauth";
 
 import {
+	auditSinkModule,
 	clientRepositoryModule,
 	inMemoryCodeRepositoryModule,
+	inMemorySubjectRevocationModule,
 	keyStoreModule,
 } from "./modules.mjs";
 import { DplaaxDidResolver } from "./resolver/dplaax.mjs";
@@ -31,7 +38,8 @@ import { DplaaxDidResolver } from "./resolver/dplaax.mjs";
 /**
  * Operational shape of the dPLaaX auth-provider config. Picks only the upstream
  * `AppConfig` sections that this DID-only deployment actually populates
- * (`http` / `oauth` / `endpoints` / `repositories`); session / federation /
+ * (`http` / `oauth` / `endpoints` / `repositories`, plus `deployment`, which
+ * core's replica-safety guard reads); session / federation /
  * rateLimit / cors are intentionally omitted instead of stubbed with
  * `undefined`. A future upstream change that makes `oauthModule({config})`
  * read one of the omitted sections unconditionally will surface as a type
@@ -40,10 +48,17 @@ import { DplaaxDidResolver } from "./resolver/dplaax.mjs";
  */
 export type DplaaxAppConfigBase = Pick<
 	AppConfig,
-	"http" | "oauth" | "endpoints" | "repositories"
+	"http" | "oauth" | "endpoints" | "repositories" | "deployment"
 >;
 
 export interface DplaaxAppConfig extends DplaaxAppConfigBase {
+	/**
+	 * Where security audit events go. `sink.type` names a registered sink
+	 * (`"console"` built in); absent means `"console"`. See `auditSinkModule`.
+	 */
+	readonly audit?: {
+		readonly sink: { readonly type: string } & Readonly<Record<string, unknown>>;
+	};
 	readonly dplaax: {
 		readonly registry: {
 			readonly baseUrl: string;
@@ -60,6 +75,30 @@ export interface DplaaxBuildModulesOverrides {
 	/** Override the codeRepository module (test-only). */
 	readonly codeRepositoryModule?: Module;
 	/**
+	 * Replace the audit-sink module. Defaults to `auditSinkModule` (the
+	 * built-in `"console"` sink only). To add a log-pipeline or SIEM sink,
+	 * pass `createAuditSinkModule({ registerSinks })` and select it with
+	 * `audit.sink.type`.
+	 */
+	readonly auditSinkModule?: Module;
+	/**
+	 * Replace the access-token denylist module that RFC 7009 revocation writes
+	 * to and token verification reads. Defaults to core's in-memory
+	 * `memoryAccessTokenDenylistModule`; multi-replica deployments pass a
+	 * shared one (e.g. `redisAccessTokenDenylistModule`).
+	 */
+	readonly accessTokenDenylistModule?: Module;
+	/**
+	 * Replace the module that provides the subject-level revocation pair.
+	 * The replacement must provide BOTH `subjectRevocation` and
+	 * `subjectSessionIndex`. They are one capability: the watermark refuses
+	 * tokens, and the index is what a subject-wide revocation cascades over.
+	 * Nothing type-checks the pair, so a module with only one of them leaves
+	 * the other unwired. Defaults to `inMemorySubjectRevocationModule`;
+	 * multi-replica deployments pass a shared one.
+	 */
+	readonly subjectRevocationModule?: Module;
+	/**
 	 * Inject a custom `DidDocumentResolver` instead of the default `DplaaxDidResolver`.
 	 * Used by integration tests to point at an in-process mock registry.
 	 */
@@ -73,13 +112,21 @@ export interface DplaaxBuildModulesOverrides {
 	readonly nonceStore?: NonceStore;
 }
 
+const jwksModule = Reflect.get(core, "jwksModule") as Module | undefined;
+
 /**
  * Compose the dPLaaX auth-provider module list from `config`.
  *
- * Scope (v0.5 rescaffold): DID grant + minimal OAuth endpoints. No session,
- * no federation, memory-only code repository. Production deployments that
- * need multi-replica behaviour can swap in the Redis-backed modules from
- * `@o3co/auth-provider-redis` via the override surface.
+ * Scope: DID grant + minimal OAuth endpoints. No session, no federation.
+ * The code repository, access-token denylist and subject-revocation pair are
+ * in-memory; production deployments that need multi-replica behaviour swap in
+ * the Redis-backed modules from `@o3co/auth-provider-redis` via the override
+ * surface.
+ *
+ * Every security capability `oauthModule` can read is wired rather than
+ * declared absent: an audit sink, an access-token denylist (so RFC 7009
+ * revocation of an access token takes effect) and the subject-revocation
+ * pair (so revoking a DID invalidates tokens already issued to it).
  */
 export function buildModules(
 	config: DplaaxAppConfig,
@@ -97,6 +144,11 @@ export function buildModules(
 		overrides.keyStoreModule ?? keyStoreModule,
 		overrides.clientRepositoryModule ?? clientRepositoryModule,
 		overrides.codeRepositoryModule ?? inMemoryCodeRepositoryModule,
+		overrides.auditSinkModule ?? auditSinkModule,
+		overrides.accessTokenDenylistModule ?? memoryAccessTokenDenylistModule,
+		overrides.subjectRevocationModule ?? inMemorySubjectRevocationModule,
+		// Current core owns JWKS separately; released 0.5.x OAuth publishes it.
+		...(jwksModule ? [jwksModule] : []),
 		// `oauthModule` types `config` as the full upstream `AppConfig`.
 		// dPLaaX deliberately omits the session / federation / rateLimit /
 		// cors sections (see `DplaaxAppConfigBase` Pick above); the upstream

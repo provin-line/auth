@@ -5,6 +5,8 @@ dPLaaX protocol: libraries plus scaffold generators that produce per-deployment
 composition roots of [auth.provider](https://github.com/o3co/auth.provider) and [auth.policy-verifier](https://github.com/o3co/auth.policy-verifier).
 
 See [docs/requirements.md](docs/requirements.md) for what this repository provides.
+See [upstream compatibility](docs/upstream-compatibility.md) before adopting
+current auth-family candidate builds in an existing generated deployment.
 
 > **Lineage**: this repository's history starts at the public cut, not at the
 > start of the work. The code grew up in a private PoC auth stack for dPLaaS,
@@ -159,6 +161,13 @@ Every minted token carries these six claims:
 | `lifecycle_state_ref` | `registry:<origin>#<digest>` — a stable pointer to that exact resolution snapshot |
 | `lifecycle_freshness_ref` | RFC 3339 UTC instant the resolution was performed |
 | `authorization_scope` | Always `AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1` — the only scope this package ever mints |
+
+Tokens minted at `/oauth/token` are also bound to the client that endpoint
+authenticated (RFC 9068 §2.2): `client_id` and `azp` both carry its client
+id, taken from the authenticated client, never from the request body. That
+binding is what lets the client revoke the token through RFC 7009
+`/oauth/revoke`. A grant invoked outside `/token`, with no authenticated
+client, mints neither claim. `azp` never carries the audience; `aud` does.
 
 `lifecycle_state_ref` / `lifecycle_freshness_ref` are a **documented P0
 projection** — the registry snapshot digest plus the retrieval instant —

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { CollectorContext, VerifierPayload } from "@o3co/auth.policy-verifier.core";
+import type { CollectorContext } from "@o3co/auth.policy-verifier.core";
 import { SubjectDidTypeRuleCollector } from "../../rules/SubjectDidTypeRuleCollector.mjs";
 import { ATTR_SUBJECT_DID_TYPE } from "../../keys.mjs";
 
 function makeContext(resource: string, action: string): CollectorContext {
   return {
-    payload: { token: "dummy", tokenType: "Bearer" } satisfies VerifierPayload,
+    subject: {},
+    signal: new AbortController().signal,
     resource: { raw: resource, resourceType: resource.split(".")[0] ?? resource },
     action,
   };
@@ -34,7 +35,7 @@ describe("SubjectDidTypeRuleCollector", () => {
     // Its default ruleType follows the builtins scheme:
     //   attr_literal_in:{a}:{type}:{count}:{hashPrefix}
     expect(rules[0].ruleType).toMatch(
-      /^attr_literal_in:subjectDidType:string:\d+:[0-9a-f]{8}$/,
+      /^attr_literal_in:subjectDidType:string:\d+:(?:[0-9a-f]{8}|[0-9a-f]{16})$/,
     );
     expect(rules[0].code).toBe("attr_not_in_set");
   });

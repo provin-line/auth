@@ -214,8 +214,8 @@ function buildPackageJson(opts: FilledOptions): string {
 			DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.core"],
 		"@o3co/auth.policy-verifier.server":
 			DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.server"],
-		"@o3co/auth.utils": DEFAULT_DEP_VERSIONS["@o3co/auth.utils"],
 		"@o3co/ts.hocon": DEFAULT_DEP_VERSIONS["@o3co/ts.hocon"],
+		pino: DEFAULT_DEP_VERSIONS.pino,
 	};
 	const devDependencies: Record<string, string> = {
 		"@types/node": DEFAULT_DEP_VERSIONS["@types/node"],
@@ -241,7 +241,8 @@ function buildPackageJson(opts: FilledOptions): string {
 			...transitiveProvinDeps.map(([name]) => name),
 			"@provin-line/auth-policy-verifier-dplaax-module",
 		].sort(),
-		overrides: Object.fromEntries(transitiveProvinDeps),
+		// Zod schema objects cross package boundaries; align their minor version.
+		overrides: { ...Object.fromEntries(transitiveProvinDeps), zod: "4.5.4" },
 	};
 
 	const manifest = {

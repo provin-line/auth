@@ -37,6 +37,23 @@ import { z } from "zod";
  * `DplaaxAppConfig`.
  */
 export const DplaaxConfigSchema = CoreConfigSchema.extend({
+	// CoreConfigSchema does not own the audit slice. `sink.type` names a sink
+	// registered by `auditSinkModule` ("console" built in); its options ride
+	// along in the same block. Absent means "console". There is no "none":
+	// the audit sink is always wired (see auditSinkModule).
+	audit: z
+		.object({ sink: z.object({ type: z.string().min(1) }).passthrough() })
+		.optional(),
+	// CoreConfigSchema does not carry `deployment` (upstream's full
+	// AppConfigSchema does). Without it here, `deployment.mode = "multi"` was
+	// stripped at validation and core's replica-safety guard never saw it, so
+	// an instance booted multi-replica on in-process stores. Same shape as
+	// upstream; absent means single.
+	deployment: z
+		.object({
+			mode: z.enum(["single", "multi"]).optional(),
+		})
+		.optional(),
 	endpoints: z.object({
 		login: z.object({
 			url: z.string().min(1),

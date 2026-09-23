@@ -14,17 +14,24 @@
 //
 // These constants are the dependency baseline of the canonical template
 // (originally the pre-M4 reference instance's package.json — 2026-05-28 snapshot, provin-line/auth
-// commit 21fe40c). When the baseline upgrades, refresh this file in
-// lockstep with a generator MINOR bump (see create-app.md § 3.3).
+// commit 21fe40c; auth baseline refreshed 2026-09-06 to the released
+// auth.provider 0.15.0 with generator 0.2.0). When the baseline upgrades,
+// refresh this file in lockstep with a generator MINOR bump (see create-app.md § 3.3).
 
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */
 export const DEFAULT_DEP_VERSIONS = {
 	// Framework (o3co) — runtime
-	"@o3co/auth-provider-core": "0.5.3",
-	"@o3co/auth.utils": "0.0.4",
+	"@o3co/auth-provider-core": "0.15.0",
 	"@o3co/ts.hocon": "0.1.5",
 	// Runtime — non-o3co
 	express: "5.2.1",
+	// Peer of @o3co/auth-provider-oauth since 0.11.0; emitted as a direct dep
+	// so the exact-pin baseline covers it.
+	"express-session": "1.19.0",
+	// The scaffold's own logger writes NDJSON through pino (see src/logger.mts);
+	// it used to reach pino only as @o3co/auth.utils' optional peer, which was
+	// never emitted here, so instances silently logged through console.
+	pino: "10.3.1",
 	// The ed25519_raw DID-grant verifier resolves this via the instance's
 	// import.meta.resolve, so it must be a DIRECT runtime dep of the instance
 	// (auth-provider-did declares it only as an optional peer).
@@ -33,7 +40,7 @@ export const DEFAULT_DEP_VERSIONS = {
 	"@types/express": "5.0.6",
 	"@types/node": "25.6.0",
 	typescript: "5.9.3",
-	vitest: "4.1.4",
+	vitest: "4.1.11",
 } as const;
 
 /** Default git-subdirectory ref for `@provin-line/auth-provider-dplaax-module`. */

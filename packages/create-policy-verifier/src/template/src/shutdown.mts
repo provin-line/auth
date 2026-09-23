@@ -1,0 +1,166 @@
+import type { Server } from "node:http";
+
+/** The logging surface shutdown needs; pino satisfies it structurally. */
+export interface Logger {
+    info(obj: Record<string, unknown>, msg?: string): void;
+    error(obj: Record<string, unknown>, msg?: string): void;
+}
+
+/**
+ * Graceful shutdown for the generated instance.
+ *
+ * ## Why this is in the scaffold rather than a dependency
+ *
+ * It used to be `gracefulShutdown` from `@o3co/auth.utils@0.0.4`. For the
+ * component that terminates every user session, "does SIGTERM wait for
+ * in-flight requests, and for how long?" has to be answerable from the code
+ * an operator deploys — and reading those 22 lines answered it badly:
+ * **there was no deadline**. `server.close()` waits indefinitely, so one stuck
+ * request meant the process never exited on its own and the orchestrator's
+ * SIGKILL took it down mid-flight, precisely under the load that produces a
+ * stuck request. Cleanup failures went to `console.error`, and every exit was
+ * zero, so a truncated shutdown looked exactly like a clean one.
+ *
+ * auth.provider (#290), auth.proxy (#81) and auth.policy-verifier (#210) each
+ * moved the behaviour into the code they ship. This is the same contract.
+ *
+ * ## The guarantees, stated
+ *
+ * 1. **SIGTERM and SIGINT** both start it; a second signal is ignored.
+ * 2. **New connections stop immediately** (`close`) and idle keep-alive
+ *    sockets are released (`closeIdleConnections`).
+ * 3. **In-flight requests get `drainTimeoutMs`** (default 10s) to finish.
+ * 4. **Past the deadline, remaining connections are cut** and the process
+ *    exits **non-zero**, so a truncated drain is distinguishable from a clean one.
+ * 5. **`cleanup` runs after draining, before exit**, bounded by
+ *    `cleanupTimeoutMs`; its failure is logged and reflected in the exit code.
+ * 6. **A `close` that fails is not reported as a clean drain.**
+ *
+ * Size `drainTimeoutMs` and `cleanupTimeoutMs` together **below** the
+ * orchestrator's kill grace period (Kubernetes
+ * `terminationGracePeriodSeconds`, compose `stop_grace_period`, both 30s by
+ * default): the worst case is the two budgets in sequence.
+ */
+export interface GracefulShutdownOptions {
+    readonly logger: Logger;
+    /** Reverse-topological component cleanup — normally `handle.dispose()`. */
+    readonly cleanup?: () => void | Promise<void>;
+    /** How long in-flight requests get before connections are cut. Default 10s. */
+    readonly drainTimeoutMs?: number;
+    /** How long `cleanup` gets. Defaults to `drainTimeoutMs`. */
+    readonly cleanupTimeoutMs?: number;
+    /** Injected in tests; defaults to {@link deferExit}. */
+    readonly exit?: (code: number) => void;
+    /** Injected in tests; defaults to `process.on`. */
+    readonly onSignal?: (signal: NodeJS.Signals, handler: () => void) => void;
+    /** Injected in tests; defaults to `process.removeListener`. */
+    readonly offSignal?: (signal: NodeJS.Signals, handler: () => void) => void;
+}
+
+/**
+ * Exit after yielding the loop once. pino's default destination is not
+ * synchronous, so exiting in the same tick as the last `logger.error` can drop
+ * exactly the line that says why. One turn is a flush window, not a
+ * guarantee; a deployment needing certainty passes an `exit` that flushes.
+ */
+export function deferExit(code: number, exitProcess: (code: number) => void = process.exit): void {
+    setImmediate(() => exitProcess(code));
+}
+
+const DEFAULT_DRAIN_TIMEOUT_MS = 10_000;
+const SIGNALS: readonly NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
+
+export function installGracefulShutdown(server: Server, options: GracefulShutdownOptions): void {
+    const {
+    	logger,
+    	cleanup,
+    	drainTimeoutMs = DEFAULT_DRAIN_TIMEOUT_MS,
+    	exit = deferExit,
+    	onSignal = (signal, handler): void => {
+    		process.on(signal, handler);
+    	},
+    	offSignal = (signal, handler): void => {
+    		process.removeListener(signal, handler);
+    	},
+    } = options;
+    const cleanupTimeoutMs = options.cleanupTimeoutMs ?? drainTimeoutMs;
+
+    let shuttingDown = false;
+    let finished = false;
+
+    /** Sentinel so a timed-out cleanup is reported as that, not as a throw. */
+    const CLEANUP_TIMED_OUT = Symbol("cleanup-timed-out");
+
+    /** Await `cleanup`, but not forever; a sync throw lands in the same path. */
+    const runCleanup = async (): Promise<typeof CLEANUP_TIMED_OUT | undefined> => {
+    	if (!cleanup) return;
+    	let timer: ReturnType<typeof setTimeout> | undefined;
+    	try {
+    		return await Promise.race([
+    			(async (): Promise<undefined> => {
+    				await cleanup();
+    				return undefined;
+    			})(),
+    			new Promise<typeof CLEANUP_TIMED_OUT>((resolve) => {
+    				timer = setTimeout(() => resolve(CLEANUP_TIMED_OUT), cleanupTimeoutMs);
+    				timer.unref?.();
+    			}),
+    		]);
+    	} finally {
+    		if (timer) clearTimeout(timer);
+    	}
+    };
+
+    /** Run `cleanup` and exit. Called by whichever of drain / deadline wins. */
+    const finish = async (code: number, reason: string): Promise<void> => {
+    	if (finished) return;
+    	finished = true;
+    	let exitCode = code;
+    	// `reason` names whatever decided the exit code; the drain outcome keeps
+    	// its own key so the line an operator alerts on is consistent and complete.
+    	let outcome = reason;
+    	try {
+    		if ((await runCleanup()) === CLEANUP_TIMED_OUT) {
+    			logger.error({ cleanupTimeoutMs }, "graceful shutdown: cleanup timed out");
+    			exitCode = 1;
+    			outcome = "cleanup-timeout";
+    		}
+    	} catch (err) {
+    		logger.error({ err }, "graceful shutdown: cleanup failed");
+    		exitCode = 1;
+    		outcome = "cleanup-failed";
+    	}
+    	logger.info({ reason: outcome, drain: reason, exitCode }, "graceful shutdown: complete");
+    	exit(exitCode);
+    };
+
+    const handler = (): void => {
+    	if (shuttingDown) return;
+    	shuttingDown = true;
+    	for (const signal of SIGNALS) offSignal(signal, handler);
+    	logger.info({ drainTimeoutMs }, "graceful shutdown: draining");
+
+    	const deadline = setTimeout(() => {
+    		logger.error(
+    			{ drainTimeoutMs },
+    			"graceful shutdown: drain deadline exceeded, closing remaining connections",
+    		);
+    		server.closeAllConnections();
+    		void finish(1, "drain-timeout");
+    	}, drainTimeoutMs);
+    	deadline.unref?.();
+
+    	server.close((err) => {
+    		clearTimeout(deadline);
+    		if (err) {
+    			logger.error({ err }, "graceful shutdown: server close failed");
+    			void finish(1, "close-failed");
+    			return;
+    		}
+    		void finish(0, "drained");
+    	});
+    	server.closeIdleConnections();
+    };
+
+    for (const signal of SIGNALS) onSignal(signal, handler);
+}

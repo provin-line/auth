@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { CollectorContext, VerifierPayload } from "@o3co/auth.policy-verifier.core";
+import type { CollectorContext } from "@o3co/auth.policy-verifier.core";
 import { SubjectDidCollector } from "../../collectors/SubjectDidCollector.mjs";
 import { ATTR_SUBJECT_DID } from "../../keys.mjs";
 
 function makeContext(sub?: string): CollectorContext {
   return {
-    payload: { sub, token: "dummy", tokenType: "Bearer" } satisfies VerifierPayload,
+    subject: sub === undefined ? {} : { sub },
+    signal: new AbortController().signal,
     resource: { raw: "test:1", resourceType: "test", resourceId: "1" },
     action: "read",
   };
@@ -14,7 +15,7 @@ function makeContext(sub?: string): CollectorContext {
 describe("SubjectDidCollector", () => {
   const collector = new SubjectDidCollector();
 
-  it("emits payload.sub to ATTR_SUBJECT_DID when it is a DID (did: prefix)", async () => {
+  it("emits subject.sub to ATTR_SUBJECT_DID when it is a DID (did: prefix)", async () => {
     const attrs = await collector.collect(makeContext("did:dplaax:r1:org:alice"));
     expect(attrs.get(ATTR_SUBJECT_DID)).toBe("did:dplaax:r1:org:alice");
   });

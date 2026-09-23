@@ -23,8 +23,8 @@
  * Test cases:
  *   1. DID auth → JWT issuance succeeds
  *   2. JWT introspection returns active=true
- *   3. Policy verification with DID-issued token: 3a pins upstream 0.3.x
- *      default-allow on empty rules (declared surface); 3b scope-mismatch
+ *   3. Policy verification with DID-issued token: 3a no-scope token passes
+ *      only through an explicit owner-identity rule; 3b scope-mismatch
  *      deny; 3c undeclared (resource, action) → DefaultDenyRuleCollector
  *      fail-closed deny
  *   4. Policy verification with manually crafted JWT with scope → 200 allow
@@ -34,7 +34,11 @@ import crypto, { createSecretKey } from "node:crypto";
 import type http from "node:http";
 import * as ed from "@noble/ed25519";
 import { builtinCollectorsModule } from "@o3co/auth.policy-verifier.builtins";
-import { createApp as createPolicyVerifierApp } from "@o3co/auth.policy-verifier.server";
+import {
+	AppConfigSchema,
+	builtinKeyResolversModule,
+	createApp as createPolicyVerifierApp,
+} from "@o3co/auth.policy-verifier.server";
 import {
 	type AppConfig,
 	createApp,
@@ -52,13 +56,14 @@ import {
 import { dplaaxModule } from "@provin-line/auth-policy-verifier-dplaax-module";
 import express from "express";
 import { SignJWT } from "jose";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { makeMockResolution } from "./utils.mjs";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
-const JWT_SECRET = "integration-test-secret-32chars-long";
-const JWT_ISSUER = "test-issuer";
+const JWT_SECRET = "integration.test.secret.at.least.32.bytes.long";
+const JWT_ISSUER = "https://issuer.test.invalid";
+const JWT_AUDIENCE = "https://policy-verifier.test.local";
 const JWT_KID = "test-key";
 const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 const TEST_CLIENT_ID = "dplaax-test-public-client";
@@ -101,11 +106,15 @@ let authProviderPort: number;
 let policyVerifierPort: number;
 
 let authProviderDispose: (() => Promise<void>) | undefined;
+let authProviderComponents: Awaited<ReturnType<typeof createApp>>["components"];
 
 // DID key material
 let privateKeyBytes: Uint8Array;
 let publicKeyBytes: Uint8Array;
 const testDid = "did:dplaax:registry.test.local:org:test-integration-001";
+// Only the subject-revocation test issues tokens for this DID. Its revocation
+// boundary would otherwise invalidate tokens that later tests issue for testDid.
+const revokedSubjectDid = "did:dplaax:registry.test.local:org:test-integration-subject-revoked";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -117,13 +126,13 @@ beforeAll(async () => {
 
 	// 2. Build DID Document for the test DID
 	const publicKeyBase64url = Buffer.from(publicKeyBytes).toString("base64url");
-	const didDocument: DidDocument = {
-		id: testDid,
+	const didDocumentFor = (did: string): DidDocument => ({
+		id: did,
 		verificationMethod: [
 			{
-				id: `${testDid}#key-1`,
+				id: `${did}#key-1`,
 				type: "JsonWebKey2020",
-				controller: testDid,
+				controller: did,
 				publicKeyJwk: {
 					kty: "OKP",
 					crv: "Ed25519",
@@ -131,13 +140,17 @@ beforeAll(async () => {
 				},
 			},
 		],
-	};
+	});
+	const didDocuments = new Map(
+		[testDid, revokedSubjectDid].map((did) => [did.split(":").at(-1), didDocumentFor(did)]),
+	);
 
 	// 3. Start mock DID registry (serves DID Documents over HTTP)
 	const registryApp = express();
 	registryApp.get("/did/org/:id/did.json", (req, res) => {
-		if (req.params.id === "test-integration-001") {
-			res.json(didDocument);
+		const document = didDocuments.get(req.params.id);
+		if (document) {
+			res.json(document);
 		} else {
 			res.status(404).json({ error: "not found" });
 		}
@@ -152,8 +165,13 @@ beforeAll(async () => {
 	//    the actual registry baseUrl points at 127.0.0.1:<mockPort>.
 	const registryBaseUrl = `http://127.0.0.1:${mockRegistryPort}`;
 	const config: DplaaxAppConfig = {
-		http: { port: 0, trustProxy: false },
+		http: { port: 0, trustProxy: false, readinessTimeoutMs: 2000 },
+		logging: { level: "silent" },
+		// The composition wires a real audit sink and real revocation stores:
+		// nothing here declares a capability absent.
+		audit: { sink: { type: "console" } },
 		oauth: {
+			revocation: { accessToken: "denylist" },
 			jwt: {
 				issuer: JWT_ISSUER,
 				legacyTypAccept: false,
@@ -178,14 +196,8 @@ beforeAll(async () => {
 				did: {
 					supportedAlgorithms: ["ed25519_raw"],
 					messageMaxAgeSec: 300,
-					// Task 8 (auth-provider-did): `allowedAudiences` is required
-					// and must be non-empty (fail closed — an empty/absent
-					// allowlist used to mean "accept any audience"). This
-					// integration flow never sends an `audience` in the DID
-					// grant request (see buildDidTokenRequest below), so the
-					// allowlist's actual contents are inert here; the value
-					// below is a placeholder satisfying the schema.
-					allowedAudiences: ["https://policy-verifier.test.local"],
+					// Bind DID issuance to the same audience enforced by the verifier.
+					allowedAudiences: [JWT_AUDIENCE],
 					// `revocationLatencyBoundSec` is required, no default (fail
 					// closed). `legacyMaxTtlSec` is raised to match
 					// `accessToken.expiresIn` (3600s below) since `authContract`
@@ -281,6 +293,7 @@ beforeAll(async () => {
 		},
 	});
 	authProviderDispose = () => handle.dispose();
+	authProviderComponents = handle.components;
 	authExpressApp.use(handle.router);
 
 	const authResult = await listenOnFreePort(authExpressApp);
@@ -288,21 +301,31 @@ beforeAll(async () => {
 	authProviderPort = authResult.port;
 
 	// 7. Start policy-verifier (in-process)
-	const pvConfig = {
-		http: { hostname: "127.0.0.1", port: 0, pathPrefix: "" },
+	const pvConfig = AppConfigSchema.parse({
+		http: { hostname: "127.0.0.1", port: 3001, pathPrefix: "" },
 		oauth: {
 			jwt: {
 				algorithm: "HS256" as const,
 				secret: JWT_SECRET,
-				validate: true,
+				mode: "verify",
+				issuer: JWT_ISSUER,
+				audience: JWT_AUDIENCE,
 			},
 		},
 		attribute: {
-			collectors: [{ collector: "PayloadScopeCollector" }],
+			collectors: [
+				{ collector: "PayloadScopeCollector" },
+				{ collector: "SubjectDidCollector" },
+				{ collector: "SubjectDidTypeCollector" },
+			],
 		},
 		rule: {
 			collectors: [
-				{ collector: "ResourceActionScopeRuleCollector" },
+				{ collector: "ResourceActionScopeRuleCollector", scopeless: "skip" },
+				{ collector: "SubjectDidTypeRuleCollector", rules: [
+					{ resource: "registry.project", action: "read", allowedTypes: ["owner"] },
+					{ resource: "registry", action: "read", allowedTypes: ["owner"] },
+				] },
 				{
 					// Fail-closed default (mirrors the scaffold config): only the
 					// pairs the tests below exercise are declared; everything else
@@ -316,12 +339,16 @@ beforeAll(async () => {
 			],
 		},
 		resource: { parser: "DotNotationResourceParser" },
-	};
+	});
 
 	const pvApp = await createPolicyVerifierApp({
 		pathResolver: import.meta.resolve,
 		config: pvConfig,
-		modules: [builtinCollectorsModule, dplaaxModule],
+		modules: [
+        builtinCollectorsModule,
+        builtinKeyResolversModule,
+        dplaaxModule,
+    ],
 	});
 
 	const pvResult = await listenOnFreePort(pvApp);
@@ -348,20 +375,21 @@ function policyVerifierUrl(path: string): string {
 	return `http://127.0.0.1:${policyVerifierPort}${path}`;
 }
 
-async function buildDidTokenRequest(): Promise<{
+async function buildDidTokenRequest(did: string = testDid): Promise<{
 	did: string;
 	message: string;
 	signature: string;
 }> {
 	const message = JSON.stringify({
-		did: testDid,
+		did,
+		audience: JWT_AUDIENCE,
 		timestamp: new Date().toISOString(),
 		nonce: crypto.randomBytes(16).toString("hex"),
 	});
 	const messageBytes = new TextEncoder().encode(message);
 	const sig = await ed.signAsync(messageBytes, privateKeyBytes);
 	const signature = Buffer.from(sig).toString("base64");
-	return { did: testDid, message, signature };
+	return { did, message, signature };
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -415,21 +443,10 @@ describe("DID auth → JWT → policy verification", () => {
 		expect(body.sub).toBe(testDid);
 	});
 
-	it("Test 3a: DID-issued no-scope token → policy-verifier ALLOWS (pins policy-verifier 0.3.x default-allow on empty rules)", async () => {
-		// With `auth.policy-verifier` >= 0.3, `ResourceActionScopeRuleCollector`
-		// produces ZERO rules when the token has no `scope` claim, and
-		// `evaluate()` returns `{ decision: "allow" }` for the empty-rules
-		// case. The pre-0.3 build denied this case. Pin the new behaviour
-		// explicitly so a future flip back to deny-by-default is caught.
-		//
-		// SECURITY NOTE: callers MUST NOT rely on the DID grant to gate
-		// scope-protected actions. Either inject a non-empty `scope` at
-		// DID-token issue time, or keep the requested (resource, action)
-		// OUT of DefaultDenyRuleCollector's declared surface so it fails
-		// closed (Test 3c). This request stays allowed only because
-		// registry.project/read is declared in the surface configured in
-		// beforeAll — the pin covers the upstream 0.3.x empty-rules default,
-		// not a recommended deployment posture.
+	it("Test 3a: DID-issued no-scope token → policy-verifier passes an explicit owner-identity rule", async () => {
+		// A scopeless DID token passes an explicit owner-identity rule.
+		// Registry ACLs remain authoritative for resource permissions.
+
 		const res = await fetch(policyVerifierUrl("/verify"), {
 			method: "POST",
 			headers: {
@@ -454,10 +471,11 @@ describe("DID auth → JWT → policy verification", () => {
 		// so `evaluate()` returns deny.
 		const secretKey = createSecretKey(Buffer.from(JWT_SECRET));
 		const mismatchedToken = await new SignJWT({ scope: "write:other-resource" })
-			.setProtectedHeader({ alg: "HS256", kid: JWT_KID })
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
 			.setIssuedAt()
 			.setExpirationTime("1h")
 			.setIssuer(JWT_ISSUER)
+			.setAudience(JWT_AUDIENCE)
 			.setSubject(testDid)
 			.sign(secretKey);
 
@@ -479,12 +497,8 @@ describe("DID auth → JWT → policy verification", () => {
 	});
 
 	it("Test 3c: undeclared (resource, action) → 403 deny (DefaultDenyRuleCollector fail-closed)", async () => {
-		// The scope collector abstains for a no-scope token and evaluate()
-		// allows on zero rules (pinned by Test 3a), so without a fail-closed
-		// default a request surface nobody configured would pass silently.
-		// DefaultDenyRuleCollector is wired into this verifier with a surface
-		// declaring only the pairs the other tests exercise — anything else
-		// must come back 403 regardless of token contents.
+		// Undeclared operations fail closed regardless of the authenticated DID.
+
 		const res = await fetch(policyVerifierUrl("/verify"), {
 			method: "POST",
 			headers: {
@@ -507,10 +521,11 @@ describe("DID auth → JWT → policy verification", () => {
 		// Craft a JWT with scope="read:registry" to prove the verification pipeline works
 		const secretKey = createSecretKey(Buffer.from(JWT_SECRET));
 		const scopedToken = await new SignJWT({ scope: "read:registry" })
-			.setProtectedHeader({ alg: "HS256", kid: JWT_KID })
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
 			.setIssuedAt()
 			.setExpirationTime("1h")
 			.setIssuer(JWT_ISSUER)
+			.setAudience(JWT_AUDIENCE)
 			.setSubject(testDid)
 			.sign(secretKey);
 
@@ -532,5 +547,137 @@ describe("DID auth → JWT → policy verification", () => {
 		).toBe(200);
 		const body = (await res.json()) as { decision: string };
 		expect(body.decision).toBe("allow");
+	});
+
+	it.each([
+		["a non-DID subject", "user-123"],
+		["a pipeline DID", `${testDid}:pipeline:child`],
+	])("rejects %s even on the declared surface", async (_label, subject) => {
+		const token = await new SignJWT({})
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
+			.setIssuedAt().setExpirationTime("1h")
+			.setIssuer(JWT_ISSUER).setAudience(JWT_AUDIENCE).setSubject(subject)
+			.sign(createSecretKey(Buffer.from(JWT_SECRET)));
+		const res = await fetch(policyVerifierUrl("/verify"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+			body: JSON.stringify({ resource: "registry.project", action: "read" }),
+		});
+		expect(res.status).toBe(403);
+		expect(await res.json()).toMatchObject({ decision: "deny" });
+	});
+
+	it.each([
+		["issuer", "https://wrong-issuer.invalid", JWT_AUDIENCE],
+		["audience", JWT_ISSUER, "https://wrong-api.invalid"],
+	])("current verifier rejects a token for the wrong %s", async (_label, issuer, audience) => {
+		const token = await new SignJWT({})
+			.setProtectedHeader({ alg: "HS256", kid: JWT_KID, typ: "at+jwt" })
+			.setIssuedAt().setExpirationTime("1h")
+			.setIssuer(issuer).setAudience(audience).setSubject(testDid)
+			.sign(createSecretKey(Buffer.from(JWT_SECRET)));
+		const res = await fetch(policyVerifierUrl("/verify"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+			body: JSON.stringify({ resource: "registry.project", action: "read" }),
+		});
+		expect(res.status).toBe(401);
+	});
+});
+
+// ─── Revocation and audit ────────────────────────────────────────────────────
+
+async function issueDidToken(forDid: string = testDid): Promise<string> {
+	const { did, message, signature } = await buildDidTokenRequest(forDid);
+	const res = await fetch(authProviderUrl("/oauth/token"), {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			grant_type: DID_GRANT_TYPE,
+			client_id: TEST_CLIENT_ID,
+			did,
+			message,
+			signature,
+		}),
+	});
+	expect(res.status, `token response (body: ${await res.clone().text()})`).toBe(200);
+	return ((await res.json()) as { access_token: string }).access_token;
+}
+
+async function selfIntrospect(token: string): Promise<{ active: boolean }> {
+	const res = await fetch(authProviderUrl("/oauth/introspect"), {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/x-www-form-urlencoded",
+			Authorization: `Bearer ${token}`,
+		},
+		body: new URLSearchParams({ token }),
+	});
+	expect(res.status).toBe(200);
+	return (await res.json()) as { active: boolean };
+}
+
+describe("revocation and audit are wired, not declared absent", () => {
+	it("records DID token issuance on the configured audit sink", async () => {
+		const lines: string[] = [];
+		const spy = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				lines.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+				return true;
+			});
+		try {
+			await issueDidToken();
+			await vi.waitFor(() => {
+				const events = lines
+					.flatMap((l) => l.split("\n"))
+					.filter((l) => l.startsWith("{"))
+					.map((l) => JSON.parse(l) as { type?: string });
+				expect(events.map((e) => e.type)).toContain("token.issued");
+			});
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	// The DID grant binds its tokens to the authenticated client (client_id /
+	// azp), so /oauth/revoke finds the owning client and denylists the jti.
+	// Before that binding, azp carried the audience and revoke silently
+	// skipped DID tokens while still answering 200.
+	it("RFC 7009 revocation of a DID-issued access token takes effect at introspection", async () => {
+		const token = await issueDidToken();
+		expect((await selfIntrospect(token)).active).toBe(true);
+
+		const res = await fetch(authProviderUrl("/oauth/revoke"), {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				token,
+				token_type_hint: "access_token",
+				client_id: TEST_CLIENT_ID,
+			}),
+		});
+		expect(res.status, `revoke response (body: ${await res.clone().text()})`).toBe(200);
+
+		expect((await selfIntrospect(token)).active).toBe(false);
+	});
+
+	it("a subject revocation boundary invalidates the subject's already-issued tokens", async () => {
+		const token = await issueDidToken(revokedSubjectDid);
+		expect((await selfIntrospect(token)).active).toBe(true);
+
+		const subjectRevocation = authProviderComponents.subjectRevocation;
+		expect(subjectRevocation, "subjectRevocation must be wired").toBeDefined();
+		// Boundary one second ahead: every token issued so far (iat in whole
+		// seconds) falls before it, whatever the clock's sub-second phase.
+		await subjectRevocation?.revokeBefore(
+			revokedSubjectDid,
+			new Date(Date.now() + 1000),
+			new Date(Date.now() + 3600 * 1000),
+		);
+
+		expect((await selfIntrospect(token)).active).toBe(false);
+		// Scoped to that subject: testDid's tokens are untouched.
+		expect((await selfIntrospect(await issueDidToken())).active).toBe(true);
 	});
 });

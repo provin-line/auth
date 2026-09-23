@@ -95,6 +95,7 @@ const methodId = "did:key:z6MkClaims#key-1";
  */
 async function buildSignedRequest(
 	did: string,
+	audience?: string,
 ): Promise<{ ctx: GrantContext; resolver: DidDocumentResolver; didDoc: DidDocument }> {
 	const privateKey = ed.utils.randomSecretKey();
 	const publicKey = await ed.getPublicKeyAsync(privateKey);
@@ -114,6 +115,7 @@ async function buildSignedRequest(
 
 	const message = JSON.stringify({
 		did,
+		...(audience ? { audience } : {}),
 		timestamp: new Date().toISOString(),
 		nonce: `nonce-${Date.now()}-${Math.random()}`,
 	});
@@ -362,5 +364,43 @@ describe("createDidGrant — select-step failure mapping (Task 9 reviewer fix)",
 		expect(
 			"errorDescription" in result && result.errorDescription,
 		).not.toContain("duplicate-method-id");
+	});
+});
+
+describe("createDidGrant — client binding (RFC 9068 §2.2)", () => {
+	it("binds the token to the authenticated client: client_id and azp name it", async () => {
+		const did = "did:key:z6MkClientBound";
+		const { ctx, resolver } = await buildSignedRequest(did);
+		const handler = createDidGrant(mockDeps, { resolver });
+		const boundCtx = {
+			...ctx,
+			// A body client_id that disagrees proves the claim comes from the
+			// authenticated client, never from the attacker-controlled body.
+			body: { ...ctx.body, client_id: "body-claims-another-client" },
+			authenticatedClient: { clientId: "client-a" },
+		} as unknown as GrantContext;
+
+		const { result } = await handler.handle(boundCtx);
+
+		expect(result.status).toBe(200);
+		if (!("tokens" in result)) throw new Error("expected a token response");
+		const payload = decodeJwt(result.tokens.access_token);
+		expect(payload.client_id).toBe("client-a");
+		expect(payload.azp).toBe("client-a");
+	});
+
+	it("does not stamp the audience as azp: with no authenticated client, neither claim is minted", async () => {
+		const did = "did:key:z6MkNoClient";
+		const { ctx, resolver } = await buildSignedRequest(did, "https://api.example.com");
+		const handler = createDidGrant(mockDeps, { resolver });
+
+		const { result } = await handler.handle(ctx);
+
+		expect(result.status).toBe(200);
+		if (!("tokens" in result)) throw new Error("expected a token response");
+		const payload = decodeJwt(result.tokens.access_token);
+		expect(payload.aud).toBe("https://api.example.com");
+		expect(payload).not.toHaveProperty("client_id");
+		expect(payload).not.toHaveProperty("azp");
 	});
 });

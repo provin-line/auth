@@ -12,11 +12,13 @@ oauth {
     algorithm = "HS256"
     algorithm = ${?OAUTH_JWT_ALGORITHM}
     secret = ${?OAUTH_JWT_SECRET}
+    issuer = ${?OAUTH_JWT_ISSUER}
+    audience = ${?OAUTH_JWT_AUDIENCE}
     jwksUri = ${?OAUTH_JWT_JWKS_URI}
     publicKey = ${?OAUTH_JWT_PUBLIC_KEY}
     publicKeyPath = ${?OAUTH_JWT_PUBLIC_KEY_PATH}
-    validate = true
-    validate = ${?OAUTH_JWT_VALIDATE}
+    # Verified JWTs only. Current upstream uses mode; 0.3.x defaults to validation.
+    mode = "verify"
   }
 }
 
@@ -32,12 +34,28 @@ attribute {
 
 rule {
   collectors = [
-    { collector = "ResourceActionScopeRuleCollector" }
+    { collector = "ResourceActionScopeRuleCollector", scopeless = "skip" }
+    {
+      # DID tokens assert identity. Admit Owner DIDs to the declared surface;
+      # the downstream registry still enforces its resource-specific ACLs.
+      # This explicit rule also works with upstream deny-on-empty evaluation.
+      collector = "SubjectDidTypeRuleCollector"
+      rules = [
+        { resource = "schemas", action = "*", allowedTypes = ["owner"] }
+        { resource = "dids", action = "*", allowedTypes = ["owner"] }
+        { resource = "signer", action = "*", allowedTypes = ["owner"] }
+        { resource = "vc", action = "*", allowedTypes = ["owner"] }
+        { resource = "chain", action = "*", allowedTypes = ["owner"] }
+        { resource = "audit", action = "*", allowedTypes = ["owner"] }
+        { resource = "tlog", action = "*", allowedTypes = ["owner"] }
+        { resource = "ingest", action = "*", allowedTypes = ["owner"] }
+        { resource = "payloads", action = "*", allowedTypes = ["owner"] }
+      ]
+    }
     {
       # SECURITY NOTE — fail-closed default (keep this collector enabled).
-      # The policy evaluator ALLOWS a request when zero rules are collected,
-      # so without this collector every (resource, action) nobody wrote a
-      # policy for passes the PDP silently. DefaultDenyRuleCollector inverts
+      # Released 0.3.x allows empty rules; current upstream denies them.
+      # Keep an explicit surface guard with both versions. DefaultDenyRuleCollector inverts
       # that default: any request whose (resource, action) is not declared in
       # `surface` below is denied unconditionally.
       #

@@ -16,10 +16,15 @@
 import path from "node:path";
 import {
 	type AppConfig,
+	type AuditSinkFactory,
+	createAuditSinkFactory,
+	createInMemorySubjectRevocation,
+	createInMemorySubjectSessionIndex,
 	createKeyStoreFactory,
 	createRepositoryFactories,
 	defineModule,
 	type Module,
+	registerBuiltinAuditSinks,
 	registerBuiltinKeyStores,
 } from "@o3co/auth-provider-core";
 
@@ -127,6 +132,11 @@ export const clientRepositoryModule: Module = defineModule({
  */
 export const inMemoryCodeRepositoryModule: Module = defineModule({
 	name: "dplaax:in-memory-code-repository",
+	replicaSafety: {
+		unsafe: true,
+		reason:
+			"authorization codes live in one process — a code issued by one replica cannot be redeemed at another",
+	},
 	requires: ["config"] as const,
 	// D-5 (core 0.5.x): the in-memory code repository spawns a GC interval
 	// timer; the built-in adapter registers `clearInterval` via
@@ -152,5 +162,83 @@ export const inMemoryCodeRepositoryModule: Module = defineModule({
 			});
 			return codeFactory.create(slice);
 		},
+	},
+});
+
+/** Options for {@link createAuditSinkModule}. */
+export interface AuditSinkModuleOptions {
+	/**
+	 * Registers additional sink builders on the audit-sink factory, next to
+	 * core's built-in `"console"`. `audit.sink.type` then selects among all of
+	 * them, and the sink's options ride in the same block
+	 * (`sink { type = "x", x { … } }`).
+	 */
+	readonly registerSinks?: (factory: AuditSinkFactory) => void;
+}
+
+/**
+ * Builds the audit-sink module, which fills the `auditSink` slot that
+ * `oauthModule` reads to record security events (`token.issued`,
+ * `token.issued.failure`, …).
+ *
+ * The sink is the one `config.audit.sink.type` names, among core's built-in
+ * `"console"` (one JSON object per event on stdout) and whatever
+ * `registerSinks` adds. A config with no `audit` section gets `"console"`.
+ *
+ * There is no `"none"`, and that is this composition's policy rather than
+ * upstream's: core would accept `"none"` as a declared absence of the slot,
+ * but this module always fills it, so an unknown type — `"none"` included —
+ * fails boot and names the sinks that exist. That follows upstream's own
+ * guidance for composition roots (o3co auth-provider #287 / #304): saying
+ * nothing about auditing, or guessing a name, must not end in no audit trail.
+ */
+export function createAuditSinkModule(options: AuditSinkModuleOptions = {}): Module {
+	return defineModule({
+		name: "dplaax:audit-sink",
+		requires: ["config"] as const,
+		provides: {
+			auditSink: async ({ config }) => {
+				const factory = createAuditSinkFactory();
+				registerBuiltinAuditSinks(factory);
+				options.registerSinks?.(factory);
+				const slice = (
+					config as { audit?: { sink?: { type: string } & Record<string, unknown> } }
+				).audit?.sink;
+				return factory.create(slice ? flattenAdapterConfig(slice) : { type: "console" });
+			},
+		},
+	});
+}
+
+/** The audit-sink module with only core's built-in `"console"` sink. */
+export const auditSinkModule: Module = createAuditSinkModule();
+
+/**
+ * In-memory subject-revocation module — provides the subject-level revocation
+ * pair: `subjectRevocation` (the not-before watermark that token verification
+ * and introspection consult) and `subjectSessionIndex` (the per-subject index a
+ * revocation cascades over).
+ *
+ * With this pair wired, `subjectRevocation.revokeBefore(did, …)` invalidates
+ * every access token already issued to that DID, instead of leaving them valid
+ * until they expire.
+ *
+ * Single-process only: the watermark lives in this process, so a second
+ * replica would never see it. The manifest says so, which makes core refuse
+ * `deployment.mode = "multi"` with this module. Multi-replica deployments pass
+ * a shared implementation through
+ * `DplaaxBuildModulesOverrides.subjectRevocationModule`, for example the Redis
+ * session-store module from `@o3co/auth-provider-redis`.
+ */
+export const inMemorySubjectRevocationModule: Module = defineModule({
+	name: "dplaax:in-memory-subject-revocation",
+	replicaSafety: {
+		unsafe: true,
+		reason:
+			"the subject revocation watermark lives in one process — a DID revoked on one replica keeps its already-issued tokens working on the others",
+	},
+	provides: {
+		subjectSessionIndex: () => createInMemorySubjectSessionIndex(),
+		subjectRevocation: () => createInMemorySubjectRevocation(),
 	},
 });
