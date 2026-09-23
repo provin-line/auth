@@ -112,6 +112,9 @@ let authProviderComponents: Awaited<ReturnType<typeof createApp>>["components"];
 let privateKeyBytes: Uint8Array;
 let publicKeyBytes: Uint8Array;
 const testDid = "did:dplaax:registry.test.local:org:test-integration-001";
+// Only the subject-revocation test issues tokens for this DID. Its revocation
+// boundary would otherwise invalidate tokens that later tests issue for testDid.
+const revokedSubjectDid = "did:dplaax:registry.test.local:org:test-integration-subject-revoked";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -123,13 +126,13 @@ beforeAll(async () => {
 
 	// 2. Build DID Document for the test DID
 	const publicKeyBase64url = Buffer.from(publicKeyBytes).toString("base64url");
-	const didDocument: DidDocument = {
-		id: testDid,
+	const didDocumentFor = (did: string): DidDocument => ({
+		id: did,
 		verificationMethod: [
 			{
-				id: `${testDid}#key-1`,
+				id: `${did}#key-1`,
 				type: "JsonWebKey2020",
-				controller: testDid,
+				controller: did,
 				publicKeyJwk: {
 					kty: "OKP",
 					crv: "Ed25519",
@@ -137,13 +140,17 @@ beforeAll(async () => {
 				},
 			},
 		],
-	};
+	});
+	const didDocuments = new Map(
+		[testDid, revokedSubjectDid].map((did) => [did.split(":").at(-1), didDocumentFor(did)]),
+	);
 
 	// 3. Start mock DID registry (serves DID Documents over HTTP)
 	const registryApp = express();
 	registryApp.get("/did/org/:id/did.json", (req, res) => {
-		if (req.params.id === "test-integration-001") {
-			res.json(didDocument);
+		const document = didDocuments.get(req.params.id);
+		if (document) {
+			res.json(document);
 		} else {
 			res.status(404).json({ error: "not found" });
 		}
@@ -368,13 +375,13 @@ function policyVerifierUrl(path: string): string {
 	return `http://127.0.0.1:${policyVerifierPort}${path}`;
 }
 
-async function buildDidTokenRequest(): Promise<{
+async function buildDidTokenRequest(did: string = testDid): Promise<{
 	did: string;
 	message: string;
 	signature: string;
 }> {
 	const message = JSON.stringify({
-		did: testDid,
+		did,
 		audience: JWT_AUDIENCE,
 		timestamp: new Date().toISOString(),
 		nonce: crypto.randomBytes(16).toString("hex"),
@@ -382,7 +389,7 @@ async function buildDidTokenRequest(): Promise<{
 	const messageBytes = new TextEncoder().encode(message);
 	const sig = await ed.signAsync(messageBytes, privateKeyBytes);
 	const signature = Buffer.from(sig).toString("base64");
-	return { did: testDid, message, signature };
+	return { did, message, signature };
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -580,8 +587,8 @@ describe("DID auth → JWT → policy verification", () => {
 
 // ─── Revocation and audit ────────────────────────────────────────────────────
 
-async function issueDidToken(): Promise<string> {
-	const { did, message, signature } = await buildDidTokenRequest();
+async function issueDidToken(forDid: string = testDid): Promise<string> {
+	const { did, message, signature } = await buildDidTokenRequest(forDid);
 	const res = await fetch(authProviderUrl("/oauth/token"), {
 		method: "POST",
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -633,15 +640,11 @@ describe("revocation and audit are wired, not declared absent", () => {
 		}
 	});
 
-	// KNOWN GAP, pinned with `it.fails`: the denylist is wired, but a DID-issued
-	// access token carries no `client_id`, and the DID grant stamps `azp` with
-	// the token's AUDIENCE rather than the requesting client. Upstream
-	// /oauth/revoke binds a revocation to the owning client (`client_id`, else
-	// `azp`) and, per RFC 7009, answers 200 even when it skips one — so no
-	// client can revoke a DID token and the call silently does nothing. When
-	// the DID grant binds its tokens to the requesting client, this test
-	// starts passing and `it.fails` reports that: flip it back to `it`.
-	it.fails("RFC 7009 revocation of a DID-issued access token takes effect at introspection", async () => {
+	// The DID grant binds its tokens to the authenticated client (client_id /
+	// azp), so /oauth/revoke finds the owning client and denylists the jti.
+	// Before that binding, azp carried the audience and revoke silently
+	// skipped DID tokens while still answering 200.
+	it("RFC 7009 revocation of a DID-issued access token takes effect at introspection", async () => {
 		const token = await issueDidToken();
 		expect((await selfIntrospect(token)).active).toBe(true);
 
@@ -660,7 +663,7 @@ describe("revocation and audit are wired, not declared absent", () => {
 	});
 
 	it("a subject revocation boundary invalidates the subject's already-issued tokens", async () => {
-		const token = await issueDidToken();
+		const token = await issueDidToken(revokedSubjectDid);
 		expect((await selfIntrospect(token)).active).toBe(true);
 
 		const subjectRevocation = authProviderComponents.subjectRevocation;
@@ -668,11 +671,13 @@ describe("revocation and audit are wired, not declared absent", () => {
 		// Boundary one second ahead: every token issued so far (iat in whole
 		// seconds) falls before it, whatever the clock's sub-second phase.
 		await subjectRevocation?.revokeBefore(
-			testDid,
+			revokedSubjectDid,
 			new Date(Date.now() + 1000),
 			new Date(Date.now() + 3600 * 1000),
 		);
 
 		expect((await selfIntrospect(token)).active).toBe(false);
+		// Scoped to that subject: testDid's tokens are untouched.
+		expect((await selfIntrospect(await issueDidToken())).active).toBe(true);
 	});
 });

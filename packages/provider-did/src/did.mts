@@ -630,6 +630,15 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 			// 11. Generate token, minting the six required claims (rules
 			// auth.token.signed-claims / auth.token.issuance-vs-request) from
 			// `input` above.
+			//
+			// Client binding (RFC 9068 §2.2): `client_id` and `azp` name the
+			// client that `clientAuthMw` authenticated at /token — never the
+			// attacker-controlled `body.client_id`, and never the audience
+			// (which this grant used to stamp as `azp`, leaving the token with
+			// no owning client: RFC 7009 /oauth/revoke then skipped it while
+			// answering 200). With no authenticated client (direct invocation
+			// outside /token), neither claim is minted.
+			const clientId = ctx.authenticatedClient?.clientId ?? null;
 			return {
 				result: {
 					status: 200,
@@ -642,13 +651,14 @@ export const createDidGrant = (deps: GrantDependencies, options: DidGrantOptions
 								lifecycle_state_ref: input.lifecycleStateRef,
 								lifecycle_freshness_ref: input.lifecycleFreshnessRef,
 								authorization_scope: AUTHZ_SCOPE_AT_ISSUANCE,
+								...(clientId ? { client_id: clientId } : {}),
 							},
 							{
 								expiresIn,
 								keyStore,
 								issuer,
 								subject: verification.subject,
-								authorizedParty: verification.audience ?? null,
+								authorizedParty: clientId,
 								tokenType: "at+jwt",
 								audience: verification.audience,
 							},

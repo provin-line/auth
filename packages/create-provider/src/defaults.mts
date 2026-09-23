@@ -15,8 +15,7 @@
 // These constants are the dependency baseline of the canonical template
 // (originally the pre-M4 reference instance's package.json — 2026-05-28 snapshot, provin-line/auth
 // commit 21fe40c; auth baseline refreshed 2026-09-06 to the released
-// auth.provider 0.12.0 with generator 0.2.0; refreshed 2026-09-23 to
-// auth.provider 0.15.0 with generator 0.3.0). When the baseline upgrades,
+// auth.provider 0.15.0 with generator 0.2.0). When the baseline upgrades,
 // refresh this file in lockstep with a generator MINOR bump (see create-app.md § 3.3).
 
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */
@@ -26,6 +25,9 @@ export const DEFAULT_DEP_VERSIONS = {
 	"@o3co/ts.hocon": "0.1.5",
 	// Runtime — non-o3co
 	express: "5.2.1",
+	// Peer of @o3co/auth-provider-oauth since 0.11.0; emitted as a direct dep
+	// so the exact-pin baseline covers it.
+	"express-session": "1.19.0",
 	// The scaffold's own logger writes NDJSON through pino (see src/logger.mts);
 	// it used to reach pino only as @o3co/auth.utils' optional peer, which was
 	// never emitted here, so instances silently logged through console.

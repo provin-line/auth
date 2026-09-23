@@ -196,6 +196,18 @@ type AnyDeps = any;
 export const oauthDidModule = (options: DidModuleOptions): Module =>
 	defineModule({
 		name: "oauth-did",
+		// With no caller-supplied store, the grant falls back to its in-process
+		// replay nonce store, which forks per replica. Declared so core refuses
+		// `deployment.mode = "multi"` in that case.
+		...(options.nonceStore
+			? {}
+			: {
+					replicaSafety: {
+						unsafe: true,
+						reason:
+							"the DID grant's replay nonces live in one process — a signed login message consumed on one replica can be replayed to another",
+					},
+				}),
 		configSchema: didConfigSchema,
 		requires: ["config", "keyStore", "pathResolver"],
 		contributes: {

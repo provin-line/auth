@@ -1,7 +1,7 @@
 # Upstream auth compatibility
 
 Workspace packages require provider `^0.15.0` and verifier `^0.12.0`, and the
-generators (0.3.0) emit the same as exact pins. Updating this repository's git
+generators (0.2.0) emit the same as exact pins. Updating this repository's git
 ref alone does **not** deploy newer upstream security fixes to an instance that
 already exists: its own `package.json` pins and its `application.conf` must be
 updated too (see below).
@@ -28,33 +28,47 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 - Generated Provider config supplies required `http.readinessTimeoutMs` and
   `logging.level`.
 - Upstream refuses to boot when a security capability `oauthModule` reads is
-  neither wired nor declared absent. `buildModules` wires all of them, so an
-  instance's config must not declare any of them absent:
+  neither wired nor declared absent. `buildModules` wires all of them:
   - **Audit sink.** `audit.sink.type` names the sink; `"console"` (one JSON
-    object per event on stdout) is built in and is the default. `"none"` is
-    refused at boot: upstream removed it so that saying nothing about
-    auditing cannot mean having no audit trail.
+    object per event on stdout) is built in and is the default. Register
+    other sinks with `createAuditSinkModule({ registerSinks })`. `"none"` is
+    refused at boot. That is this composition's policy, not upstream's: core
+    would accept `"none"` as a declared absence, but this composition always
+    fills the slot, so saying nothing about auditing, or guessing a name,
+    cannot mean having no audit trail.
   - **Access-token denylist.** `oauth.revocation.accessToken = "denylist"`.
-    RFC 7009 revocation writes the token's `jti` to it; verification and
-    introspection consult it.
+    RFC 7009 revocation writes the token's `jti` to it; the provider's
+    verification and introspection consult it. The DID grant binds each token
+    to the client authenticated at `/token` (`client_id` / `azp`), which is
+    what lets that client revoke it.
   - **Subject revocation.** The `subjectRevocation` / `subjectSessionIndex`
-    pair is wired; leave `oauth.revocation.subject` unset.
-    `subjectRevocation.revokeBefore(did, …)` invalidates every token already
-    issued to that DID.
+    pair is wired. `subjectRevocation.revokeBefore(did, …)` invalidates every
+    token already issued to that DID. Nothing in this repository calls it yet:
+    the trigger (for example, a DID deactivated at the registry) is the
+    deployment's to connect.
 
-  Migrating an instance generated before 0.3.0: delete
-  `audit.sink.type = "none"`, `revocation.subject = "unsupported"` and
-  `revocation.accessToken = "unsupported"`, and add the `audit.sink` block and
-  `revocation.accessToken = "denylist"` from the current template.
-- The denylist and the subject-revocation pair are in-memory, so they hold
-  for one process only. Their manifests say so, and upstream refuses
-  `deployment.mode = "multi"` with them. A multi-replica deployment passes
-  shared implementations through `DplaaxBuildModulesOverrides`
-  (`accessTokenDenylistModule`, `subjectRevocationModule`, and
-  `auditSinkModule` for a non-console sink).
-- Nothing in this repository calls `subjectRevocation.revokeBefore` yet:
-  the capability is wired, and the trigger (for example, a DID deactivated
-  at the registry) is the deployment's to connect.
+  Revocation takes effect where the provider verifies a token: its
+  introspection endpoint and its own routes. A resource server that verifies
+  JWTs locally against the provider's JWKS, as the generated policy-verifier
+  does, consults neither store; for it, the access-token lifetime (900s in the
+  scaffold) is still the bound.
+
+  Migrating an instance generated earlier:
+  - `audit.sink.type = "none"` **must** go, or boot fails. Add the
+    `audit.sink` block from the current template.
+  - `revocation.accessToken = "unsupported"` still boots, but keeps
+    access-token revocation off: `/oauth/revoke` answers
+    `unsupported_token_type`. Change it to `"denylist"`.
+  - `revocation.subject = "unsupported"` still boots and is ignored, since
+    the slot is now filled. Delete it.
+- Every in-process store declares itself replica-unsafe: the code repository,
+  the DID grant's nonce store when no `nonceStore` override is given, the
+  denylist and the subject-revocation pair. `DplaaxConfigSchema` keeps
+  `deployment.mode` (it used to strip it, so the guard never saw it), and the
+  template reads it from `DEPLOYMENT_MODE`. With `"multi"`, core refuses to
+  boot until each store is replaced through `DplaaxBuildModulesOverrides`
+  (`codeRepositoryModule`, `nonceStore`, `accessTokenDenylistModule`,
+  `subjectRevocationModule`).
 - Current Provider separates JWKS publication from OAuth; current Verifier
   separates key-resolver registration. Composition includes those modules when
   available; released versions retain their internal wiring.

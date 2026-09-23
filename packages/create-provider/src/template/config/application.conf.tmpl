@@ -12,6 +12,15 @@ logging {
   level = ${?LOG_LEVEL}
 }
 
+# "multi" makes core refuse to boot while any in-process store is wired (the
+# code repository, the DID nonce store, the access-token denylist, the
+# subject-revocation pair): each forks per replica. No literal default —
+# absent means a single process. Set DEPLOYMENT_MODE=multi on every
+# multi-replica deployment, after swapping in shared stores.
+deployment {
+  mode = ${?DEPLOYMENT_MODE}
+}
+
 # Where security audit events go (token.issued, token.issued.failure, ...).
 # "console" writes one JSON object per event to stdout, which every container
 # runtime already collects. There is no "none": an unknown sink type fails

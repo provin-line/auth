@@ -279,3 +279,14 @@ describe("scaffolded application.conf — security capabilities are wired, not d
 		expect(conf).toMatch(/^\s*revocation\.accessToken\s*=\s*"denylist"\s*$/m);
 	});
 });
+
+describe("scaffolded application.conf — deployment mode", () => {
+	// No literal default, as upstream (#271): single-process is what the
+	// absent key means, and DEPLOYMENT_MODE=multi makes core refuse the
+	// in-process stores this scaffold wires.
+	it("reads deployment.mode from DEPLOYMENT_MODE only", async () => {
+		const conf = await renderApplicationConf();
+		expect(conf).toMatch(/^\s*mode\s*=\s*\$\{\?DEPLOYMENT_MODE\}\s*$/m);
+		expect(conf).not.toMatch(/^\s*mode\s*=\s*"/m);
+	});
+});

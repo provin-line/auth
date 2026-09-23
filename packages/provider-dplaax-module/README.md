@@ -13,10 +13,11 @@ This package is the upstream dPLaaX extension that a deployment consumes alongsi
 | `buildModules(config, overrides?)` | Compose the dPLaaX auth-provider module list for `createApp({ modules })`. |
 | `DplaaxAppConfig` (type) | Operational config shape consumed by `buildModules`. |
 | `DplaaxAppConfigBase` (type) | The `Pick<AppConfig, ...>` subset dPLaaX deployments populate. |
-| `DplaaxBuildModulesOverrides` (type) | Test/runtime override surface (`keyStoreModule`, `clientRepositoryModule`, `codeRepositoryModule`, `didResolver`). |
+| `DplaaxBuildModulesOverrides` (type) | Test/runtime override surface (`keyStoreModule`, `clientRepositoryModule`, `codeRepositoryModule`, `auditSinkModule`, `accessTokenDenylistModule`, `subjectRevocationModule`, `didResolver`, `nonceStore`). |
 | `DplaaxConfigSchema` | Zod schema that validates parsed HOCON against `DplaaxAppConfig`. |
 | `DplaaxConfigParsed` (type) | `z.infer<typeof DplaaxConfigSchema>` for callers that want the zod-narrowed view. |
-| `keyStoreModule` / `clientRepositoryModule` / `inMemoryCodeRepositoryModule` | Built-in module implementations. |
+| `keyStoreModule` / `clientRepositoryModule` / `inMemoryCodeRepositoryModule` / `inMemorySubjectRevocationModule` / `auditSinkModule` | Built-in module implementations. |
+| `createAuditSinkModule({ registerSinks? })` / `AuditSinkModuleOptions` (type) | Audit-sink module that also offers the sinks `registerSinks` adds; `audit.sink.type` selects one. |
 | `DplaaxDidResolver` | did:dplaax resolver enforcing owner-only DIDs + registry allow-list. |
 | `parseDplaaxDid` / `validateDplaaxDid` / `classifyDplaaxDid` / `requireOwner` / `requireKnownPattern` / `getSupportedAccountTypes` / `isSupportedAccountType` | DID parser + validator helpers. |
 
@@ -27,10 +28,26 @@ This package is the upstream dPLaaX extension that a deployment consumes alongsi
 1. `keyStoreModule` — JWT signing key store (built-in adapters: local / jwks)
 2. `clientRepositoryModule` — yaml-backed client registry (lifecycle-aware file watcher)
 3. `inMemoryCodeRepositoryModule` — in-process OAuth code repository (PoC default; swap for Redis via the override)
-4. `oauthModule` (upstream `@o3co/auth-provider-oauth`)
-5. `oauthDidModule` (upstream `@provin-line/auth-provider-did`) wired with `DplaaxDidResolver`
+4. `auditSinkModule` — the audit sink `audit.sink.type` names (`"console"`, one JSON object per event on stdout, by default). `"none"` is refused: this composition always records security events.
+5. `memoryAccessTokenDenylistModule` (upstream core) — the denylist RFC 7009 access-token revocation writes to (`oauth.revocation.accessToken = "denylist"`)
+6. `inMemorySubjectRevocationModule` — the `subjectRevocation` / `subjectSessionIndex` pair; `subjectRevocation.revokeBefore(did, …)` invalidates the DID's already-issued tokens
+7. `jwksModule` (upstream core), when the installed core exports it
+8. `oauthModule` (upstream `@o3co/auth-provider-oauth`)
+9. `oauthDidModule` (upstream `@provin-line/auth-provider-did`) wired with `DplaaxDidResolver`
 
 Each module can be overridden via `DplaaxBuildModulesOverrides` — used by integration tests to inject mock registries and by production deployments to swap memory-backed repositories for Redis.
+
+Revocation, whether by RFC 7009 or by subject, takes effect where the
+provider itself verifies a token: its introspection endpoint and its own
+routes. A resource server that verifies JWTs locally against the provider's
+JWKS, as the generated policy-verifier does, never consults either store;
+for it, the access-token lifetime (900s in the scaffold) remains the bound.
+
+Every in-process store (the code repository, the DID nonce store when no
+`nonceStore` override is given, the denylist, the subject-revocation pair)
+declares itself replica-unsafe. With `deployment.mode = "multi"`
+(`DEPLOYMENT_MODE=multi` in the scaffold), core refuses to boot until each
+is replaced by a shared implementation.
 
 ## Usage
 

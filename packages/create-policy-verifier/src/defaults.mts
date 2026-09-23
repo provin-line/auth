@@ -15,8 +15,7 @@
 // These constants are the dependency baseline of the canonical template
 // (originally the pre-M4 reference instance's package.json — 2026-05-28 snapshot, provin-line/auth
 // commit 220f52f; auth baseline refreshed 2026-09-06 to the released
-// auth.policy-verifier 0.8.1 with generator 0.2.0; refreshed 2026-09-23 to
-// auth.policy-verifier 0.12.0 with generator 0.3.0). When the baseline upgrades,
+// auth.policy-verifier 0.12.0 with generator 0.2.0). When the baseline upgrades,
 // refresh this file in lockstep with a generator MINOR bump (see create-app.md § 3.3).
 
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */

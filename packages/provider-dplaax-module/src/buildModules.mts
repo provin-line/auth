@@ -38,7 +38,8 @@ import { DplaaxDidResolver } from "./resolver/dplaax.mjs";
 /**
  * Operational shape of the dPLaaX auth-provider config. Picks only the upstream
  * `AppConfig` sections that this DID-only deployment actually populates
- * (`http` / `oauth` / `endpoints` / `repositories`); session / federation /
+ * (`http` / `oauth` / `endpoints` / `repositories`, plus `deployment`, which
+ * core's replica-safety guard reads); session / federation /
  * rateLimit / cors are intentionally omitted instead of stubbed with
  * `undefined`. A future upstream change that makes `oauthModule({config})`
  * read one of the omitted sections unconditionally will surface as a type
@@ -47,7 +48,7 @@ import { DplaaxDidResolver } from "./resolver/dplaax.mjs";
  */
 export type DplaaxAppConfigBase = Pick<
 	AppConfig,
-	"http" | "oauth" | "endpoints" | "repositories"
+	"http" | "oauth" | "endpoints" | "repositories" | "deployment"
 >;
 
 export interface DplaaxAppConfig extends DplaaxAppConfigBase {
@@ -74,8 +75,10 @@ export interface DplaaxBuildModulesOverrides {
 	/** Override the codeRepository module (test-only). */
 	readonly codeRepositoryModule?: Module;
 	/**
-	 * Replace the audit-sink module, e.g. with one that registers a log
-	 * pipeline or SIEM sink. Defaults to `auditSinkModule`.
+	 * Replace the audit-sink module. Defaults to `auditSinkModule` (the
+	 * built-in `"console"` sink only). To add a log-pipeline or SIEM sink,
+	 * pass `createAuditSinkModule({ registerSinks })` and select it with
+	 * `audit.sink.type`.
 	 */
 	readonly auditSinkModule?: Module;
 	/**
@@ -86,10 +89,13 @@ export interface DplaaxBuildModulesOverrides {
 	 */
 	readonly accessTokenDenylistModule?: Module;
 	/**
-	 * Replace the module that provides the subject-level revocation pair
-	 * (`subjectRevocation` + `subjectSessionIndex`). Defaults to
-	 * `inMemorySubjectRevocationModule`; multi-replica deployments pass a
-	 * shared one.
+	 * Replace the module that provides the subject-level revocation pair.
+	 * The replacement must provide BOTH `subjectRevocation` and
+	 * `subjectSessionIndex`. They are one capability: the watermark refuses
+	 * tokens, and the index is what a subject-wide revocation cascades over.
+	 * Nothing type-checks the pair, so a module with only one of them leaves
+	 * the other unwired. Defaults to `inMemorySubjectRevocationModule`;
+	 * multi-replica deployments pass a shared one.
 	 */
 	readonly subjectRevocationModule?: Module;
 	/**
