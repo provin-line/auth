@@ -77,7 +77,7 @@ describe("DefaultDenyRuleCollector", () => {
       message: "scope check",
       verify: () => true,
     };
-    const decision = evaluate(new Map(), [passingRule, ...denyRules]);
+    const decision = await evaluate(new Map(), [passingRule, ...denyRules]);
     expect(decision).toMatchObject({
       decision: "deny",
       code: "undeclared_resource_action",
@@ -93,7 +93,7 @@ describe("DefaultDenyRuleCollector", () => {
       message: "scope check",
       verify: () => true,
     };
-    const decision = evaluate(new Map(), [passingRule, ...denyRules]);
+    const decision = await evaluate(new Map(), [passingRule, ...denyRules]);
     expect(decision).toMatchObject({ decision: "allow" });
   });
 });
