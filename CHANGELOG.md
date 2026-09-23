@@ -42,6 +42,32 @@ releases.
 
 ### Added
 
+- **The provider composition wires every security capability upstream can
+  read, instead of declaring them absent.** Previously a DID-issued token could
+  not be revoked before it expired, and no audit event was recorded.
+  `buildModules` now includes:
+  - `auditSinkModule` (new export): the sink named by `audit.sink.type`,
+    `"console"` by default. `token.issued` and `token.issued.failure` events
+    now reach stdout. `createAuditSinkModule({ registerSinks })` (new export)
+    builds the same module with additional sinks for `audit.sink.type` to
+    select.
+  - core's `memoryAccessTokenDenylistModule`: RFC 7009 revocation of an access
+    token writes to it, and the provider's verification and introspection
+    consult it. With the client binding (see Changed), the client a DID token
+    was issued to can now revoke it.
+  - `inMemorySubjectRevocationModule` (new export): the `subjectRevocation` /
+    `subjectSessionIndex` pair. `subjectRevocation.revokeBefore(did, …)`
+    invalidates every token already issued to that DID.
+
+  Both kinds of revocation take effect where the provider verifies a token.
+  A resource server that verifies JWTs locally against the JWKS, such as the
+  generated policy-verifier, consults neither store; the token lifetime is
+  still its bound. The two in-memory stores are single-process and declare
+  themselves replica-unsafe.
+  `DplaaxBuildModulesOverrides` gains `auditSinkModule`,
+  `accessTokenDenylistModule` and `subjectRevocationModule`, so a
+  multi-replica deployment can pass shared implementations.
+
 - The OWNER login contracts (`OWNER_AUTHENTICATION_LOGIN@1`,
   `OWNER_ASSERTION_CONTROL_LOGIN@1`) are now wired into the DID grant's
   request handler. `handle()` dispatches on the configured `authContract`:
@@ -69,13 +95,45 @@ releases.
 
 ### Changed
 
+- **BREAKING (config): the provider composition no longer accepts security
+  capabilities declared absent.** `buildModules` now wires an audit sink, an
+  access-token denylist and the subject-revocation pair (see Added), so
+  `audit.sink.type = "none"` fails boot. That refusal is this composition's
+  policy: core would accept `"none"` as a declared absence, but the slot is
+  always filled here. `DplaaxConfigSchema` now takes any sink name instead of
+  only `"none"`. The generated `application.conf` selects
+  `audit.sink.type = "console"` (override: `AUDIT_SINK_TYPE`) and
+  `oauth.revocation.accessToken = "denylist"`, and drops
+  `revocation.subject = "unsupported"`. For instances generated earlier, only
+  the `"none"` line breaks boot; the migration is in
+  [upstream compatibility](docs/upstream-compatibility.md).
+
+- **DID-issued tokens are bound to the authenticated client.** The DID grant
+  used to stamp `azp` with the token's *audience* and mint no `client_id`, so
+  a token named no owning client. It now sets `client_id` and `azp` to the
+  client that `/token` authenticated (RFC 9068 §2.2) — never the request
+  body's `client_id` — and mints neither when there is none. `aud` still
+  carries the audience. No consumer in the provin family reads `azp`.
+
+- **`deployment.mode = "multi"` is enforced.** `DplaaxConfigSchema` used to
+  strip `deployment`, so core's replica-safety guard never saw it and an
+  instance booted multi-replica on in-process stores. The schema now keeps
+  it, `DplaaxAppConfig` carries it, and the template reads it from
+  `DEPLOYMENT_MODE`. `inMemoryCodeRepositoryModule`, and `oauthDidModule` when
+  it falls back to its in-process nonce store, now declare themselves
+  replica-unsafe as well, so `"multi"` refuses to boot until every in-process
+  store is replaced.
+
 - **The auth baseline is the released upstream, not a 0.3.x / 0.5.x pin with a
   compatibility shim.** Every workspace package now requires
-  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.8.1` and
-  `@o3co/auth-provider-{core,oauth}` `^0.12.0` — the versions published on
-  2026-09-06 — and the generators emit the same as exact pins
-  (`DEFAULT_DEP_VERSIONS`: 0.8.1 / 0.12.0), with both generators bumped to
-  0.2.0 per create-app.md § 3.3. The dual-path shim that let the collectors
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.12.0` and
+  `@o3co/auth-provider-{core,oauth}` `^0.15.0` — the latest releases — and the
+  generators emit the same as exact pins (`DEFAULT_DEP_VERSIONS`: 0.12.0 /
+  0.15.0), with both generators bumped to 0.2.0 per create-app.md § 3.3.
+  `create-provider` also emits `express-session`, a peer of
+  `@o3co/auth-provider-oauth` since 0.11.0, as an exact pin. Upstream core
+  `evaluate()` is async since verifier 0.10.0; no production code here called
+  it. The dual-path shim that let the collectors
   read `payload` or `subject` and reach `readUntrustedRequestContext` by
   reflection (`collectors/context.mts`) is removed: collectors read
   `context.subject` and call `readUntrustedRequestContext` directly, and the
@@ -89,6 +147,9 @@ releases.
 
 - Refresh vulnerable transitive lockfile entries: js-yaml 4.3.2, qs 6.16.0,
   nanoid 3.3.18 and brace-expansion 5.0.9. CI audits the dependency graph.
+  vitest and @vitest/coverage-v8 move to `^4.1.11` (GHSA-82fw-gwwq-j7x9,
+  path traversal via the @vitest/mocker redirect mock), and both generators
+  emit vitest 4.1.11.
 - Prepare generated instances for current upstream auth while retaining released
   dependency pins: align Zod 4.5.4, wire separated JWKS/key-resolver modules,
   update required configuration and support verified subject bags plus explicitly

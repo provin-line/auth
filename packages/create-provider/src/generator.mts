@@ -205,6 +205,9 @@ function buildPackageJson(opts: FilledOptions): string {
 		"@o3co/auth-provider-core": DEFAULT_DEP_VERSIONS["@o3co/auth-provider-core"],
 		"@o3co/ts.hocon": DEFAULT_DEP_VERSIONS["@o3co/ts.hocon"],
 		express: DEFAULT_DEP_VERSIONS.express,
+		// Peer of @o3co/auth-provider-oauth (0.11+): pinned here so the
+		// instance does not get whatever peer auto-install picks.
+		"express-session": DEFAULT_DEP_VERSIONS["express-session"],
 		pino: DEFAULT_DEP_VERSIONS.pino,
 		// Direct dep so the ed25519_raw DID-grant verifier's
 		// import.meta.resolve("@noble/ed25519") resolves from the instance root.

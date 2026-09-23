@@ -150,6 +150,18 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 		expect(pkg.dependencies.pino).toBe("10.3.1");
 	});
 
+	it("emits express-session as an exact-pinned runtime dep", async () => {
+		// @o3co/auth-provider-oauth 0.15 declares express-session as a peer. An
+		// instance would otherwise get whatever version the package manager's
+		// peer auto-install picks, outside the exact-pin baseline.
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
+			dependencies: Record<string, string>;
+		};
+		expect(pkg.dependencies["express-session"]).toBe("1.19.0");
+	});
+
 	it("emits exact-pin dep versions (no caret)", async () => {
 		const outDir = join(tmpRoot, "out");
 		await generateAuthProviderScaffold({

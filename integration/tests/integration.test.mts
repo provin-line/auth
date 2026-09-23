@@ -56,7 +56,7 @@ import {
 import { dplaaxModule } from "@provin-line/auth-policy-verifier-dplaax-module";
 import express from "express";
 import { SignJWT } from "jose";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { makeMockResolution } from "./utils.mjs";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
@@ -106,11 +106,15 @@ let authProviderPort: number;
 let policyVerifierPort: number;
 
 let authProviderDispose: (() => Promise<void>) | undefined;
+let authProviderComponents: Awaited<ReturnType<typeof createApp>>["components"];
 
 // DID key material
 let privateKeyBytes: Uint8Array;
 let publicKeyBytes: Uint8Array;
 const testDid = "did:dplaax:registry.test.local:org:test-integration-001";
+// Only the subject-revocation test issues tokens for this DID. Its revocation
+// boundary would otherwise invalidate tokens that later tests issue for testDid.
+const revokedSubjectDid = "did:dplaax:registry.test.local:org:test-integration-subject-revoked";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -122,13 +126,13 @@ beforeAll(async () => {
 
 	// 2. Build DID Document for the test DID
 	const publicKeyBase64url = Buffer.from(publicKeyBytes).toString("base64url");
-	const didDocument: DidDocument = {
-		id: testDid,
+	const didDocumentFor = (did: string): DidDocument => ({
+		id: did,
 		verificationMethod: [
 			{
-				id: `${testDid}#key-1`,
+				id: `${did}#key-1`,
 				type: "JsonWebKey2020",
-				controller: testDid,
+				controller: did,
 				publicKeyJwk: {
 					kty: "OKP",
 					crv: "Ed25519",
@@ -136,13 +140,17 @@ beforeAll(async () => {
 				},
 			},
 		],
-	};
+	});
+	const didDocuments = new Map(
+		[testDid, revokedSubjectDid].map((did) => [did.split(":").at(-1), didDocumentFor(did)]),
+	);
 
 	// 3. Start mock DID registry (serves DID Documents over HTTP)
 	const registryApp = express();
 	registryApp.get("/did/org/:id/did.json", (req, res) => {
-		if (req.params.id === "test-integration-001") {
-			res.json(didDocument);
+		const document = didDocuments.get(req.params.id);
+		if (document) {
+			res.json(document);
 		} else {
 			res.status(404).json({ error: "not found" });
 		}
@@ -159,9 +167,11 @@ beforeAll(async () => {
 	const config: DplaaxAppConfig = {
 		http: { port: 0, trustProxy: false, readinessTimeoutMs: 2000 },
 		logging: { level: "silent" },
-		audit: { sink: { type: "none" } },
+		// The composition wires a real audit sink and real revocation stores:
+		// nothing here declares a capability absent.
+		audit: { sink: { type: "console" } },
 		oauth: {
-			revocation: { subject: "unsupported", accessToken: "unsupported" },
+			revocation: { accessToken: "denylist" },
 			jwt: {
 				issuer: JWT_ISSUER,
 				legacyTypAccept: false,
@@ -283,6 +293,7 @@ beforeAll(async () => {
 		},
 	});
 	authProviderDispose = () => handle.dispose();
+	authProviderComponents = handle.components;
 	authExpressApp.use(handle.router);
 
 	const authResult = await listenOnFreePort(authExpressApp);
@@ -364,13 +375,13 @@ function policyVerifierUrl(path: string): string {
 	return `http://127.0.0.1:${policyVerifierPort}${path}`;
 }
 
-async function buildDidTokenRequest(): Promise<{
+async function buildDidTokenRequest(did: string = testDid): Promise<{
 	did: string;
 	message: string;
 	signature: string;
 }> {
 	const message = JSON.stringify({
-		did: testDid,
+		did,
 		audience: JWT_AUDIENCE,
 		timestamp: new Date().toISOString(),
 		nonce: crypto.randomBytes(16).toString("hex"),
@@ -378,7 +389,7 @@ async function buildDidTokenRequest(): Promise<{
 	const messageBytes = new TextEncoder().encode(message);
 	const sig = await ed.signAsync(messageBytes, privateKeyBytes);
 	const signature = Buffer.from(sig).toString("base64");
-	return { did: testDid, message, signature };
+	return { did, message, signature };
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -571,5 +582,102 @@ describe("DID auth → JWT → policy verification", () => {
 			body: JSON.stringify({ resource: "registry.project", action: "read" }),
 		});
 		expect(res.status).toBe(401);
+	});
+});
+
+// ─── Revocation and audit ────────────────────────────────────────────────────
+
+async function issueDidToken(forDid: string = testDid): Promise<string> {
+	const { did, message, signature } = await buildDidTokenRequest(forDid);
+	const res = await fetch(authProviderUrl("/oauth/token"), {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			grant_type: DID_GRANT_TYPE,
+			client_id: TEST_CLIENT_ID,
+			did,
+			message,
+			signature,
+		}),
+	});
+	expect(res.status, `token response (body: ${await res.clone().text()})`).toBe(200);
+	return ((await res.json()) as { access_token: string }).access_token;
+}
+
+async function selfIntrospect(token: string): Promise<{ active: boolean }> {
+	const res = await fetch(authProviderUrl("/oauth/introspect"), {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/x-www-form-urlencoded",
+			Authorization: `Bearer ${token}`,
+		},
+		body: new URLSearchParams({ token }),
+	});
+	expect(res.status).toBe(200);
+	return (await res.json()) as { active: boolean };
+}
+
+describe("revocation and audit are wired, not declared absent", () => {
+	it("records DID token issuance on the configured audit sink", async () => {
+		const lines: string[] = [];
+		const spy = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation((chunk: string | Uint8Array) => {
+				lines.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+				return true;
+			});
+		try {
+			await issueDidToken();
+			await vi.waitFor(() => {
+				const events = lines
+					.flatMap((l) => l.split("\n"))
+					.filter((l) => l.startsWith("{"))
+					.map((l) => JSON.parse(l) as { type?: string });
+				expect(events.map((e) => e.type)).toContain("token.issued");
+			});
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	// The DID grant binds its tokens to the authenticated client (client_id /
+	// azp), so /oauth/revoke finds the owning client and denylists the jti.
+	// Before that binding, azp carried the audience and revoke silently
+	// skipped DID tokens while still answering 200.
+	it("RFC 7009 revocation of a DID-issued access token takes effect at introspection", async () => {
+		const token = await issueDidToken();
+		expect((await selfIntrospect(token)).active).toBe(true);
+
+		const res = await fetch(authProviderUrl("/oauth/revoke"), {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				token,
+				token_type_hint: "access_token",
+				client_id: TEST_CLIENT_ID,
+			}),
+		});
+		expect(res.status, `revoke response (body: ${await res.clone().text()})`).toBe(200);
+
+		expect((await selfIntrospect(token)).active).toBe(false);
+	});
+
+	it("a subject revocation boundary invalidates the subject's already-issued tokens", async () => {
+		const token = await issueDidToken(revokedSubjectDid);
+		expect((await selfIntrospect(token)).active).toBe(true);
+
+		const subjectRevocation = authProviderComponents.subjectRevocation;
+		expect(subjectRevocation, "subjectRevocation must be wired").toBeDefined();
+		// Boundary one second ahead: every token issued so far (iat in whole
+		// seconds) falls before it, whatever the clock's sub-second phase.
+		await subjectRevocation?.revokeBefore(
+			revokedSubjectDid,
+			new Date(Date.now() + 1000),
+			new Date(Date.now() + 3600 * 1000),
+		);
+
+		expect((await selfIntrospect(token)).active).toBe(false);
+		// Scoped to that subject: testDid's tokens are untouched.
+		expect((await selfIntrospect(await issueDidToken())).active).toBe(true);
 	});
 });

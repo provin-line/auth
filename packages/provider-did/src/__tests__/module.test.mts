@@ -136,3 +136,22 @@ describe("oauthDidModule", () => {
 		}
 	});
 });
+
+describe("oauthDidModule — replica safety of the replay nonce store", () => {
+	const resolver: DidDocumentResolver = {
+		async resolve(): Promise<ResolutionResult> {
+			throw new Error("not called");
+		},
+	};
+
+	it("declares itself replica-unsafe when it falls back to the in-process nonce store", () => {
+		const module = oauthDidModule({ resolver });
+		expect(module.replicaSafety?.unsafe).toBe(true);
+		expect(module.replicaSafety?.reason).toMatch(/nonce/);
+	});
+
+	it("makes no replica-safety claim when the caller supplies the nonce store", () => {
+		const module = oauthDidModule({ resolver, nonceStore: { consume: async () => true } });
+		expect(module.replicaSafety).toBeUndefined();
+	});
+});

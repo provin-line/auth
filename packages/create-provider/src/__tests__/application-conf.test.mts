@@ -255,3 +255,38 @@ describe("scaffolded application.conf — real boot path via createDidGrant (Tas
 		);
 	});
 });
+
+describe("scaffolded application.conf — security capabilities are wired, not declared absent", () => {
+	// The composition (buildModules) wires an audit sink, an access-token
+	// denylist and the subject-revocation pair. A template that still declared
+	// them absent would either contradict the wiring or, for the audit sink,
+	// fail boot: `"none"` is not a registered sink.
+	it("does not declare the audit sink or either revocation capability absent", async () => {
+		const conf = await renderApplicationConf();
+		expect(conf).not.toMatch(/^\s*audit\.sink\.type\s*=\s*"none"/m);
+		expect(conf).not.toMatch(/^\s*revocation\.subject\s*=\s*"unsupported"/m);
+		expect(conf).not.toMatch(/^\s*revocation\.accessToken\s*=\s*"unsupported"/m);
+	});
+
+	it("selects the built-in console audit sink by default, overridable by AUDIT_SINK_TYPE", async () => {
+		const conf = await renderApplicationConf();
+		expect(conf).toMatch(/^\s*type\s*=\s*"console"\s*$/m);
+		expect(conf).toMatch(/^\s*type\s*=\s*\$\{\?AUDIT_SINK_TYPE\}\s*$/m);
+	});
+
+	it("routes access-token revocation to the denylist", async () => {
+		const conf = await renderApplicationConf();
+		expect(conf).toMatch(/^\s*revocation\.accessToken\s*=\s*"denylist"\s*$/m);
+	});
+});
+
+describe("scaffolded application.conf — deployment mode", () => {
+	// No literal default, as upstream (#271): single-process is what the
+	// absent key means, and DEPLOYMENT_MODE=multi makes core refuse the
+	// in-process stores this scaffold wires.
+	it("reads deployment.mode from DEPLOYMENT_MODE only", async () => {
+		const conf = await renderApplicationConf();
+		expect(conf).toMatch(/^\s*mode\s*=\s*\$\{\?DEPLOYMENT_MODE\}\s*$/m);
+		expect(conf).not.toMatch(/^\s*mode\s*=\s*"/m);
+	});
+});

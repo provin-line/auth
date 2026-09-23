@@ -162,6 +162,13 @@ Every minted token carries these six claims:
 | `lifecycle_freshness_ref` | RFC 3339 UTC instant the resolution was performed |
 | `authorization_scope` | Always `AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1` — the only scope this package ever mints |
 
+Tokens minted at `/oauth/token` are also bound to the client that endpoint
+authenticated (RFC 9068 §2.2): `client_id` and `azp` both carry its client
+id, taken from the authenticated client, never from the request body. That
+binding is what lets the client revoke the token through RFC 7009
+`/oauth/revoke`. A grant invoked outside `/token`, with no authenticated
+client, mints neither claim. `azp` never carries the audience; `aud` does.
+
 `lifecycle_state_ref` / `lifecycle_freshness_ref` are a **documented P0
 projection** — the registry snapshot digest plus the retrieval instant —
 standing in until a real lifecycle service exists. There is no live/positive
