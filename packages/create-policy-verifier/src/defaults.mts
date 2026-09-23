@@ -33,7 +33,7 @@ export const DEFAULT_DEP_VERSIONS = {
 	// Dev
 	"@types/node": "25.6.0",
 	typescript: "5.9.3",
-	vitest: "4.1.2",
+	vitest: "4.1.11",
 } as const;
 
 /**

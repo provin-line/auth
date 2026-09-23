@@ -40,7 +40,7 @@ export const DEFAULT_DEP_VERSIONS = {
 	"@types/express": "5.0.6",
 	"@types/node": "25.6.0",
 	typescript: "5.9.3",
-	vitest: "4.1.4",
+	vitest: "4.1.11",
 } as const;
 
 /** Default git-subdirectory ref for `@provin-line/auth-provider-dplaax-module`. */

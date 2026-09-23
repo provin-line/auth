@@ -44,9 +44,9 @@
 	"devDependencies": {
 		"@noble/ed25519": "^3.0.1",
 		"@types/node": "^25.6.0",
-		"@vitest/coverage-v8": "^4.1.4",
+		"@vitest/coverage-v8": "^4.1.11",
 		"rimraf": "^6.1.3",
 		"typescript": "^5.9.3",
-		"vitest": "^4.1.4"
+		"vitest": "^4.1.11"
 	}
 }
