@@ -10,35 +10,19 @@ releases.
 
 ## [Unreleased]
 
-### Fixed
+## [0.3.0] - 2026-09-24
 
-- **Generated instances never logged NDJSON.** Both scaffolds took their logger
-  from `@o3co/auth.utils`, which treats pino as an *optional* peer and falls
-  back to `console` when the import fails — and the generator never emitted
-  pino, so every instance created by `create-provider` or
-  `create-policy-verifier` logged bare `[name] …` console lines that no
-  aggregator parses. The scaffold now ships its own `src/logger.mts` on pino
-  (a direct runtime dependency, exact-pinned like the rest), honouring
-  `logging.level` from the application config with `LOG_LEVEL` as the
-  environment override, and serialising `err` so an Error keeps its stack.
+A minor number, unlike 0.2.1's patch: this release carries a breaking
+configuration change (`audit.sink.type = "none"` no longer boots) and new
+public exports, and it must not reach consumers that track the moving `v0.2`
+image tag. provin.oss's quickstart pins `v0.2` and moves to `v0.3` on its own
+schedule.
 
-- **Generated instances could hang on SIGTERM and always exited zero.** The
-  same package's `gracefulShutdown` called `server.close()` with no deadline,
-  so one stuck request meant the process never exited on its own and the
-  orchestrator's SIGKILL cut it down mid-flight; cleanup failures went to
-  `console.error`. The scaffold now ships `src/shutdown.mts` with the contract
-  auth.provider (#290), auth.proxy (#81) and auth.policy-verifier (#210) each
-  adopted: drain for `drainTimeoutMs` (default 10s), bound `cleanup` by
-  `cleanupTimeoutMs`, force-close past the deadline and exit non-zero, log
-  through the instance logger, and yield the loop once before exiting so the
-  last lines flush. Both files come with tests that run under the instance's
-  own `pnpm run test`.
-
-### Changed
-
-- **`@o3co/auth.utils` is no longer emitted into generated `package.json`.**
-  Its two helpers live in the scaffold (above). This was the package's last
-  consumer across the auth family.
+The auth baseline is now the latest upstream (provider 0.15.0, verifier
+0.12.0). The provider composition records audit events and can revoke tokens —
+by RFC 7009 for the client a DID token was issued to, and by subject for every
+token already issued to a DID — and `deployment.mode = "multi"` refuses to boot
+on in-process stores. The OWNER login contracts are wired into the DID grant.
 
 ### Added
 
@@ -95,6 +79,10 @@ releases.
 
 ### Changed
 
+- **`@o3co/auth.utils` is no longer emitted into generated `package.json`.**
+  Its two helpers live in the scaffold (above). This was the package's last
+  consumer across the auth family.
+
 - **BREAKING (config): the provider composition no longer accepts security
   capabilities declared absent.** `buildModules` now wires an audit sink, an
   access-token denylist and the subject-revocation pair (see Added), so
@@ -139,21 +127,18 @@ releases.
   `context.subject` and call `readUntrustedRequestContext` directly, and the
   policy-verifier template and the integration test import
   `builtinKeyResolversModule` rather than probing for it. The code had already
-  crossed the intervening upstream BREAKING changes (o3co/auth's
-  `provin-compatibility` job builds this workspace against those exact
-  revisions); what changes here is that the released-0.3.x branch of each
-  dual path is gone. `@o3co/ts.hocon` stays at its current pin — its 0.1 → 1.x
-  move is a separate migration.
+  crossed the intervening upstream BREAKING changes; what changes here is that
+  the released-0.3.x branch of each dual path is gone. `@o3co/ts.hocon` stays
+  at its current pin — its 0.1 → 1.x move is a separate migration.
 
 - Refresh vulnerable transitive lockfile entries: js-yaml 4.3.2, qs 6.16.0,
   nanoid 3.3.18 and brace-expansion 5.0.9. CI audits the dependency graph.
   vitest and @vitest/coverage-v8 move to `^4.1.11` (GHSA-82fw-gwwq-j7x9,
   path traversal via the @vitest/mocker redirect mock), and both generators
   emit vitest 4.1.11.
-- Prepare generated instances for current upstream auth while retaining released
-  dependency pins: align Zod 4.5.4, wire separated JWKS/key-resolver modules,
-  update required configuration and support verified subject bags plus explicitly
-  untrusted request context.
+- Prepare generated instances for current upstream auth: align Zod 4.5.4, wire
+  separated JWKS/key-resolver modules, update required configuration and support
+  verified subject bags plus explicitly untrusted request context.
 - Generated Verifiers now require an explicit Owner DID rule on the declared
   surface instead of relying on empty-rule allow. Scopeless DID tokens skip only
   the scope group; undeclared operations and non-Owner subjects remain denied.
@@ -170,6 +155,30 @@ releases.
   simultaneously valid for both, so the wired-in Added item above shipped
   correct only against test fixtures that added the field without it being
   part of the documented schema.
+
+### Fixed
+
+- **Generated instances never logged NDJSON.** Both scaffolds took their logger
+  from `@o3co/auth.utils`, which treats pino as an *optional* peer and falls
+  back to `console` when the import fails — and the generator never emitted
+  pino, so every instance created by `create-provider` or
+  `create-policy-verifier` logged bare `[name] …` console lines that no
+  aggregator parses. The scaffold now ships its own `src/logger.mts` on pino
+  (a direct runtime dependency, exact-pinned like the rest), honouring
+  `logging.level` from the application config with `LOG_LEVEL` as the
+  environment override, and serialising `err` so an Error keeps its stack.
+
+- **Generated instances could hang on SIGTERM and always exited zero.** The
+  same package's `gracefulShutdown` called `server.close()` with no deadline,
+  so one stuck request meant the process never exited on its own and the
+  orchestrator's SIGKILL cut it down mid-flight; cleanup failures went to
+  `console.error`. The scaffold now ships `src/shutdown.mts` with the contract
+  auth.provider (#290), auth.proxy (#81) and auth.policy-verifier (#210) each
+  adopted: drain for `drainTimeoutMs` (default 10s), bound `cleanup` by
+  `cleanupTimeoutMs`, force-close past the deadline and exit non-zero, log
+  through the instance logger, and yield the loop once before exiting so the
+  last lines flush. Both files come with tests that run under the instance's
+  own `pnpm run test`.
 
 ### Security
 
@@ -366,6 +375,7 @@ SECURITY.md).
   `ghcr.io/provin-line/auth-auth-provider`) by `publish-images.yml` on `v*`
   tags, consumed by the provin.oss quickstart via `AUTH_REF`.
 
-[Unreleased]: https://github.com/provin-line/auth/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/provin-line/auth/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/provin-line/auth/releases/tag/v0.3.0
 [0.2.1]: https://github.com/provin-line/auth/releases/tag/v0.2.1
 [0.2.0]: https://github.com/provin-line/auth/releases/tag/v0.2.0
