@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 import * as ed from "@noble/ed25519";
-import { createSymmetricKeyStore, type GrantContext } from "@o3co/auth-provider-core";
+import { createSymmetricKeyStore, defineModule, type GrantContext } from "@o3co/auth-provider-core";
 import { makeValidAppConfig } from "@o3co/auth-provider-core/testing";
 import type { DidDocument, DidDocumentResolver, NonceStore, ResolutionResult } from "@provin-line/auth-provider-did";
 import { describe, expect, it, vi } from "vitest";
 import { buildModules, type DplaaxAppConfig } from "../buildModules.mjs";
+import { auditSinkModule } from "../modules.mjs";
 
 const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 
@@ -158,5 +159,73 @@ describe("buildModules – nonceStore override", () => {
 		const { result } = await handler.handle(ctx);
 		expect(result.status).toBe(200);
 		handler.cleanup?.();
+	});
+});
+
+describe("buildModules – security capabilities are wired", () => {
+	const providers = (modules: readonly { provides?: Record<string, unknown> }[]) =>
+		modules.flatMap((m) => Object.keys(m.provides ?? {}));
+
+	it("provides an audit sink, an access-token denylist and the subject-revocation pair", () => {
+		const provided = providers(buildModules(makeConfig()));
+		expect(provided).toEqual(
+			expect.arrayContaining([
+				"auditSink",
+				"accessTokenDenylist",
+				"subjectRevocation",
+				"subjectSessionIndex",
+			]),
+		);
+	});
+
+	it("marks every in-memory revocation store unsafe for multi-replica boot", () => {
+		const modules = buildModules(makeConfig());
+		for (const slot of ["accessTokenDenylist", "subjectRevocation"]) {
+			const owner = modules.find((m) => Object.hasOwn(m.provides ?? {}, slot));
+			expect(owner?.replicaSafety?.unsafe, `${slot} provider`).toBe(true);
+		}
+	});
+
+	it("replaces each capability module with its override", () => {
+		const auditSinkModule = defineModule({ name: "test:audit", provides: { auditSink: () => ({}) as never } });
+		const accessTokenDenylistModule = defineModule({
+			name: "test:denylist",
+			provides: { accessTokenDenylist: () => ({}) as never },
+		});
+		const subjectRevocationModule = defineModule({
+			name: "test:subject",
+			provides: { subjectRevocation: () => ({}) as never },
+		});
+		const names = buildModules(makeConfig(), {
+			auditSinkModule,
+			accessTokenDenylistModule,
+			subjectRevocationModule,
+		}).map((m) => m.name);
+		expect(names).toEqual(expect.arrayContaining(["test:audit", "test:denylist", "test:subject"]));
+		expect(names).not.toContain("dplaax:audit-sink");
+		expect(names).not.toContain("core-access-token-denylist-memory");
+		expect(names).not.toContain("dplaax:in-memory-subject-revocation");
+	});
+});
+
+describe("auditSinkModule", () => {
+	const build = (config: unknown) =>
+		// biome-ignore lint/suspicious/noExplicitAny: provider factory boundary
+		(auditSinkModule.provides as Record<string, any>).auditSink({ config });
+
+	it("defaults to the built-in console sink when the config has no audit section", async () => {
+		const { audit: _omitted, ...withoutAudit } = makeConfig() as DplaaxAppConfig & { audit?: unknown };
+		expect(withoutAudit).not.toHaveProperty("audit");
+		const sink = await build(withoutAudit);
+		expect(sink.kind).toBe("console");
+	});
+
+	it("builds the sink named by audit.sink.type", async () => {
+		const sink = await build({ ...makeConfig(), audit: { sink: { type: "console" } } });
+		expect(sink.kind).toBe("console");
+	});
+
+	it('refuses "none" — the audit trail cannot be switched off by config', async () => {
+		await expect(build({ ...makeConfig(), audit: { sink: { type: "none" } } })).rejects.toThrow(/none/);
 	});
 });

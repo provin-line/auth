@@ -37,9 +37,13 @@ import { z } from "zod";
  * `DplaaxAppConfig`.
  */
 export const DplaaxConfigSchema = CoreConfigSchema.extend({
-	// CoreConfigSchema does not own the audit module slice. Preserve the
-	// DID-only composition's explicit absence declaration for boot validation.
-	audit: z.object({ sink: z.object({ type: z.literal("none") }) }).optional(),
+	// CoreConfigSchema does not own the audit slice. `sink.type` names a sink
+	// registered by `auditSinkModule` ("console" built in); its options ride
+	// along in the same block. Absent means "console". There is no "none":
+	// the audit sink is always wired (see auditSinkModule).
+	audit: z
+		.object({ sink: z.object({ type: z.string().min(1) }).passthrough() })
+		.optional(),
 	endpoints: z.object({
 		login: z.object({
 			url: z.string().min(1),

@@ -30,8 +30,10 @@ export {
 } from "./buildModules.mjs";
 
 export {
+	auditSinkModule,
 	clientRepositoryModule,
 	inMemoryCodeRepositoryModule,
+	inMemorySubjectRevocationModule,
 	keyStoreModule,
 } from "./modules.mjs";
 

@@ -16,10 +16,14 @@
 import path from "node:path";
 import {
 	type AppConfig,
+	createAuditSinkFactory,
+	createInMemorySubjectRevocation,
+	createInMemorySubjectSessionIndex,
 	createKeyStoreFactory,
 	createRepositoryFactories,
 	defineModule,
 	type Module,
+	registerBuiltinAuditSinks,
 	registerBuiltinKeyStores,
 } from "@o3co/auth-provider-core";
 
@@ -152,5 +156,63 @@ export const inMemoryCodeRepositoryModule: Module = defineModule({
 			});
 			return codeFactory.create(slice);
 		},
+	},
+});
+
+/**
+ * Audit-sink module — fills the `auditSink` slot that `oauthModule` reads to
+ * record security events (`token.issued`, `token.issued.failure`, …).
+ *
+ * The sink comes from `config.audit.sink` through core's audit-sink factory.
+ * Core registers one sink, `"console"`: one JSON object per event on stdout.
+ * A deployment that needs a different sink replaces this module through
+ * `DplaaxBuildModulesOverrides.auditSinkModule`.
+ *
+ * There is no `"none"`. Upstream dropped it (o3co auth-provider #287 / #304)
+ * because a deployment that says nothing about auditing must not end up with
+ * no audit trail. An unknown type, `"none"` included, fails boot and names the
+ * sinks that exist. A config with no `audit` section gets `"console"`.
+ */
+export const auditSinkModule: Module = defineModule({
+	name: "dplaax:audit-sink",
+	requires: ["config"] as const,
+	provides: {
+		auditSink: async ({ config }) => {
+			const factory = createAuditSinkFactory();
+			registerBuiltinAuditSinks(factory);
+			const slice = (config as { audit?: { sink?: { type: string } & Record<string, unknown> } })
+				.audit?.sink;
+			return factory.create(slice ? flattenAdapterConfig(slice) : { type: "console" });
+		},
+	},
+});
+
+/**
+ * In-memory subject-revocation module — provides the subject-level revocation
+ * pair: `subjectRevocation` (the not-before watermark that token verification
+ * and introspection consult) and `subjectSessionIndex` (the per-subject index a
+ * revocation cascades over).
+ *
+ * With this pair wired, `subjectRevocation.revokeBefore(did, …)` invalidates
+ * every access token already issued to that DID, instead of leaving them valid
+ * until they expire.
+ *
+ * Single-process only: the watermark lives in this process, so a second
+ * replica would never see it. The manifest says so, which makes core refuse
+ * `deployment.mode = "multi"` with this module. Multi-replica deployments pass
+ * a shared implementation through
+ * `DplaaxBuildModulesOverrides.subjectRevocationModule`, for example the Redis
+ * session-store module from `@o3co/auth-provider-redis`.
+ */
+export const inMemorySubjectRevocationModule: Module = defineModule({
+	name: "dplaax:in-memory-subject-revocation",
+	replicaSafety: {
+		unsafe: true,
+		reason:
+			"the subject revocation watermark lives in one process — a DID revoked on one replica keeps its already-issued tokens working on the others",
+	},
+	provides: {
+		subjectSessionIndex: () => createInMemorySubjectSessionIndex(),
+		subjectRevocation: () => createInMemorySubjectRevocation(),
 	},
 });

@@ -12,14 +12,26 @@ logging {
   level = ${?LOG_LEVEL}
 }
 
-# This minimal composition does not persist audit events.
-audit.sink.type = "none"
+# Where security audit events go (token.issued, token.issued.failure, ...).
+# "console" writes one JSON object per event to stdout, which every container
+# runtime already collects. There is no "none": an unknown sink type fails
+# boot and names the sinks that exist.
+audit {
+  sink {
+    type = "console"
+    type = ${?AUDIT_SINK_TYPE}
+  }
+}
 
 oauth {
-  # DID-only: lifecycle is checked at issuance; existing tokens expire by TTL.
-  # This composition has no password/session store or subject revocation service.
-  revocation.subject = "unsupported"
-  revocation.accessToken = "unsupported"
+  # RFC 7009 revocation of an ACCESS token writes its jti to the access-token
+  # denylist, which token verification and introspection consult. The
+  # composition wires an in-memory denylist: single-process only.
+  #
+  # Subject-level revocation (every token already issued to a DID) is wired
+  # too, through the in-memory subject-revocation pair, so no
+  # `revocation.subject` value is needed here.
+  revocation.accessToken = "denylist"
   jwt {
     issuer = ${?OAUTH_JWT_ISSUER}
     legacyTypAccept = false

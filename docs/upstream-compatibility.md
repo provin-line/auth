@@ -1,8 +1,10 @@
 # Upstream auth compatibility
 
-Generators still pin released provider 0.5.3 and verifier 0.3.1. Updating this
-repository's git ref alone does **not** deploy newer upstream security fixes.
-Existing instances need their dependency baseline and configuration updated.
+Workspace packages require provider `^0.15.0` and verifier `^0.12.0`, and the
+generators (0.3.0) emit the same as exact pins. Updating this repository's git
+ref alone does **not** deploy newer upstream security fixes to an instance that
+already exists: its own `package.json` pins and its `application.conf` must be
+updated too (see below).
 
 The [o3co/auth compatibility suite](https://github.com/o3co/auth) tests candidate
 source without publishing packages: it packs provider/core, provider/oauth and
@@ -24,12 +26,35 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 - Use `oauth.jwt.mode = "verify"`; remove old `validate` and
   `allowInsecureDecode` keys from overlays. Supply strong signing keys/secrets.
 - Generated Provider config supplies required `http.readinessTimeoutMs` and
-  `logging.level`. `DplaaxConfigSchema` preserves the audit declaration.
-- This DID-only composition has no session/password store, token denylist or
-  audit sink. Config explicitly declares subject/access-token revocation
-  unsupported and audit sink absent. Lifecycle is checked at issuance; issued
-  tokens remain usable until bounded expiry. Earlier revocation or retained
-  audit events requires wiring those services.
+  `logging.level`.
+- Upstream refuses to boot when a security capability `oauthModule` reads is
+  neither wired nor declared absent. `buildModules` wires all of them, so an
+  instance's config must not declare any of them absent:
+  - **Audit sink.** `audit.sink.type` names the sink; `"console"` (one JSON
+    object per event on stdout) is built in and is the default. `"none"` is
+    refused at boot: upstream removed it so that saying nothing about
+    auditing cannot mean having no audit trail.
+  - **Access-token denylist.** `oauth.revocation.accessToken = "denylist"`.
+    RFC 7009 revocation writes the token's `jti` to it; verification and
+    introspection consult it.
+  - **Subject revocation.** The `subjectRevocation` / `subjectSessionIndex`
+    pair is wired; leave `oauth.revocation.subject` unset.
+    `subjectRevocation.revokeBefore(did, …)` invalidates every token already
+    issued to that DID.
+
+  Migrating an instance generated before 0.3.0: delete
+  `audit.sink.type = "none"`, `revocation.subject = "unsupported"` and
+  `revocation.accessToken = "unsupported"`, and add the `audit.sink` block and
+  `revocation.accessToken = "denylist"` from the current template.
+- The denylist and the subject-revocation pair are in-memory, so they hold
+  for one process only. Their manifests say so, and upstream refuses
+  `deployment.mode = "multi"` with them. A multi-replica deployment passes
+  shared implementations through `DplaaxBuildModulesOverrides`
+  (`accessTokenDenylistModule`, `subjectRevocationModule`, and
+  `auditSinkModule` for a non-console sink).
+- Nothing in this repository calls `subjectRevocation.revokeBefore` yet:
+  the capability is wired, and the trigger (for example, a DID deactivated
+  at the registry) is the deployment's to connect.
 - Current Provider separates JWKS publication from OAuth; current Verifier
   separates key-resolver registration. Composition includes those modules when
   available; released versions retain their internal wiring.
@@ -42,11 +67,11 @@ Scopeless tokens skip only the OAuth scope group.
 Other configured groups, including subscriber identity when enabled, must pass.
 A missing or non-Owner subject is denied.
 
-This avoids relying on 0.3.x's empty-rule allow behavior; current upstream denies
-empty rules. PDP allow is the identity/surface gate; resource permissions remain
+This avoids relying on 0.3.x's empty-rule allow behavior; upstream has denied
+empty rules since 0.4.0, and core `evaluate()` is async since 0.10.0.
+PDP allow is the identity/surface gate; resource permissions remain
 the downstream registry's ACL decision, as required by the Provin contract.
 
-Collectors use verified `subject` on current upstream and `payload` on 0.3.x.
-When present, `subject` is authoritative even if empty. Subscriber fields remain
-caller supplied: current upstream reads them only through
+Collectors read the verified `subject`, which is authoritative even if empty.
+Subscriber fields remain caller supplied: collectors read them only through
 `readUntrustedRequestContext`, with no plain-record fallback.

@@ -42,6 +42,25 @@ releases.
 
 ### Added
 
+- **The provider composition wires every security capability upstream can
+  read, instead of declaring them absent.** Previously a DID-issued token could
+  not be revoked before it expired, and no audit event was recorded.
+  `buildModules` now includes:
+  - `auditSinkModule` (new export): the sink named by `audit.sink.type`,
+    `"console"` by default. `token.issued` and `token.issued.failure` events
+    now reach stdout.
+  - core's `memoryAccessTokenDenylistModule`: RFC 7009 revocation of an access
+    token writes to it, and verification and introspection consult it.
+  - `inMemorySubjectRevocationModule` (new export): the `subjectRevocation` /
+    `subjectSessionIndex` pair. `subjectRevocation.revokeBefore(did, …)`
+    invalidates every token already issued to that DID.
+
+  The two in-memory stores are single-process, and their manifests make
+  upstream refuse `deployment.mode = "multi"`.
+  `DplaaxBuildModulesOverrides` gains `auditSinkModule`,
+  `accessTokenDenylistModule` and `subjectRevocationModule`, so a
+  multi-replica deployment can pass shared implementations.
+
 - The OWNER login contracts (`OWNER_AUTHENTICATION_LOGIN@1`,
   `OWNER_ASSERTION_CONTROL_LOGIN@1`) are now wired into the DID grant's
   request handler. `handle()` dispatches on the configured `authContract`:
@@ -69,13 +88,26 @@ releases.
 
 ### Changed
 
+- **BREAKING (config): the provider composition no longer accepts security
+  capabilities declared absent.** `buildModules` now wires an audit sink, an
+  access-token denylist and the subject-revocation pair (see Added), so
+  `audit.sink.type = "none"` fails boot — `"none"` is not a registered sink,
+  and `DplaaxConfigSchema` now takes any sink name instead of only `"none"`.
+  The generated `application.conf` selects `audit.sink.type = "console"`
+  (override: `AUDIT_SINK_TYPE`) and `oauth.revocation.accessToken =
+  "denylist"`, and drops `revocation.subject = "unsupported"`. Instances
+  generated earlier must make the same edit; see
+  [upstream compatibility](docs/upstream-compatibility.md).
+
 - **The auth baseline is the released upstream, not a 0.3.x / 0.5.x pin with a
   compatibility shim.** Every workspace package now requires
-  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.8.1` and
-  `@o3co/auth-provider-{core,oauth}` `^0.12.0` — the versions published on
-  2026-09-06 — and the generators emit the same as exact pins
-  (`DEFAULT_DEP_VERSIONS`: 0.8.1 / 0.12.0), with both generators bumped to
-  0.2.0 per create-app.md § 3.3. The dual-path shim that let the collectors
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.12.0` and
+  `@o3co/auth-provider-{core,oauth}` `^0.15.0` — the latest releases — and the
+  generators emit the same as exact pins (`DEFAULT_DEP_VERSIONS`: 0.12.0 /
+  0.15.0), with both generators bumped to 0.3.0 per create-app.md § 3.3. (The
+  move went through 0.8.1 / 0.12.0 with generators 0.2.0 first.) Upstream core
+  `evaluate()` is async since verifier 0.10.0; no production code here called
+  it. The dual-path shim that let the collectors
   read `payload` or `subject` and reach `readUntrustedRequestContext` by
   reflection (`collectors/context.mts`) is removed: collectors read
   `context.subject` and call `readUntrustedRequestContext` directly, and the
