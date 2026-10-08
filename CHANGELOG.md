@@ -10,6 +10,42 @@ releases.
 
 ## [Unreleased]
 
+Ships as a minor (0.4.0), not a patch: the verifier baseline below changes
+`/verify`'s answer for JWKS-verifying deployments, and that must not reach
+consumers that track the moving `v0.3` image tag.
+
+### Changed
+
+- **BREAKING (wire, JWKS-verifying deployments only): the policy-verifier
+  baseline is 0.16.0.** Workspace packages require
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.16.0`, and
+  `create-policy-verifier` (now 0.3.0, per create-app.md § 3.3) emits the
+  same as exact pins. No code here changes: 0.13–0.16 otherwise change
+  surfaces this composition does not use (Cedar engines, static
+  role/permission collectors, delegated-token ranges, caller
+  authentication).
+
+  What changes on the wire: a verifier configured with `OAUTH_JWT_JWKS_URI`
+  that cannot get the keys a token needs (fetch failure or timeout, non-200,
+  a body that is not a key set) answers `503 verification_unavailable`
+  instead of `401 invalid_token`. A cached key set keeps verifying through an
+  outage only until it is `oauth.jwt.jwksCacheMaxAgeMs` old (upstream
+  default 10 minutes). A token that fails verification is still `401`. The
+  generated verifier uses a shared HS256 secret unless `OAUTH_JWT_JWKS_URI`
+  is set, and only then is it affected. If it is: alerts, SLOs, retry-on-5xx
+  and mesh outlier detection now see an IdP outage as 5xx, and
+  provin.oss's `protobuf.interceptors` endpoint reports it to the caller as
+  an internal error rather than as unauthenticated. See
+  [upstream compatibility](docs/upstream-compatibility.md) for existing
+  instances.
+
+### Security
+
+- Refresh vulnerable transitive lockfile entries: proxy-addr 2.0.8
+  (GHSA-jqcg-44mw-7w3h, via express), brace-expansion 5.0.12
+  (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p) and
+  source-map-js 1.2.2 (GHSA-68fv-2mgg-jv7q).
+
 ## [0.3.0] - 2026-09-24
 
 A minor number, unlike 0.2.1's patch: this release carries a breaking
