@@ -27,14 +27,14 @@ importers:
         specifier: ^0.15.0
         version: 0.15.0(express@5.2.1)
       '@o3co/auth.policy-verifier.builtins':
-        specifier: ^0.16.0
-        version: 0.16.0
+        specifier: ^0.16.1
+        version: 0.16.1
       '@o3co/auth.policy-verifier.core':
-        specifier: ^0.16.0
-        version: 0.16.0
+        specifier: ^0.16.1
+        version: 0.16.1
       '@o3co/auth.policy-verifier.server':
-        specifier: ^0.16.0
-        version: 0.16.0
+        specifier: ^0.16.1
+        version: 0.16.1
       '@provin-line/auth-policy-verifier-dplaax-module':
         specifier: workspace:*
         version: link:../packages/policy-verifier-dplaax-module
@@ -85,7 +85,7 @@ importers:
     devDependencies:
       '@o3co/auth-provider-core':
         specifier: ^0.15.0
-        version: 0.15.0(express@5.2.1)
+        version: 0.15.0(express@5.3.0)
       '@provin-line/auth-provider-did':
         specifier: workspace:*
         version: link:../provider-did
@@ -126,11 +126,11 @@ importers:
   packages/policy-verifier-dplaax-module:
     dependencies:
       '@o3co/auth.policy-verifier.builtins':
-        specifier: ^0.16.0
-        version: 0.16.0
+        specifier: ^0.16.1
+        version: 0.16.1
       '@o3co/auth.policy-verifier.core':
-        specifier: ^0.16.0
-        version: 0.16.0
+        specifier: ^0.16.1
+        version: 0.16.1
       '@provin-line/did-dplaax':
         specifier: workspace:*
         version: link:../did-dplaax
@@ -155,7 +155,7 @@ importers:
     dependencies:
       '@o3co/auth-provider-core':
         specifier: ^0.15.0
-        version: 0.15.0(express@5.2.1)
+        version: 0.15.0(express@5.3.0)
       jose:
         specifier: ^6.2.2
         version: 6.2.2
@@ -189,10 +189,10 @@ importers:
         version: 3.1.0
       '@o3co/auth-provider-core':
         specifier: ^0.15.0
-        version: 0.15.0(express@5.2.1)
+        version: 0.15.0(express@5.3.0)
       '@o3co/auth-provider-oauth':
         specifier: ^0.15.0
-        version: 0.15.0(express-session@1.19.0)(express@5.2.1)
+        version: 0.15.0(express-session@1.19.0)(express@5.3.0)
       '@provin-line/auth-provider-did':
         specifier: workspace:*
         version: link:../provider-did
@@ -287,16 +287,16 @@ packages:
       express: ^5.0.0
       express-session: ^1.17.0
 
-  '@o3co/auth.policy-verifier.builtins@0.16.0':
-    resolution: {integrity: sha512-ZvUlLp5QdGcXEUD7cm7BmVn4fL+xp6+yzM8dDncJJkJLhDhzZZwt6eFzxlJkODAiGG+XynAg71k0miZ+Y+oWnw==}
+  '@o3co/auth.policy-verifier.builtins@0.16.1':
+    resolution: {integrity: sha512-TZtQMf6Ofh4qygKXwOHs+n6xgeynydxZI0hF3Iq2TTyRAOULGcOdiOPJqlnXF5I8/RFHDa8Onfbhs4wtfG6/bA==}
     engines: {node: '>=22.0.0'}
 
-  '@o3co/auth.policy-verifier.core@0.16.0':
-    resolution: {integrity: sha512-xiaZNQvLyQCaL2vH+WwJsZ1mHDZvp5q4tbFfeNijfuJz7iwIVqN+RnbjisjMWgACohrm4lgz3NCT6B7WR3SvhQ==}
+  '@o3co/auth.policy-verifier.core@0.16.1':
+    resolution: {integrity: sha512-lSkx4ZTMY7agtv5wV6mJXAl9iCP5to18/o/UXLVaAYqlMsoGNd7kCF4qKJIRmBV6ThDj8nirelwLAd+CezhoAA==}
     engines: {node: '>=22.0.0'}
 
-  '@o3co/auth.policy-verifier.server@0.16.0':
-    resolution: {integrity: sha512-FiDCaMmxy44OhzuA7M5BQwGkkhdUgH8yTapy3kdJ6roxqPeIvvyrcy7byG4UIAZ1zDigVS0wdo/ruxvHAvkN9A==}
+  '@o3co/auth.policy-verifier.server@0.16.1':
+    resolution: {integrity: sha512-iEFsROVUUlksnN7zLRUqofW8MKkSJP8BXAIw54SZSBR1xjuW78J1N796EZWRUOk7PrgoAYNgEQApywTUYTJsxA==}
     engines: {node: '>=22.0.0'}
 
   '@opentelemetry/api@1.9.1':
@@ -540,6 +540,10 @@ packages:
     resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
     engines: {node: '>=18'}
 
+  content-disposition@2.0.1:
+    resolution: {integrity: sha512-e+H0ZXHSWYrENhQzw1LPuP4oF5MzVKmDU6d3hxlvaPEYLLg62MxtQNPRx4SYSuYJSBUgnQIG4HIN2tEtNv7Dog==}
+    engines: {node: '>=18'}
+
   content-type@1.0.5:
     resolution: {integrity: sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==}
     engines: {node: '>= 0.6'}
@@ -633,6 +637,10 @@ packages:
 
   express@5.2.1:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
+    engines: {node: '>= 18'}
+
+  express@5.3.0:
+    resolution: {integrity: sha512-qCqy1xSoaugxOD4IVHb1ZWdkvCF2W3aE2okKouWj8VwJ+ztskSiXoBnCSJqfKT+cVPJhuJqe9YLbY425+Zh00g==}
     engines: {node: '>= 18'}
 
   fdir@6.5.0:
@@ -1225,25 +1233,34 @@ snapshots:
     optionalDependencies:
       express: 5.2.1
 
-  '@o3co/auth-provider-oauth@0.15.0(express-session@1.19.0)(express@5.2.1)':
+  '@o3co/auth-provider-core@0.15.0(express@5.3.0)':
     dependencies:
-      '@o3co/auth-provider-core': 0.15.0(express@5.2.1)
+      bcrypt: 6.0.0
+      jose: 6.2.12
+      js-yaml: 5.4.1
+      zod: 4.5.4
+    optionalDependencies:
+      express: 5.3.0
+
+  '@o3co/auth-provider-oauth@0.15.0(express-session@1.19.0)(express@5.3.0)':
+    dependencies:
+      '@o3co/auth-provider-core': 0.15.0(express@5.3.0)
       accepts: 2.0.0
-      express: 5.2.1
+      express: 5.3.0
       express-session: 1.19.0
       jose: 6.2.12
       zod: 4.5.4
 
-  '@o3co/auth.policy-verifier.builtins@0.16.0':
+  '@o3co/auth.policy-verifier.builtins@0.16.1':
     dependencies:
-      '@o3co/auth.policy-verifier.core': 0.16.0
+      '@o3co/auth.policy-verifier.core': 0.16.1
 
-  '@o3co/auth.policy-verifier.core@0.16.0': {}
+  '@o3co/auth.policy-verifier.core@0.16.1': {}
 
-  '@o3co/auth.policy-verifier.server@0.16.0':
+  '@o3co/auth.policy-verifier.server@0.16.1':
     dependencies:
-      '@o3co/auth.policy-verifier.core': 0.16.0
-      express: 5.2.1
+      '@o3co/auth.policy-verifier.core': 0.16.1
+      express: 5.3.0
       jose: 6.2.12
       prom-client: 15.1.3
       zod: 4.5.4
@@ -1475,6 +1492,8 @@ snapshots:
 
   content-disposition@1.1.0: {}
 
+  content-disposition@2.0.1: {}
+
   content-type@1.0.5: {}
 
   content-type@2.0.0: {}
@@ -1548,6 +1567,39 @@ snapshots:
       body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
+      cookie: 0.7.2
+      cookie-signature: 1.2.2
+      debug: 4.4.3
+      depd: 2.0.0
+      encodeurl: 2.0.0
+      escape-html: 1.0.3
+      etag: 1.8.1
+      finalhandler: 2.1.1
+      fresh: 2.0.0
+      http-errors: 2.0.1
+      merge-descriptors: 2.0.0
+      mime-types: 3.0.2
+      on-finished: 2.4.1
+      once: 1.4.0
+      parseurl: 1.3.3
+      proxy-addr: 2.0.8
+      qs: 6.16.0
+      range-parser: 1.2.1
+      router: 2.2.0
+      send: 1.2.1
+      serve-static: 2.2.1
+      statuses: 2.0.2
+      type-is: 2.1.0
+      vary: 1.1.2
+    transitivePeerDependencies:
+      - supports-color
+
+  express@5.3.0:
+    dependencies:
+      accepts: 2.0.0
+      body-parser: 2.3.0
+      content-disposition: 2.0.1
+      content-type: 2.0.0
       cookie: 0.7.2
       cookie-signature: 1.2.2
       debug: 4.4.3

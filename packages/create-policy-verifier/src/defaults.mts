@@ -13,21 +13,20 @@
 // version if they want a newer baseline.
 //
 // These constants are the dependency baseline of the canonical template:
-// auth.policy-verifier 0.16.0, emitted by generator 0.3.0. When the baseline
+// auth.policy-verifier 0.16.1, emitted by generator 0.3.0. When the baseline
 // upgrades, refresh this file in lockstep with a generator MINOR bump (see
 // create-app.md § 3.3).
 
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */
 export const DEFAULT_DEP_VERSIONS = {
 	// Framework (o3co) — runtime
-	"@o3co/auth.policy-verifier.server": "0.16.0",
-	"@o3co/auth.policy-verifier.builtins": "0.16.0",
-	"@o3co/auth.policy-verifier.core": "0.16.0",
+	"@o3co/auth.policy-verifier.server": "0.16.1",
+	"@o3co/auth.policy-verifier.builtins": "0.16.1",
+	"@o3co/auth.policy-verifier.core": "0.16.1",
 	"@o3co/ts.hocon": "0.1.5",
 	// Runtime — non-o3co
-	// The scaffold's own logger writes NDJSON through pino (see src/logger.mts);
-	// it used to reach pino only as @o3co/auth.utils' optional peer, which was
-	// never emitted here, so instances silently logged through console.
+	// The scaffold's logger writes NDJSON through pino (src/logger.mts), so pino
+	// is a direct runtime dependency.
 	pino: "10.3.1",
 	// Dev
 	"@types/node": "25.6.0",
