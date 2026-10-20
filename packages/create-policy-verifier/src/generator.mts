@@ -242,7 +242,7 @@ function buildPackageJson(opts: FilledOptions): string {
 			"@provin-line/auth-policy-verifier-dplaax-module",
 		].sort(),
 		// Zod schema objects cross package boundaries; align their minor version.
-		overrides: { ...Object.fromEntries(transitiveProvinDeps), zod: "4.5.4" },
+		overrides: { ...Object.fromEntries(transitiveProvinDeps), zod: "4.6.7" },
 	};
 
 	const manifest = {
