@@ -118,9 +118,8 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 	});
 
 	it("emits pino as a runtime dependency, so the instance logs NDJSON rather than console", async () => {
-		// @o3co/auth.utils took pino as an *optional* peer and fell back to
-		// console; the generator never emitted pino, so every generated instance
-		// logged bare `[name] …` lines. The in-tree logger depends on pino directly.
+		// The in-tree logger (src/logger.mts) imports pino directly, so the
+		// generated package.json must list it.
 		const outDir = join(tmpRoot, "out");
 		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
 		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
@@ -129,6 +128,17 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		// A literal, not DEFAULT_DEP_VERSIONS.pino: sharing the oracle with the
 		// implementation would let a missing key pass as undefined === undefined.
 		expect(pkg.dependencies.pino).toBe("10.3.1");
+	});
+
+	it("hands its pino logger to createApp, so verifier events such as jwt_verification_unavailable reach the NDJSON log", async () => {
+		// Without `logger`, the server falls back to its console logger.
+		const outDir = join(tmpRoot, "out-logger");
+		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const main = await readFile(join(outDir, "src", "main.mts"), "utf8");
+		// The options object alone: `logger` appears elsewhere in main.mts too.
+		const options = main.match(/createApp\(\{([\s\S]*?)\}\);/)?.[1];
+		expect(options).toBeDefined();
+		expect(options).toMatch(/\blogger\b/);
 	});
 
 	it("emits exact-pin dep versions (no caret)", async () => {
