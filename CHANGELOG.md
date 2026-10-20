@@ -17,10 +17,11 @@ consumers that track the moving `v0.3` image tag.
 ### Changed
 
 - **BREAKING (wire, JWKS-verifying deployments only): the policy-verifier
-  baseline is 0.16.0.** Workspace packages require
-  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.16.0`, and
+  baseline is 0.16.1.** Workspace packages require
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.16.1`, and
   `create-policy-verifier` (now 0.3.0, per create-app.md § 3.3) emits the
-  same as exact pins. No code here changes: 0.13–0.16 otherwise change
+  same as exact pins. zod is pinned to 4.6.7 in the workspace and in the
+  generated verifier's `pnpm.overrides` (server 0.16.1 requires `^4.6.6`). No code here changes: 0.13–0.16 otherwise change
   surfaces this composition does not use (Cedar engines, static
   role/permission collectors, delegated-token ranges, caller
   authentication).
@@ -38,6 +39,16 @@ consumers that track the moving `v0.3` image tag.
   an internal error rather than as unauthenticated. See
   [upstream compatibility](docs/upstream-compatibility.md) for existing
   instances.
+
+### Fixed
+
+- The generated verifier passes its pino logger to `createApp`, so the
+  verifier's own lines (e.g. `jwt_verification_unavailable`,
+  `unauthenticated_non_loopback_bind`) are NDJSON instead of console text.
+- `policy-verifier-dplaax-module`'s docs no longer say that the upstream
+  evaluator allows a request no rule applies to. They state 0.16's
+  deny-by-default (`onEmptyRuleSet`) and why `DefaultDenyRuleCollector` stays
+  enabled.
 
 ### Security
 

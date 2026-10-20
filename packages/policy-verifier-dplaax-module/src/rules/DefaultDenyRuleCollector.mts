@@ -42,12 +42,14 @@ export interface DefaultDenyRuleCollectorConfig {
  * RuleCollector imposing a fail-closed default over the request surface:
  * any `(resource, action)` not declared in `surface` is denied.
  *
- * Why this exists: the core `evaluate()` allows when zero rules are
- * collected, so a deployment whose rule collectors are all dispatch-scoped
- * (they abstain on unknown resource/action) silently ALLOWS requests nobody
- * configured a policy for. This collector inverts that default — an
- * unconfigured request fails closed, and extending the surface is a
- * deliberate config change reviewed next to the policy rules themselves.
+ * Why this exists: the core `evaluate()` denies a request no granting rule
+ * applies to only while `onEmptyRuleSet` keeps its "deny" default, and a
+ * collector emitting a granting rule for a pair it was not meant to cover
+ * would allow that pair. This collector denies every undeclared
+ * (resource, action) whatever the other collectors emit and whatever
+ * `onEmptyRuleSet` says, so an unconfigured request fails closed, and
+ * extending the surface is a deliberate config change reviewed next to the
+ * policy rules themselves.
  *
  * The emitted rule carries the dedicated ruleType `default_deny` and always
  * verifies false. Rule groups are OR-combined per ruleType and AND-combined

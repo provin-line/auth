@@ -1,6 +1,6 @@
 # Upstream auth compatibility
 
-Workspace packages require provider `^0.15.0` and verifier `^0.16.0`. The
+Workspace packages require provider `^0.15.0` and verifier `^0.16.1`. The
 generators emit the same as exact pins (create-provider 0.2.0,
 create-policy-verifier 0.3.0). Updating this repository's git
 ref alone does **not** deploy newer upstream security fixes to an instance that
@@ -17,9 +17,11 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 
 ## Adopting current upstream
 
-- Keep Zod at one minor version across the dependency graph. Workspace and
-  generator overrides pin 4.5.4: mixing 4.3.x and 4.5.x schema objects across
-  module boundaries fails TypeScript compilation.
+- Keep Zod at one minor version across each dependency graph: mixing schema
+  objects of different minor versions across module boundaries fails
+  TypeScript compilation. The workspace and the generated verifier pin 4.6.7
+  (policy-verifier 0.16.1 requires `^4.6.6`); the generated provider pins
+  4.5.4 for provider 0.15.
 - Supply an absolute Provider issuer. Set the Verifier's `OAUTH_JWT_ISSUER`
   and `OAUTH_JWT_AUDIENCE`. DID clients must include that audience in their
   **signed** message/transcript. Current Verifier rejects LEGACY tokens with no
@@ -80,9 +82,9 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 An instance generated before create-policy-verifier 0.3.0 pins
 `@o3co/auth.policy-verifier.{server,builtins,core}` exactly at 0.12.0.
 
-- Bump all three to exactly `0.16.0` in the same change that moves
+- Bump all three to exactly `0.16.1` in the same change that moves
   `--dplaax-module-ref` past the 0.16 baseline. The module requires
-  `^0.16.0`; moving only the ref installs a second copy of `core` and
+  `^0.16.1`; moving only the ref installs a second copy of `core` and
   `builtins` beside server 0.12, a combination upstream does not support.
 - With a shared HS256 secret (the template default), `application.conf`
   needs no change.

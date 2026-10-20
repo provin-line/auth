@@ -17,7 +17,7 @@ oauth {
     jwksUri = ${?OAUTH_JWT_JWKS_URI}
     publicKey = ${?OAUTH_JWT_PUBLIC_KEY}
     publicKeyPath = ${?OAUTH_JWT_PUBLIC_KEY_PATH}
-    # Verified JWTs only. Current upstream uses mode; 0.3.x defaults to validation.
+    # Verified JWTs only.
     mode = "verify"
   }
 }
@@ -53,11 +53,10 @@ rule {
       ]
     }
     {
-      # SECURITY NOTE — fail-closed default (keep this collector enabled).
-      # Released 0.3.x allows empty rules; current upstream denies them.
-      # Keep an explicit surface guard with both versions. DefaultDenyRuleCollector inverts
-      # that default: any request whose (resource, action) is not declared in
-      # `surface` below is denied unconditionally.
+      # SECURITY NOTE — fail-closed surface guard (keep this collector enabled).
+      # DefaultDenyRuleCollector denies any request whose (resource, action) is
+      # not declared in `surface` below, whatever the other collectors emit and
+      # whatever `onEmptyRuleSet` says.
       #
       # `surface` is the deployment's declared L1 request surface. The entries
       # mirror the o3co.authz.v1.policy method options in provin.oss
