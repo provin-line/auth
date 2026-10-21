@@ -19,7 +19,7 @@
 		"@provin-line/auth-policy-verifier-dplaax-module": "workspace:*",
 		"@types/express": "^5.0.6",
 		"@types/node": "^25.6.0",
-		"express": "^5.2.1",
+		"express": "^5.3.0",
 		"jose": "^6.2.2",
 		"typescript": "^5.9.3",
 		"vitest": "^4.1.11",
