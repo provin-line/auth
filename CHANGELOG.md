@@ -21,10 +21,10 @@ consumers that track the moving `v0.3` image tag.
   `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.16.1`, and
   `create-policy-verifier` (now 0.3.0, per create-app.md § 3.3) emits the
   same as exact pins. zod is pinned to 4.6.7 in the workspace and in the
-  generated verifier's `pnpm.overrides` (server 0.16.1 requires `^4.6.6`). No code here changes: 0.13–0.16 otherwise change
-  surfaces this composition does not use (Cedar engines, static
-  role/permission collectors, delegated-token ranges, caller
-  authentication).
+  generated verifier's `pnpm.overrides` (server 0.16.1 requires `^4.6.6`).
+  The bump needs no code change here: 0.13–0.16 otherwise change surfaces
+  this composition does not use (Cedar engines, static role/permission
+  collectors, delegated-token ranges, caller authentication).
 
   What changes on the wire: a verifier configured with `OAUTH_JWT_JWKS_URI`
   that cannot get the keys a token needs (fetch failure or timeout, non-200,
@@ -46,9 +46,9 @@ consumers that track the moving `v0.3` image tag.
   verifier's own lines (e.g. `jwt_verification_unavailable`,
   `unauthenticated_non_loopback_bind`) are NDJSON instead of console text.
 - `policy-verifier-dplaax-module`'s docs no longer say that the upstream
-  evaluator allows a request no rule applies to. They state 0.16's
-  deny-by-default (`onEmptyRuleSet`) and why `DefaultDenyRuleCollector` stays
-  enabled.
+  evaluator allows a request no rule applies to. They state its
+  deny-by-default (`onEmptyRuleSet`, upstream's default since 0.4.0) and why
+  `DefaultDenyRuleCollector` stays enabled.
 
 ### Security
 

@@ -46,8 +46,8 @@ export interface DefaultDenyRuleCollectorConfig {
  * applies to only while `onEmptyRuleSet` keeps its "deny" default, and a
  * collector emitting a granting rule for a pair it was not meant to cover
  * would allow that pair. This collector denies every undeclared
- * (resource, action) whatever the other collectors emit and whatever
- * `onEmptyRuleSet` says, so an unconfigured request fails closed, and
+ * (resource, action) whatever the other collectors emit under their own
+ * ruleTypes and whatever `onEmptyRuleSet` says, so an unconfigured request fails closed, and
  * extending the surface is a deliberate config change reviewed next to the
  * policy rules themselves.
  *

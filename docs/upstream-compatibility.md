@@ -20,8 +20,9 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 - Keep Zod at one minor version across each dependency graph: mixing schema
   objects of different minor versions across module boundaries fails
   TypeScript compilation. The workspace and the generated verifier pin 4.6.7
-  (policy-verifier 0.16.1 requires `^4.6.6`); the generated provider pins
-  4.5.4 for provider 0.15.
+  (policy-verifier 0.16.1 requires `^4.6.6`). The generated provider still
+  pins 4.5.4, below provider 0.15's declared `^4.6.2`; it moves with the
+  provider 0.18 migration.
 - Supply an absolute Provider issuer. Set the Verifier's `OAUTH_JWT_ISSUER`
   and `OAUTH_JWT_AUDIENCE`. DID clients must include that audience in their
   **signed** message/transcript. Current Verifier rejects LEGACY tokens with no
@@ -80,12 +81,19 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 ## Moving an existing verifier instance to 0.16
 
 An instance generated before create-policy-verifier 0.3.0 pins
-`@o3co/auth.policy-verifier.{server,builtins,core}` exactly at 0.12.0.
+`@o3co/auth.policy-verifier.{server,builtins,core}` exactly at 0.12.0, and
+zod at 4.5.4 in its `pnpm.overrides`.
 
-- Bump all three to exactly `0.16.1` in the same change that moves
-  `--dplaax-module-ref` past the 0.16 baseline. The module requires
-  `^0.16.1`; moving only the ref installs a second copy of `core` and
-  `builtins` beside server 0.12, a combination upstream does not support.
+- Bump all three to exactly `0.16.1` in the same change that moves the
+  `#<ref>` of `@provin-line/auth-policy-verifier-dplaax-module`, and of the
+  `@provin-line/*` entries in `pnpm.overrides`, to the provin.auth release
+  that carries the 0.16.1 baseline (v0.4.0). The module requires `^0.16.1`;
+  moving only the ref installs a second copy of `core` and `builtins`
+  beside server 0.12, a combination upstream does not support.
+- Raise `pnpm.overrides.zod` to `4.6.7`: server 0.16.1 requires `^4.6.6`.
+- Pass the instance's logger to `createApp` in `src/main.mts` (add
+  `logger,` to its options). Without it the verifier's own lines, such as
+  `jwt_verification_unavailable` below, are console text rather than NDJSON.
 - With a shared HS256 secret (the template default), `application.conf`
   needs no change.
 - With `OAUTH_JWT_JWKS_URI` set, an unreachable key set now answers `503`

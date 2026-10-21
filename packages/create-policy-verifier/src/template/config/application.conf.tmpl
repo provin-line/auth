@@ -38,7 +38,6 @@ rule {
     {
       # DID tokens assert identity. Admit Owner DIDs to the declared surface;
       # the downstream registry still enforces its resource-specific ACLs.
-      # This explicit rule also works with upstream deny-on-empty evaluation.
       collector = "SubjectDidTypeRuleCollector"
       rules = [
         { resource = "schemas", action = "*", allowedTypes = ["owner"] }
@@ -55,8 +54,8 @@ rule {
     {
       # SECURITY NOTE — fail-closed surface guard (keep this collector enabled).
       # DefaultDenyRuleCollector denies any request whose (resource, action) is
-      # not declared in `surface` below, whatever the other collectors emit and
-      # whatever `onEmptyRuleSet` says.
+      # not declared in `surface` below, whatever the other collectors emit under
+      # their own ruleTypes and whatever `onEmptyRuleSet` says.
       #
       # `surface` is the deployment's declared L1 request surface. The entries
       # mirror the o3co.authz.v1.policy method options in provin.oss

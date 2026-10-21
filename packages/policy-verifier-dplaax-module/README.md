@@ -28,9 +28,10 @@ All rule collectors support exact resource+action match and a wildcard `action: 
 applies to (`no_applicable_rule`) only while `onEmptyRuleSet` keeps its
 `"deny"` default, and a collector that emits a granting rule for a pair it was
 not meant to cover lets that pair through. `DefaultDenyRuleCollector` denies
-every `(resource, action)` outside its `surface` whatever the other collectors
-emit and whatever `onEmptyRuleSet` says: its `default_deny` rule always fails,
-and rule groups are AND-combined across ruleTypes. Keep it enabled (the
+every `(resource, action)` outside its `surface`, whatever the other collectors
+emit under their own ruleTypes and whatever `onEmptyRuleSet` says: its
+`default_deny` rule always fails, and rule groups are AND-combined across
+ruleTypes. Keep it enabled (the
 `create-policy-verifier` scaffold ships it with the full dPLaaX L1 request
 surface) and extend `surface` deliberately when the deployment gains a new
 RPC.
