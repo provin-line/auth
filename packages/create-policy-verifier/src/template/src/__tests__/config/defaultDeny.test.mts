@@ -3,11 +3,11 @@ import { fileURLToPath } from "node:url";
 import { parseFile } from "@o3co/ts.hocon";
 import { describe, expect, it } from "vitest";
 
-// SECURITY pin (dPLaaX D-1): the upstream evaluator ALLOWS a request when
-// zero rules are collected, so a deployment without a fail-closed default
-// silently allows every (resource, action) nobody wrote a policy for. The
-// scaffold therefore ships DefaultDenyRuleCollector enabled with a non-empty
-// declared surface, and this test pins that. Removing the collector or
+// SECURITY pin (dPLaaX D-1): the upstream evaluator denies a request no
+// granting rule applies to only while `onEmptyRuleSet` keeps its "deny"
+// default, so the scaffold ships DefaultDenyRuleCollector enabled with a
+// non-empty declared surface, which denies every undeclared (resource, action)
+// whatever that setting says, and this test pins that. Removing the collector or
 // emptying its surface is a deliberate, security-relevant act — if you are
 // editing this test to make that pass, stop and read the SECURITY NOTE in
 // config/application.conf and docs/requirements.md first.
