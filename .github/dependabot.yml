@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # The Node base image of every Dockerfile, the generator templates included.
+  # Each pins a Node minor tag (node:24.22-alpine). Docker stops updating a
+  # minor tag once a newer minor ships, so these bumps are what keep the
+  # images on a Node line that still receives security fixes.
+  #
+  # Updates go to develop, the working branch; main changes only with a
+  # release. Dependabot reads this file from the default branch, so this
+  # takes effect once it reaches main.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/deploy"
+      - "/packages/create-provider/src/template"
+      - "/packages/create-policy-verifier/src/template"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    ignore:
+      # engines.node admits Node 24 only; a major move is a deliberate change.
+      - dependency-name: "node"
+        update-types:
+          - "version-update:semver-major"

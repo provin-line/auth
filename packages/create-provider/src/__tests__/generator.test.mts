@@ -189,6 +189,19 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 		}
 	});
 
+	it("emits the vitest pin as an exact devDependency", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({
+			name: "test-scaffold",
+			outDir,
+			gitInit: false,
+		});
+		const pkg = JSON.parse(
+			await readFile(join(outDir, "package.json"), "utf8"),
+		) as { devDependencies: Record<string, string> };
+		expect(pkg.devDependencies.vitest).toBe("4.1.12");
+	});
+
 	it("declares @noble/ed25519 as a runtime dep so the DID grant's import.meta.resolve finds it", async () => {
 		// The instance sets `pathResolver: import.meta.resolve` (main.mts), so the
 		// ed25519_raw DID-grant verifier resolves @noble/ed25519 from the INSTANCE
@@ -286,6 +299,23 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 			gitInit: false,
 		});
 		expect(result.filesWritten).toContain("keys/.gitkeep");
+	});
+
+	it("builds the Dockerfile on a Node 24 minor tag no older than 24.22, never the floating major tag", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({
+			name: "test-scaffold",
+			outDir,
+			gitInit: false,
+		});
+		const dockerfile = await readFile(join(outDir, "Dockerfile"), "utf8");
+		const nodeImages = [...dockerfile.matchAll(/^FROM (node:\S+)/gm)].map(
+			(m) => m[1],
+		);
+		expect(nodeImages).toHaveLength(1);
+		const minor = /^node:24\.(\d+)-alpine$/.exec(nodeImages[0] ?? "");
+		expect(minor, nodeImages[0]).not.toBeNull();
+		expect(Number(minor?.[1])).toBeGreaterThanOrEqual(22);
 	});
 
 	it("emits valid JSON even with JSON-special chars in free-form values", async () => {
