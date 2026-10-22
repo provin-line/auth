@@ -19,8 +19,9 @@ consumers that track the moving `v0.3` image tag. provin.oss's quickstart pins
 `v0.3` and moves to `v0.4` on its own schedule.
 
 The release also carries security fixes: Node.js 24.22.1, the 2026-10-21
-security release, under every image and generated scaffold, and patched
-proxy-addr, brace-expansion and source-map-js in the lockfile.
+security release, under every image and generated scaffold; vitest 4.1.12 in
+the workspace and the generated scaffolds; and patched proxy-addr,
+brace-expansion and source-map-js in the lockfile.
 
 ### Changed
 
