@@ -13,7 +13,9 @@
 # fresh. Once you commit a lockfile, add `--frozen-lockfile` to the
 # install lines below for reproducible builds.
 
-FROM node:24-alpine AS node-base
+# Node minor line, not the floating major tag: a rebuild picks up its patch
+# releases (security fixes) without moving to an untested minor.
+FROM node:24.22-alpine AS node-base
 
 ENV HOME=/home/node
 

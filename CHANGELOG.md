@@ -52,6 +52,15 @@ consumers that track the moving `v0.3` image tag.
 
 ### Security
 
+- **Node.js 24.22.1, the 2026-10-21 security release** (eight CVEs on the
+  24.x line, four of them high: TLS hostname verification, a Brotli decoder
+  out-of-bounds write, and DNS name truncation). Every image builds on
+  `node:24.22-alpine` instead of the floating `node:24-alpine`:
+  `Dockerfile.instance`, `deploy/generated-instance.Dockerfile` (the
+  published images) and both generator templates, so a newly generated
+  instance starts on it. An already generated instance keeps its own
+  Dockerfile; change its `FROM` line by hand. CI installs the newest 24.22
+  patch (`check-latest`), and `engines.node` is `>=24.22.1 <25`.
 - Refresh vulnerable transitive lockfile entries: proxy-addr 2.0.8
   (GHSA-jqcg-44mw-7w3h, via express), brace-expansion 5.0.12
   (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p) and

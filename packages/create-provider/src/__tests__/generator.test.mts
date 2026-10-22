@@ -288,6 +288,20 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 		expect(result.filesWritten).toContain("keys/.gitkeep");
 	});
 
+	it("builds the Dockerfile on the node:24.22 minor line, never the floating major tag", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({
+			name: "test-scaffold",
+			outDir,
+			gitInit: false,
+		});
+		const dockerfile = await readFile(join(outDir, "Dockerfile"), "utf8");
+		const nodeImages = [...dockerfile.matchAll(/^FROM (node:\S+)/gm)].map(
+			(m) => m[1],
+		);
+		expect(nodeImages).toEqual(["node:24.22-alpine"]);
+	});
+
 	it("emits valid JSON even with JSON-special chars in free-form values", async () => {
 		const outDir = join(tmpRoot, "out");
 		const trickyDescription = 'A "tricky" \\ description\nwith newline';
