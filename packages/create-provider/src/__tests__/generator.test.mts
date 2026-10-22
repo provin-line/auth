@@ -53,6 +53,23 @@ describe("generateAuthProviderScaffold — file emission", () => {
 		expect(result.filesWritten).toContain("keys/.gitkeep");
 	});
 
+	it("builds the Dockerfile on a Node 24 minor tag no older than 24.22, never the floating major tag", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({
+			name: "test-scaffold",
+			outDir,
+			gitInit: false,
+		});
+		const dockerfile = await readFile(join(outDir, "Dockerfile"), "utf8");
+		const nodeImages = [...dockerfile.matchAll(/^FROM (node:\S+)/gm)].map(
+			(m) => m[1],
+		);
+		expect(nodeImages).toHaveLength(1);
+		const minor = /^node:24\.(\d+)-alpine$/.exec(nodeImages[0] ?? "");
+		expect(minor, nodeImages[0]).not.toBeNull();
+		expect(Number(minor?.[1])).toBeGreaterThanOrEqual(22);
+	});
+
 	it("accepts an existing empty target directory", async () => {
 		const outDir = join(tmpRoot, "empty");
 		await mkdir(outDir);
