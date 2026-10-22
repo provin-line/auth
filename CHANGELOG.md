@@ -59,8 +59,11 @@ consumers that track the moving `v0.3` image tag.
   `Dockerfile.instance`, `deploy/generated-instance.Dockerfile` (the
   published images) and both generator templates, so a newly generated
   instance starts on it. An already generated instance keeps its own
-  Dockerfile; change its `FROM` line by hand. CI installs the newest 24.22
-  patch (`check-latest`), and `engines.node` is `>=24.22.1 <25`.
+  Dockerfile; change its `FROM` line by hand. A minor tag stops receiving
+  updates once a newer minor ships, so Dependabot's `docker` ecosystem now
+  proposes those bumps for this repository's Dockerfiles. CI installs the
+  newest 24.22 patch (`check-latest`), and `engines.node` is
+  `>=24.22.1 <25`.
 - Refresh vulnerable transitive lockfile entries: proxy-addr 2.0.8
   (GHSA-jqcg-44mw-7w3h, via express), brace-expansion 5.0.12
   (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p) and

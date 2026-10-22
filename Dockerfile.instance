@@ -16,8 +16,9 @@
 # because workspace node_modules are symlink forests that don't survive
 # extraction. Image size is a non-goal here.
 
-# Node minor line, not the floating major tag: a rebuild picks up its patch
-# releases (security fixes) without moving to an untested minor.
+# Pinned to a Node minor tag: a rebuild picks up that minor's patch releases
+# while it is current, but Docker stops updating the tag once a newer minor
+# ships. Dependabot (.github/dependabot.yml) proposes that bump.
 FROM node:24.22-alpine AS node-base
 
 ENV HOME=/home/node

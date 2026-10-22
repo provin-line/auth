@@ -235,7 +235,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		expect(result.filesWritten).toContain("src/collectors/.gitkeep");
 	});
 
-	it("builds the Dockerfile on the node:24.22 minor line, never the floating major tag", async () => {
+	it("builds the Dockerfile on a Node 24 minor tag no older than 24.22, never the floating major tag", async () => {
 		const outDir = join(tmpRoot, "out");
 		await generatePolicyVerifierScaffold({
 			name: "test-scaffold",
@@ -246,7 +246,10 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		const nodeImages = [...dockerfile.matchAll(/^FROM (node:\S+)/gm)].map(
 			(m) => m[1],
 		);
-		expect(nodeImages).toEqual(["node:24.22-alpine"]);
+		expect(nodeImages).toHaveLength(1);
+		const minor = /^node:24\.(\d+)-alpine$/.exec(nodeImages[0] ?? "");
+		expect(minor, nodeImages[0]).not.toBeNull();
+		expect(Number(minor?.[1])).toBeGreaterThanOrEqual(22);
 	});
 
 	it("emits valid JSON even with JSON-special chars in free-form values", async () => {
