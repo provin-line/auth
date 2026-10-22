@@ -13,30 +13,33 @@ releases.
 ## [0.3.1] - 2026-10-22
 
 A patch on the 0.3 line, so the moving `v0.3` image tag that provin.oss's
-quickstart pins picks up the security fixes below. It changes no behaviour,
-configuration or wire answer; the policy-verifier 0.16 baseline ships in
-0.4.0.
+quickstart pins picks up the Node.js and proxy-addr fixes below. It changes
+no behaviour, configuration or wire answer; the policy-verifier 0.16
+baseline ships in 0.4.0.
 
 ### Security
 
-- **Node.js 24.22.1, the 2026-10-21 security release** (eight CVEs on the
-  24.x line, four of them high: TLS hostname verification, a Brotli decoder
-  out-of-bounds write, and DNS name truncation). Every image builds on
-  `node:24.22-alpine` instead of the floating `node:24-alpine`:
-  `Dockerfile.instance`, `deploy/generated-instance.Dockerfile` (the
-  published images) and both generator templates, so a newly generated
-  instance starts on it. An already generated instance keeps its own
-  Dockerfile; change its `FROM` line by hand. CI installs the newest 24.22
-  patch (`check-latest`), and `engines.node` is `>=24.22.1 <25`.
+- **Node.js 24.22.1, the October 2026 security release** (eight CVEs on the
+  24.x line, four of them high: two TLS hostname-verification bypasses, a
+  Brotli decoder out-of-bounds write, and DNS name truncation). Every image
+  builds on `node:24.22-alpine` instead of the floating `node:24-alpine`:
+  the published images (`deploy/generated-instance.Dockerfile`), the dev
+  composition image (`Dockerfile.instance`) and both generator templates,
+  so a newly generated instance starts on it. An already generated instance
+  keeps its own Dockerfile; change its `FROM` line by hand. CI installs the
+  newest 24.22 patch (`check-latest`), and `engines.node` is
+  `>=24.22.1 <25`.
 - Refresh vulnerable lockfile entries: proxy-addr 2.0.8
   (GHSA-jqcg-44mw-7w3h, via express), brace-expansion 5.0.12
   (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p),
   source-map-js 1.2.2 (GHSA-68fv-2mgg-jv7q), vite 8.3.4 (GHSA-587h-7wmj-h5pm,
   GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-9jrq-w75r-8gcw,
-  GHSA-rq7h-c2jc-7f22) and vitest 4.1.12 (GHSA-qxg6-89mg-rqv8,
-  GHSA-xp26-3454-mjgp). Only proxy-addr is a runtime dependency; the rest
-  is test and build tooling. Generated scaffolds keep their vitest 4.1.11
-  development pin; 0.4.0 moves it.
+  GHSA-rq7h-c2jc-7f22) and vitest 4.1.12 (`@vitest/mocker`:
+  GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp). Only proxy-addr is a runtime
+  dependency; the rest is test and build tooling.
+- Generated scaffolds, and therefore the published images, keep their
+  vitest 4.1.11 development pin, which carries the two `@vitest/mocker`
+  advisories (development-only). 0.4.0 moves it.
 
 ## [0.3.0] - 2026-09-24
 
