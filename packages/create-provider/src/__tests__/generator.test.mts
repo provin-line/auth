@@ -189,6 +189,19 @@ describe("generateAuthProviderScaffold — template substitution", () => {
 		}
 	});
 
+	it("emits the vitest pin as an exact devDependency", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generateAuthProviderScaffold({
+			name: "test-scaffold",
+			outDir,
+			gitInit: false,
+		});
+		const pkg = JSON.parse(
+			await readFile(join(outDir, "package.json"), "utf8"),
+		) as { devDependencies: Record<string, string> };
+		expect(pkg.devDependencies.vitest).toBe("4.1.12");
+	});
+
 	it("declares @noble/ed25519 as a runtime dep so the DID grant's import.meta.resolve finds it", async () => {
 		// The instance sets `pathResolver: import.meta.resolve` (main.mts), so the
 		// ed25519_raw DID-grant verifier resolves @noble/ed25519 from the INSTANCE

@@ -159,6 +159,19 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		}
 	});
 
+	it("emits the vitest pin as an exact devDependency", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generatePolicyVerifierScaffold({
+			name: "test-scaffold",
+			outDir,
+			gitInit: false,
+		});
+		const pkg = JSON.parse(
+			await readFile(join(outDir, "package.json"), "utf8"),
+		) as { devDependencies: Record<string, string> };
+		expect(pkg.devDependencies.vitest).toBe("4.1.12");
+	});
+
 	it("emits git-subdir form for @provin-line/auth-policy-verifier-dplaax-module", async () => {
 		const outDir = join(tmpRoot, "out");
 		await generatePolicyVerifierScaffold({
