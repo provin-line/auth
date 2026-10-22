@@ -10,9 +10,17 @@ releases.
 
 ## [Unreleased]
 
-Ships as a minor (0.4.0), not a patch: the verifier baseline below changes
-`/verify`'s answer for JWKS-verifying deployments, and that must not reach
-consumers that track the moving `v0.3` image tag.
+## [0.4.0] - 2026-10-22
+
+A minor number, not a patch: the policy-verifier baseline moves to 0.16.1,
+which changes `/verify`'s answer for JWKS-verifying deployments (`503`
+instead of `401` when the keys cannot be fetched), and that must not reach
+consumers that track the moving `v0.3` image tag. provin.oss's quickstart pins
+`v0.3` and moves to `v0.4` on its own schedule.
+
+The release also carries security fixes: Node.js 24.22.1, the 2026-10-21
+security release, under every image and generated scaffold, and patched
+proxy-addr, brace-expansion and source-map-js in the lockfile.
 
 ### Changed
 
@@ -422,7 +430,8 @@ SECURITY.md).
   `ghcr.io/provin-line/auth-auth-provider`) by `publish-images.yml` on `v*`
   tags, consumed by the provin.oss quickstart via `AUTH_REF`.
 
-[Unreleased]: https://github.com/provin-line/auth/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/provin-line/auth/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/provin-line/auth/releases/tag/v0.4.0
 [0.3.0]: https://github.com/provin-line/auth/releases/tag/v0.3.0
 [0.2.1]: https://github.com/provin-line/auth/releases/tag/v0.2.1
 [0.2.0]: https://github.com/provin-line/auth/releases/tag/v0.2.0
