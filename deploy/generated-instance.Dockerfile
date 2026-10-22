@@ -40,7 +40,7 @@ ARG SCAFFOLD_ARGS=""
 # --- gen: clone provin.auth, build the generator, scaffold the instance ---
 # Pinned to a Node minor tag: a rebuild picks up that minor's patch releases
 # while it is current, but Docker stops updating the tag once a newer minor
-# ships. Move to the newer minor then.
+# ships. Dependabot (.github/dependabot.yml) proposes that bump.
 FROM node:24.22-alpine AS gen
 RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 WORKDIR /src

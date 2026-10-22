@@ -27,6 +27,7 @@ const logger = createAppLogger("dplaax-policy-verifier", config.logging.level);
 const app = await createApp({
     pathResolver: import.meta.resolve,
     config,
+    logger,
     modules: [
         builtinCollectorsModule,
         builtinKeyResolversModule,

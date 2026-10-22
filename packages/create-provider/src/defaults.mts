@@ -12,11 +12,10 @@
 // literals at build time; consumers regenerate by running a newer generator
 // version if they want a newer baseline.
 //
-// These constants are the dependency baseline of the canonical template
-// (originally the pre-M4 reference instance's package.json — 2026-05-28 snapshot, provin-line/auth
-// commit 21fe40c; auth baseline refreshed 2026-09-06 to the released
-// auth.provider 0.15.0 with generator 0.2.0). When the baseline upgrades,
-// refresh this file in lockstep with a generator MINOR bump (see create-app.md § 3.3).
+// These constants are the dependency baseline of the canonical template:
+// auth.provider 0.15.0, emitted by generator 0.3.0. When the baseline
+// upgrades, refresh this file in lockstep with a generator MINOR bump (see
+// create-app.md § 3.3).
 
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */
 export const DEFAULT_DEP_VERSIONS = {
@@ -40,7 +39,7 @@ export const DEFAULT_DEP_VERSIONS = {
 	"@types/express": "5.0.6",
 	"@types/node": "25.6.0",
 	typescript: "5.9.3",
-	vitest: "4.1.11",
+	vitest: "4.1.12",
 } as const;
 
 /** Default git-subdirectory ref for `@provin-line/auth-provider-dplaax-module`. */

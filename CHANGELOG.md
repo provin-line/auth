@@ -10,6 +10,70 @@ releases.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+A minor number, not a patch: the policy-verifier baseline moves to 0.16.1,
+which changes `/verify`'s answer for JWKS-verifying deployments (`503`
+instead of `401` when the keys cannot be fetched), and that must not reach
+consumers that track the moving `v0.3` image tag. provin.oss's quickstart pins
+`v0.3` and moves to `v0.4` on its own schedule.
+
+It includes 0.3.1's security fixes (Node.js 24.22.1 under every image, the
+refreshed lockfile entries), and adds the generated scaffolds' vitest 4.1.12
+pin and Dependabot updates for the Node minor pin.
+
+### Changed
+
+- **BREAKING (wire, JWKS-verifying deployments only): the policy-verifier
+  baseline is 0.16.1.** Workspace packages require
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.16.1`, and
+  `create-policy-verifier` (now 0.3.0, per create-app.md § 3.3) emits the
+  same as exact pins. zod is pinned to 4.6.7 in the workspace and in the
+  generated verifier's `pnpm.overrides` (server 0.16.1 requires `^4.6.6`).
+  The bump needs no code change here: 0.13–0.16 otherwise change surfaces
+  this composition does not use (Cedar engines, static role/permission
+  collectors, delegated-token ranges, caller authentication).
+
+  What changes on the wire: a verifier configured with `OAUTH_JWT_JWKS_URI`
+  that cannot get the keys a token needs (fetch failure or timeout, non-200,
+  a body that is not a key set) answers `503 verification_unavailable`
+  instead of `401 invalid_token`. A cached key set keeps verifying through an
+  outage only until it is `oauth.jwt.jwksCacheMaxAgeMs` old (upstream
+  default 10 minutes). A token that fails verification is still `401`. The
+  generated verifier uses a shared HS256 secret unless `OAUTH_JWT_JWKS_URI`
+  is set, and only then is it affected. If it is: alerts, SLOs, retry-on-5xx
+  and mesh outlier detection now see an IdP outage as 5xx, and
+  provin.oss's `protobuf.interceptors` endpoint reports it to the caller as
+  an internal error rather than as unauthenticated. See
+  [upstream compatibility](docs/upstream-compatibility.md) for existing
+  instances.
+
+### Fixed
+
+- The generated verifier passes its pino logger to `createApp`, so the
+  verifier's own lines (e.g. `jwt_verification_unavailable`,
+  `unauthenticated_non_loopback_bind`) are NDJSON instead of console text.
+- `policy-verifier-dplaax-module`'s docs no longer say that the upstream
+  evaluator allows a request no rule applies to. They state its
+  deny-by-default (`onEmptyRuleSet`, upstream's default since 0.4.0) and why
+  `DefaultDenyRuleCollector` stays enabled.
+
+### Security
+
+Node.js 24.22.1 (`node:24.22-alpine` under every image) and the refreshed
+lockfile entries (proxy-addr, brace-expansion, source-map-js, vite, vitest)
+shipped in 0.3.1. On top of them:
+
+- **Dependabot keeps the Node minor pin current.** A minor tag such as
+  `node:24.22-alpine` stops receiving updates once a newer minor ships, so
+  Dependabot's `docker` ecosystem now proposes those bumps for this
+  repository's Dockerfiles.
+- **Generated scaffolds pin vitest 4.1.12** (`@vitest/mocker`:
+  GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp), so a newly generated instance,
+  and the published images, start on it. `create-provider` is now 0.3.0, per
+  create-app.md § 3.3. An already generated instance moves its own `vitest`
+  pin by hand.
+
 ## [0.3.1] - 2026-10-22
 
 A patch on the 0.3 line, so the moving `v0.3` image tag that provin.oss's
@@ -406,7 +470,8 @@ SECURITY.md).
   `ghcr.io/provin-line/auth-auth-provider`) by `publish-images.yml` on `v*`
   tags, consumed by the provin.oss quickstart via `AUTH_REF`.
 
-[Unreleased]: https://github.com/provin-line/auth/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/provin-line/auth/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/provin-line/auth/releases/tag/v0.4.0
 [0.3.1]: https://github.com/provin-line/auth/releases/tag/v0.3.1
 [0.3.0]: https://github.com/provin-line/auth/releases/tag/v0.3.0
 [0.2.1]: https://github.com/provin-line/auth/releases/tag/v0.2.1

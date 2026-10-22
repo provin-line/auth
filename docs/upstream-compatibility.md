@@ -1,7 +1,8 @@
 # Upstream auth compatibility
 
-Workspace packages require provider `^0.15.0` and verifier `^0.12.0`, and the
-generators (0.2.0) emit the same as exact pins. Updating this repository's git
+Workspace packages require provider `^0.15.0` and verifier `^0.16.1`. The
+generators emit the same as exact pins (create-provider 0.3.0,
+create-policy-verifier 0.3.0). Updating this repository's git
 ref alone does **not** deploy newer upstream security fixes to an instance that
 already exists: its own `package.json` pins and its `application.conf` must be
 updated too (see below).
@@ -16,9 +17,12 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 
 ## Adopting current upstream
 
-- Keep Zod at one minor version across the dependency graph. Workspace and
-  generator overrides pin 4.5.4: mixing 4.3.x and 4.5.x schema objects across
-  module boundaries fails TypeScript compilation.
+- Keep Zod at one minor version across each dependency graph: mixing schema
+  objects of different minor versions across module boundaries fails
+  TypeScript compilation. The workspace and the generated verifier pin 4.6.7
+  (policy-verifier 0.16.1 requires `^4.6.6`). The generated provider still
+  pins 4.5.4, below provider 0.15's declared `^4.6.2`; it moves with the
+  provider 0.18 migration.
 - Supply an absolute Provider issuer. Set the Verifier's `OAUTH_JWT_ISSUER`
   and `OAUTH_JWT_AUDIENCE`. DID clients must include that audience in their
   **signed** message/transcript. Current Verifier rejects LEGACY tokens with no
@@ -49,9 +53,10 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 
   Revocation takes effect where the provider verifies a token: its
   introspection endpoint and its own routes. A resource server that verifies
-  JWTs locally against the provider's JWKS, as the generated policy-verifier
-  does, consults neither store; for it, the access-token lifetime (900s in the
-  scaffold) is still the bound.
+  JWTs locally, as the generated policy-verifier does (with a shared HS256
+  secret by default, or against the provider's JWKS when
+  `OAUTH_JWT_JWKS_URI` is set), consults neither store; for it, the
+  access-token lifetime (900s in the scaffold) is still the bound.
 
   Migrating an instance generated earlier:
   - `audit.sink.type = "none"` **must** go, or boot fails. Add the
@@ -72,6 +77,33 @@ This does not certify deployed registry ACLs or Web/mobile clients.
 - Current Provider separates JWKS publication from OAuth; current Verifier
   separates key-resolver registration. Composition includes those modules when
   available; released versions retain their internal wiring.
+
+## Moving an existing verifier instance to 0.16
+
+An instance generated before create-policy-verifier 0.3.0 pins
+`@o3co/auth.policy-verifier.{server,builtins,core}` exactly at 0.12.0, and
+zod at 4.5.4 in its `pnpm.overrides`.
+
+- Bump all three to exactly `0.16.1` in the same change that moves the
+  `#<ref>` of `@provin-line/auth-policy-verifier-dplaax-module`, and of the
+  `@provin-line/*` entries in `pnpm.overrides`, to the provin.auth release
+  that carries the 0.16.1 baseline (v0.4.0). The module requires `^0.16.1`;
+  moving only the ref installs a second copy of `core` and `builtins`
+  beside server 0.12, a combination upstream does not support.
+- Raise `pnpm.overrides.zod` to `4.6.7`: server 0.16.1 requires `^4.6.6`.
+- Pass the instance's logger to `createApp` in `src/main.mts` (add
+  `logger,` to its options). Without it the verifier's own lines, such as
+  `jwt_verification_unavailable` below, are console text rather than NDJSON.
+- With a shared HS256 secret (the template default), `application.conf`
+  needs no change.
+- With `OAUTH_JWT_JWKS_URI` set, an unreachable key set now answers `503`
+  rather than `401` once the cached set is `oauth.jwt.jwksCacheMaxAgeMs` old.
+  Review alerts, retries and outlier detection that key on 5xx.
+- Run `pnpm update proxy-addr` (and the same for `brace-expansion` and
+  `source-map-js` if present) in the instance: the advisory fix in this
+  repository's lockfile does not reach an instance's own lockfile. Provider
+  instances read `HTTP_TRUST_PROXY` into Express `trust proxy`, which is
+  where `proxy-addr` runs.
 
 ## DID policy and trust boundaries
 

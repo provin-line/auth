@@ -66,15 +66,19 @@ see [create-app.md](create-app.md).
   - `SubjectDidTypeRuleCollector` — DID-hierarchy-level restriction per `(resource, action)`
   - `DefaultDenyRuleCollector` — fail-closed default over the declared `(resource, action)` surface
 - MUST load policy from YAML. No database.
-- **SECURITY NOTE — the PDP is allow-by-default without a declared surface.**
-  The upstream evaluator allows a request when zero rules are collected, and
-  every other rule collector is dispatch-scoped (it abstains on `(resource,
-  action)` pairs it is not configured for). A deployment MUST therefore keep
+- **SECURITY NOTE — the declared surface is the PDP's fail-closed guard.**
+  The upstream evaluator denies a request no granting rule applies to only
+  while `onEmptyRuleSet` keeps its `"deny"` default, and a collector that
+  emits a granting rule for a pair it was not meant to cover lets that pair
+  through: `ResourceActionScopeRuleCollector` emits a scope rule for every
+  request a scoped token makes. A deployment MUST therefore keep
   `DefaultDenyRuleCollector` enabled with its `surface` listing exactly the
   RPCs the deployment serves (the scaffold ships this; the SoT for the L1
   surface is the `o3co.authz.v1.policy` options in provin.oss
-  `api/protobuf/dplaax/*/v1/*.proto`). Removing the collector or emptying its
-  surface re-opens the silent-allow hole for unconfigured requests.
+  `api/protobuf/dplaax/*/v1/*.proto`). Its `default_deny` rule fails every
+  pair outside `surface`, and rule groups are AND-combined across ruleTypes,
+  so an empty surface denies every request. Removing the collector lets an
+  undeclared pair through wherever another collector grants it.
 
 ### 2.4 Authorization (policy-verifier) — Out of OSS scope
 
