@@ -58,8 +58,9 @@ consumers that track the moving `v0.3` image tag.
   source-map-js 1.2.2 (GHSA-68fv-2mgg-jv7q).
 - vitest 4.1.12 (`@vitest/mocker`: GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp),
   in the workspace and in both generators' scaffold pins, so a newly
-  generated instance starts on it. `create-provider` is now 0.3.0 (create-app.md
-  § 3.3). An already generated instance moves its own `vitest` pin by hand.
+  generated instance starts on it. `create-provider` is now 0.3.0, per
+  create-app.md § 3.3. An already generated instance moves its own `vitest`
+  pin by hand.
 
 ## [0.3.0] - 2026-09-24
 

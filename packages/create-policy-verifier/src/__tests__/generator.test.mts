@@ -159,7 +159,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		}
 	});
 
-	it("emits vitest 4.1.12, the first 4.x release clear of the @vitest/mocker advisories", async () => {
+	it("emits the vitest pin as an exact devDependency", async () => {
 		const outDir = join(tmpRoot, "out");
 		await generatePolicyVerifierScaffold({
 			name: "test-scaffold",

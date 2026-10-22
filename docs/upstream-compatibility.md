@@ -1,7 +1,7 @@
 # Upstream auth compatibility
 
 Workspace packages require provider `^0.15.0` and verifier `^0.16.1`. The
-generators emit the same as exact pins (create-provider 0.2.0,
+generators emit the same as exact pins (create-provider 0.3.0,
 create-policy-verifier 0.3.0). Updating this repository's git
 ref alone does **not** deploy newer upstream security fixes to an instance that
 already exists: its own `package.json` pins and its `application.conf` must be
