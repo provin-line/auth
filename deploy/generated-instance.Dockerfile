@@ -38,7 +38,10 @@ ARG PORT=3001
 ARG SCAFFOLD_ARGS=""
 
 # --- gen: clone provin.auth, build the generator, scaffold the instance ---
-FROM node:24-alpine AS gen
+# Pinned to a Node minor tag: a rebuild picks up that minor's patch releases
+# while it is current, but Docker stops updating the tag once a newer minor
+# ships. Dependabot (.github/dependabot.yml) proposes that bump.
+FROM node:24.22-alpine AS gen
 RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 WORKDIR /src
 ARG GENERATOR
@@ -85,7 +88,7 @@ RUN --mount=type=secret,id=github_token \
 # actually runs, so a mistake in the restructure surfaces immediately instead
 # of waiting in a path nothing exercises. Shipping it earlier would repeat what
 # happened to provin.oss's quickstart §2f — documented, unexecuted, wrong.
-FROM node:24-alpine AS builder
+FROM node:24.22-alpine AS builder
 RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 WORKDIR /app
 COPY --from=gen /instance/ ./
@@ -105,7 +108,7 @@ RUN --mount=type=secret,id=github_token \
 # builder's already-installed, already-built /app (node_modules is
 # self-contained: pnpm's links stay within node_modules) sidesteps that and
 # needs no GitHub access.
-FROM node:24-alpine AS runtime
+FROM node:24.22-alpine AS runtime
 RUN apk add --no-cache tini
 ENV NODE_ENV=production
 ARG PORT

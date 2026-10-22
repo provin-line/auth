@@ -13,7 +13,10 @@
 # fresh. Once you commit a lockfile, add `--frozen-lockfile` to the
 # install lines below for reproducible builds.
 
-FROM node:24-alpine AS node-base
+# Pinned to a Node minor tag: a rebuild picks up that minor's patch releases
+# while it is current, but Docker stops updating the tag once a newer minor
+# ships. Move to the newer minor then.
+FROM node:24.22-alpine AS node-base
 
 ENV HOME=/home/node
 

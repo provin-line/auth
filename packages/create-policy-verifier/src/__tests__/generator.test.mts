@@ -248,6 +248,23 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		expect(result.filesWritten).toContain("src/collectors/.gitkeep");
 	});
 
+	it("builds the Dockerfile on a Node 24 minor tag no older than 24.22, never the floating major tag", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generatePolicyVerifierScaffold({
+			name: "test-scaffold",
+			outDir,
+			gitInit: false,
+		});
+		const dockerfile = await readFile(join(outDir, "Dockerfile"), "utf8");
+		const nodeImages = [...dockerfile.matchAll(/^FROM (node:\S+)/gm)].map(
+			(m) => m[1],
+		);
+		expect(nodeImages).toHaveLength(1);
+		const minor = /^node:24\.(\d+)-alpine$/.exec(nodeImages[0] ?? "");
+		expect(minor, nodeImages[0]).not.toBeNull();
+		expect(Number(minor?.[1])).toBeGreaterThanOrEqual(22);
+	});
+
 	it("emits valid JSON even with JSON-special chars in free-form values", async () => {
 		// Codex P2 #3: a description containing quotes, a backslash, and a
 		// newline must not corrupt the emitted package.json. The object-based
