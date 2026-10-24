@@ -12,6 +12,23 @@ releases.
 
 ### Added
 
+- **`@provin-line/auth-dplaax-registry`**: provides the DID grant's
+  `didDocuments` (`packages/dplaax-registry`).
+  - It resolves did:dplaax owner DIDs at
+    `<url>/did/<accountType>/<accountId>/did.json` through auth.provider's
+    `outbound`, as the operator's own URL. The operator's destination policy
+    decides between https (`outbound.internal-hosts`) and plain http to a
+    private address (`outbound.plain-internal`).
+  - Its section `dplaax-registry` (`url`, `allowed-registries`, `timeout`,
+    `max-document-size`) replaces `oauth.grants.did.resolver.*`.
+    Concurrency is now outbound's own `max-concurrent`.
+  - The rejected and unavailable outcomes are those of 0.15's resolver: a
+    redirect is unavailable, and an oversized document is rejected.
+  - `strictJsonParse` moves here from `auth-provider-did`.
+- **`@provin-line/auth-did-grant-store`**: keeps the DID grant's spent nonces
+  on `records` over the kernel's `store` (`packages/did-grant-store`), with
+  the guarantees `spentNoncesNeeds` asks, as upstream's `jwt-bearer-store`
+  does.
 - **`@provin-line/auth-did-grant`**: the DID grant as an auth.provider 0.18
   module (`packages/did-grant`), beside the 0.15 `auth-provider-did`.
   - Its tokens carry the six claims of rule `auth.token.signed-claims`
