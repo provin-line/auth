@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Boot a generated instance and assert its health endpoint responds
-# (create-app.md § 6.3). Usage: smoke-instance.sh <instance-dir> <port> <health-path>
+# (create-app.md § 6.3). Usage: smoke-instance.sh <instance-dir> <port> <health-path> [<protected-path>]
+# With <protected-path>, a POST to it without a token must answer 401: the
+# endpoint is up and refuses an unauthenticated caller.
 set -euo pipefail
 
 dir="$1"
 port="$2"
 health_path="$3"
+protected_path="${4:-}"
 
 if [ ! -f "$dir/dist/main.mjs" ]; then
 	echo "smoke: $dir/dist/main.mjs missing — run the build first" >&2
@@ -35,6 +38,15 @@ trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do
 	if curl -fsS "http://localhost:$port$health_path" >/dev/null 2>&1; then
 		echo "smoke: healthy — $dir on :$port$health_path"
+		if [ -n "$protected_path" ]; then
+			code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -X POST \
+				-H 'content-type: application/json' -d '{"resource":"smoke","action":"read"}' "http://localhost:$port$protected_path" || true)"
+			if [ "$code" != "401" ]; then
+				echo "smoke: POST $protected_path without a token answered $code, want 401 — $dir" >&2
+				exit 1
+			fi
+			echo "smoke: POST $protected_path without a token refused with 401"
+		fi
 		exit 0
 	fi
 	if ! kill -0 "$pid" 2>/dev/null; then

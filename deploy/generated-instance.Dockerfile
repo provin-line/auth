@@ -115,11 +115,13 @@ RUN --mount=type=secret,id=github_token \
  && test -f "${ENTRY}"
 
 # --- runtime: the built app copied wholesale from the builder ---
-# A `pnpm install --prod` here would refetch the git-subdir deps and run their
-# `prepare` (tsc) with devDependencies pruned, which fails. Copying the
-# builder's already-installed, already-built /app (node_modules is
-# self-contained: pnpm's links stay within node_modules) sidesteps that and
-# needs no GitHub access.
+# The builder's already-installed, already-built /app is copied rather than
+# reinstalled with `pnpm install --prod`: a second install would fetch the
+# git-subdir deps again (needing GitHub access and the token) and resolve the
+# graph a second time, so the runtime could differ from what the builder built
+# and tested. node_modules is self-contained (pnpm's links stay within it), so
+# the copy runs as built. The policy-verifier's devDependencies stay in the
+# image; image size is not the goal here.
 FROM node:24.22-alpine AS runtime
 RUN apk add --no-cache tini
 ENV NODE_ENV=production

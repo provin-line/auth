@@ -31,19 +31,31 @@
  * reads, and a local layer file (APP_CONFIG) for the lists. The instance under
  * test is never mutated.
  *
+ * Against a built image instead of a directory (--image), the instance runs in
+ * a container: the registry then listens on every interface and is named
+ * host.docker.internal, which outbound reaches as a plain-internal peer (the
+ * host-gateway address is private), and the container's port 8080 is
+ * published on <port>.
+ *
  * Usage: node scripts/smoke-did-grant.mjs <instance-dir> <port>
+ *        node scripts/smoke-did-grant.mjs --image <image> <port>
  */
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-const [instanceDir, portArg] = process.argv.slice(2);
-if (!instanceDir || !portArg) {
-	console.error("usage: smoke-did-grant.mjs <instance-dir> <port>");
+const args = process.argv.slice(2);
+const image = args[0] === "--image" ? args[1] : undefined;
+if (args[0] === "--image") args.splice(0, 2);
+const [instanceDir, portArg] = image === undefined ? args : [undefined, args[0]];
+if ((image === undefined && !instanceDir) || !portArg || args[0] === "--image") {
+	console.error(
+		"usage: smoke-did-grant.mjs <instance-dir> <port> | --image <image> <port>",
+	);
 	process.exit(1);
 }
 const port = Number(portArg);
@@ -52,15 +64,19 @@ if (!Number.isInteger(port) || port <= 0 || port > 65535) {
 	process.exit(1);
 }
 
-const mainTs = path.join(instanceDir, "src", "main.ts");
-if (!fs.existsSync(mainTs)) {
-	console.error(`smoke-did-grant: ${mainTs} missing — generate the instance first`);
-	process.exit(1);
+if (image === undefined) {
+	const mainTs = path.join(instanceDir, "src", "main.ts");
+	if (!fs.existsSync(mainTs)) {
+		console.error(`smoke-did-grant: ${mainTs} missing — generate the instance first`);
+		process.exit(1);
+	}
+	if (!fs.existsSync(path.join(instanceDir, "node_modules"))) {
+		console.error(`smoke-did-grant: ${instanceDir}/node_modules missing — install first`);
+		process.exit(1);
+	}
 }
-if (!fs.existsSync(path.join(instanceDir, "node_modules"))) {
-	console.error(`smoke-did-grant: ${instanceDir}/node_modules missing — install first`);
-	process.exit(1);
-}
+// The name the registry is reached by, which is the DID's registry segment.
+const registryHost = image === undefined ? "127.0.0.1" : "host.docker.internal";
 
 // Stale-port guard first (same doctrine as smoke-instance.sh, and cheapest to
 // fail) — any HTTP response means a stale server owns the port.
@@ -87,7 +103,7 @@ const fail = (msg) => {
 const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
 const ACCOUNT_ID = "smoke-ci-001";
 // The DID's registry segment must be the registry URL's host.
-const DID = `did:dplaax:127.0.0.1:org:${ACCOUNT_ID}`;
+const DID = `did:dplaax:${registryHost}:org:${ACCOUNT_ID}`;
 const didDocument = {
 	id: DID,
 	verificationMethod: [
@@ -111,7 +127,7 @@ const registry = http.createServer((req, res) => {
 	res.end(JSON.stringify({ error: "not found" }));
 });
 await new Promise((resolve, reject) => {
-	registry.listen(0, "127.0.0.1", resolve);
+	registry.listen(0, image === undefined ? "127.0.0.1" : "0.0.0.0", resolve);
 	registry.on("error", reject);
 });
 const registryPort = registry.address().port;
@@ -124,12 +140,17 @@ const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 const origin = `http://localhost:${port}`;
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "smoke-did-grant-"));
 const localConf = path.join(tmpDir, "local.conf");
-// Plain http to the loopback registry: outbound admits the pair by name, and
-// the host must pass its allow list too.
+// Plain http to the registry: outbound admits the pair by name (loopback for a
+// directory, a private peer for a container), and the host must pass its allow
+// list too.
+const outboundConf =
+	image === undefined
+		? `outbound.plain-loopback = ["${registryHost}:${registryPort}"]`
+		: `outbound.plain-internal = ["${registryHost}:${registryPort}"]`;
 fs.writeFileSync(
 	localConf,
-	`outbound.allow = ["127.0.0.1"]
-outbound.plain-loopback = ["127.0.0.1:${registryPort}"]
+	`outbound.allow = ["${registryHost}"]
+${outboundConf}
 audit.receivers = [log]
 clients.registered = [
 	{
@@ -144,33 +165,67 @@ clients.registered = [
 	}
 ]
 `,
+	{ mode: 0o644 },
 );
 
 // ── boot the instance under test ─────────────────────────────────────────────
-const child = spawn("node", ["src/main.ts"], {
-	cwd: instanceDir,
-	stdio: ["ignore", "inherit", "inherit"],
-	env: {
-		...process.env,
-		APP_CONFIG: `${localConf},config/application.conf`,
-		KERNEL_DEPLOYMENT: "single",
-		STORE_ACCEPT_VOLATILE: "true",
-		TOKENS_REVOCATION: "denylist",
-		TOKENS_SUBJECT_CHECK: "none",
-		HTTP_HOST: "127.0.0.1",
-		HTTP_PORT: String(port),
-		HTTP_PUBLIC_ORIGIN: origin,
-		HTTP_INSECURE_ORIGIN: "true",
-		ISSUER_URL: origin,
-		KEYS_SIGNING_KID: "smoke-1",
-		KEYS_SIGNING_ALG: "HS256",
-		KEYS_SIGNING_SECRET: SECRET,
-		KEYS_SIGNING_SECRET_ENCODING: "utf8",
-		DID_GRANT_REVOCATION_LATENCY_BOUND: "15m",
-		DID_GRANT_ACCESS_TOKEN_LIFETIME: "10m",
-		DPLAAX_REGISTRY_URL: `http://127.0.0.1:${registryPort}`,
-	},
-});
+const settings = {
+	KERNEL_DEPLOYMENT: "single",
+	STORE_ACCEPT_VOLATILE: "true",
+	TOKENS_REVOCATION: "denylist",
+	TOKENS_SUBJECT_CHECK: "none",
+	HTTP_PUBLIC_ORIGIN: origin,
+	HTTP_INSECURE_ORIGIN: "true",
+	ISSUER_URL: origin,
+	KEYS_SIGNING_KID: "smoke-1",
+	KEYS_SIGNING_ALG: "HS256",
+	KEYS_SIGNING_SECRET: SECRET,
+	KEYS_SIGNING_SECRET_ENCODING: "utf8",
+	DID_GRANT_REVOCATION_LATENCY_BOUND: "15m",
+	DID_GRANT_ACCESS_TOKEN_LIFETIME: "10m",
+	DPLAAX_REGISTRY_URL: `http://${registryHost}:${registryPort}`,
+};
+const containerName = `smoke-did-grant-${process.pid}`;
+const child =
+	image === undefined
+		? spawn("node", ["src/main.ts"], {
+				cwd: instanceDir,
+				stdio: ["ignore", "inherit", "inherit"],
+				// Only what node needs and what is set here: the caller's
+				// environment may hold settings (HTTP_*, KEYS_*, proxy variables)
+				// that would change what is under test or refuse its boot.
+				env: {
+					PATH: process.env.PATH,
+					HOME: process.env.HOME,
+					APP_CONFIG: `${localConf},config/application.conf`,
+					HTTP_HOST: "127.0.0.1",
+					HTTP_PORT: String(port),
+					...settings,
+				},
+			})
+		: spawn(
+				"docker",
+				[
+					"run",
+					"--rm",
+					"--name",
+					containerName,
+					"--add-host",
+					"host.docker.internal:host-gateway",
+					"-p",
+					`127.0.0.1:${port}:8080`,
+					"-v",
+					`${localConf}:/app/config/local.conf:ro`,
+					...Object.entries({
+						APP_CONFIG: "config/local.conf,config/application.conf",
+						HTTP_HOST: "0.0.0.0",
+						HTTP_PORT: "8080",
+						...settings,
+					}).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+					image,
+				],
+				{ stdio: ["ignore", "inherit", "inherit"], env: { PATH: process.env.PATH, HOME: process.env.HOME } },
+			);
 let childExited = false;
 child.on("exit", () => {
 	childExited = true;
@@ -179,6 +234,9 @@ const cleanup = () => {
 	// SIGKILL: the exit handler cannot wait for a graceful shutdown, and a
 	// lingering child would trip the next run's stale-port guard.
 	child.kill("SIGKILL");
+	if (image !== undefined) {
+		spawnSync("docker", ["rm", "-f", containerName], { stdio: "ignore" });
+	}
 	registry.close();
 	fs.rmSync(tmpDir, { recursive: true, force: true });
 };

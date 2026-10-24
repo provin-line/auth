@@ -129,13 +129,24 @@ jobs:
           # The provider runs its sources: install only.
           (cd "$out/provider" && pnpm install)
           (cd "$out/policy-verifier" && pnpm install && pnpm run build && pnpm run typecheck)
-          ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck
+          ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck /verify
           # One real DID-grant round trip (assertion → /oauth/token → 200 +
           # signed claims, tampered-signature reject): the boot smoke alone let
           # the PDP surface drift and the missing @noble/ed25519 through.
           node scripts/smoke-did-grant.mjs "$out/provider" 3100
 
-      - name: docker build the standalone Dockerfile
+      # The standalone Dockerfiles, built and run: each image answers its
+      # health endpoint, the verifier refuses /verify without a token (401),
+      # and the provider image takes the DID-grant round trip (the registry
+      # runs on the runner and is reached as host.docker.internal).
+      - name: docker build and run the standalone Dockerfiles
         run: |
-          docker build -t smoke/provider "$RUNNER_TEMP/consumer/provider"
-          docker build -t smoke/policy-verifier "$RUNNER_TEMP/consumer/policy-verifier"
+          out="$RUNNER_TEMP/consumer"
+          docker build -t smoke/provider "$out/provider"
+          docker build -t smoke/policy-verifier "$out/policy-verifier"
+          ./scripts/smoke-image.sh smoke/policy-verifier 3001 3001 /healthcheck /verify -- \
+            -e OAUTH_JWT_ALGORITHM=HS256 \
+            -e OAUTH_JWT_SECRET=smoke.only.secret.at.least.32.bytes.long \
+            -e OAUTH_JWT_ISSUER=https://smoke.invalid \
+            -e OAUTH_JWT_AUDIENCE=https://smoke-api.invalid
+          node scripts/smoke-did-grant.mjs --image smoke/provider 3100

@@ -52,5 +52,5 @@ VERIFIER_PORT ?= 3001
 smoke:
 	pnpm --filter ./instances/policy-verifier run build
 	pnpm --filter ./instances/policy-verifier run typecheck
-	./scripts/smoke-instance.sh instances/policy-verifier $(VERIFIER_PORT) /healthcheck
+	./scripts/smoke-instance.sh instances/policy-verifier $(VERIFIER_PORT) /healthcheck /verify
 	node scripts/smoke-did-grant.mjs instances/provider $(PROVIDER_PORT)
