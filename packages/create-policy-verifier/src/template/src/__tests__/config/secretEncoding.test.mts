@@ -30,7 +30,7 @@ function loadedWith(env: Record<string, string>) {
 describe("config/application.conf oauth.jwt.secretEncoding", () => {
   it("reads the secret as UTF-8 when nothing says otherwise", () => {
     const config = loadedWith({ OAUTH_JWT_SECRET: "template.test.secret.at.least.32.bytes.long" });
-    expect(config.oauth.jwt.secretEncoding).toBe("utf8");
+    expect(config.oauth.jwt?.secretEncoding).toBe("utf8");
   });
 
   it("takes OAUTH_JWT_SECRET_ENCODING over the default", () => {
@@ -38,7 +38,7 @@ describe("config/application.conf oauth.jwt.secretEncoding", () => {
       OAUTH_JWT_SECRET: Buffer.alloc(32, 0x5a).toString("base64"),
       OAUTH_JWT_SECRET_ENCODING: "base64",
     });
-    expect(config.oauth.jwt.secretEncoding).toBe("base64");
+    expect(config.oauth.jwt?.secretEncoding).toBe("base64");
   });
 
   it("refuses a reading the verifier does not know", () => {
