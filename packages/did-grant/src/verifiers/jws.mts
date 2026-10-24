@@ -105,7 +105,7 @@ export class JwsVerifier implements SignatureVerifier {
 
 		// Surface (but do not enforce) the JWS header's kid and the payload's
 		// verification_method; three-way matching against the resolved key is
-		// the caller's responsibility (see Task 6/9).
+		// the caller's (`validateOwnerLogin`, rule auth.grant.kid-match).
 		const parsedMessage: ParsedMessage = {
 			...(rawPayload as unknown as ParsedMessage),
 			headerKid: header.kid,

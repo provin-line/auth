@@ -30,7 +30,7 @@ export interface DidKey {
 
 let serial = 0;
 
-export function didKey(relationships: { authentication?: boolean } = {}): DidKey {
+export function didKey(relationships: { authentication?: boolean; assertionMethod?: boolean } = {}): DidKey {
 	const did = `did:dplaax:example:owner-${++serial}`;
 	const methodId = `${did}#key-1`;
 	const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -41,6 +41,7 @@ export function didKey(relationships: { authentication?: boolean } = {}): DidKey
 			{ id: methodId, type: "JsonWebKey2020", controller: did, publicKeyJwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x } },
 		],
 		...(relationships.authentication ? { authentication: [methodId] } : {}),
+		...(relationships.assertionMethod ? { assertionMethod: [methodId] } : {}),
 	};
 	const canonicalBytes = new TextEncoder().encode(JSON.stringify(document));
 	const digest = `sha256:${createHash("sha256").update(canonicalBytes).digest("hex")}`;

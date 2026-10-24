@@ -42,6 +42,11 @@ export type AuthContractId =
 	| "OWNER_ASSERTION_CONTROL_LOGIN@1"
 	| "LEGACY_DID_LOGIN@1";
 
+/** Whether a contract is one of the transcript-bearing OWNER contracts. */
+export const isOwnerContract = (
+	contract: AuthContractId,
+): contract is Exclude<AuthContractId, "LEGACY_DID_LOGIN@1"> => contract !== "LEGACY_DID_LOGIN@1";
+
 const AUTH_CONTRACT_IDS: readonly AuthContractId[] = [
 	"OWNER_AUTHENTICATION_LOGIN@1",
 	"OWNER_ASSERTION_CONTROL_LOGIN@1",
@@ -189,10 +194,9 @@ export function parseLoginTranscript(payload: unknown): LoginTranscript {
 }
 
 /**
- * Inputs to `validateOwnerLogin`. Deliberately flat/plain rather than the
- * full grant config object (which gains the `authContract` field selecting
- * this path in Task 8, and will keep changing shape) — this keeps the
- * function's contract stable across that later config work. `transcript`,
+ * Inputs to `validateOwnerLogin`. Flat values rather than the grant's
+ * section, so the function does not change with the section's shape.
+ * `transcript`,
  * `parsedMessage`, and `selected` are the artifacts a caller has already
  * produced by this point: `parseLoginTranscript(rawPayload)`, the signature
  * verifier's `ParsedMessage`, and
@@ -205,14 +209,14 @@ export interface ValidateOwnerLoginInput {
 	selected: SelectedMethod;
 	/** The DID the grant request claims to authenticate as. */
 	did: string;
-	/** The contract configured for this grant handler (`config.authContract`, Task 8). */
+	/** The contract the grant enforces (`did-grant.auth-contract`). */
 	expectedContract: AuthContractId;
-	/** The configured token issuer (`config.oauth.issuer` or equivalent). */
+	/** This provider's issuer URL. */
 	expectedIssuer: string;
-	/** The configured token endpoint (`config.tokenEndpoint`, Task 8). */
+	/** Where this provider's token endpoint answers (`tokenEndpointLocation`). */
 	expectedTokenEndpoint: string;
-	/** The configured audience allowlist (`config.allowedAudiences`, Task 8). */
-	allowedAudiences: readonly string[];
+	/** Whether the client may be issued an audience (its client allowance). */
+	allowsAudience: (audience: string) => boolean;
 }
 
 /**
@@ -233,13 +237,12 @@ export interface ValidateOwnerLoginInput {
  * (the transcript's own two identity fields must agree with each other, not
  * just with the caller's `did` — see `LoginTranscript`'s doc comment for why
  * both exist); `auth_contract_id === expectedContract`; `issuer ===
- * expectedIssuer`; `token_endpoint === expectedTokenEndpoint`; `audience ∈
- * allowedAudiences`; and the three-way method match `parsedMessage.headerKid
+ * expectedIssuer`; `token_endpoint === expectedTokenEndpoint`; `allowsAudience(audience)`; and the three-way method match `parsedMessage.headerKid
  * === transcript.verification_method === selected.id` (rule
  * `auth.grant.kid-match`).
  *
- * Wired into `createDidGrant`'s handler — `did.mts`'s `handle()` calls this
- * (its step 5b) once `authContract` selects an OWNER_* contract.
+ * The grant (`grant.mts`) calls this once `auth-contract` selects an OWNER_*
+ * contract, before the message's nonce is spent.
  *
  * Throws `TranscriptError` naming the first field that fails. Returns
  * nothing on success.
@@ -253,7 +256,7 @@ export function validateOwnerLogin(input: ValidateOwnerLoginInput): void {
 		expectedContract,
 		expectedIssuer,
 		expectedTokenEndpoint,
-		allowedAudiences,
+		allowsAudience,
 	} = input;
 
 	if (transcript.domain_separation_tag !== DOMAIN_SEPARATION_TAG) {
@@ -286,11 +289,8 @@ export function validateOwnerLogin(input: ValidateOwnerLoginInput): void {
 		);
 	}
 
-	if (!allowedAudiences.includes(transcript.audience)) {
-		throw new TranscriptError(
-			"audience",
-			`"${transcript.audience}" is not in the allowed audience list`,
-		);
+	if (!allowsAudience(transcript.audience)) {
+		throw new TranscriptError("audience", `"${transcript.audience}" may not be issued to this client`);
 	}
 
 	if (

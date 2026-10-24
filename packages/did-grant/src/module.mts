@@ -21,6 +21,7 @@ import { tokenEndpointLocation } from "@o3co/auth-provider-oauth/token-endpoint"
 import { z } from "zod";
 import { didDocuments, signatureAlgorithms, spentNonces } from "./contract.mjs";
 import { didGrant } from "./grant.mjs";
+import { isOwnerContract } from "./transcript.mjs";
 import { BUILTIN_ALGORITHMS, type VerifierFactory } from "./verifiers/factory.mjs";
 
 /** The P0 auth contracts (dplaax.spec). Kept in step with `AuthContractId` in transcript.mts. */
@@ -30,7 +31,6 @@ const authContracts = [
 	"OWNER_ASSERTION_CONTROL_LOGIN@1",
 ] as const;
 
-const isOwner = (contract: (typeof authContracts)[number]) => contract !== "LEGACY_DID_LOGIN@1";
 
 /**
  * Algorithms whose signed envelope carries a JWS protected header, the only
@@ -87,7 +87,7 @@ const section = z
 				message: `exceeds legacy-max-ttl (${s["legacy-max-ttl"]}s) for LEGACY_DID_LOGIN@1, rule auth.legacy.did-login`,
 			});
 		}
-		if (isOwner(s["auth-contract"]) && !s["owner-migration-ratified"]) {
+		if (isOwnerContract(s["auth-contract"]) && !s["owner-migration-ratified"]) {
 			ctx.addIssue({
 				code: "custom",
 				path: ["owner-migration-ratified"],
@@ -99,7 +99,7 @@ const section = z
 export default defineModule({ name: "did-grant", section }, (m) => [
 	m.contribute(grants).by(async (c) => {
 		const s = c.section;
-		const owner = isOwner(s["auth-contract"]);
+		const owner = isOwnerContract(s["auth-contract"]);
 		const refused: Refusal[] = [];
 
 		const algorithms = new Map<string, VerifierFactory>(BUILTIN_ALGORITHMS);
@@ -141,6 +141,7 @@ export default defineModule({ name: "did-grant", section }, (m) => [
 				messageMaxAgeMs: s["message-max-age"] * 1000,
 				accessTokenLifetimeSeconds: s["access-token-lifetime"],
 				issuer: (await c.get(issuer)).url,
+				tokenEndpoint,
 			},
 			{
 				documents: await c.get(didDocuments),

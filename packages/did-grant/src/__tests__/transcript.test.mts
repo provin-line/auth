@@ -207,7 +207,7 @@ describe("validateOwnerLogin", () => {
 			expectedContract: transcript.auth_contract_id,
 			expectedIssuer: transcript.issuer,
 			expectedTokenEndpoint: transcript.token_endpoint,
-			allowedAudiences: [transcript.audience],
+			allowsAudience: (audience: string) => audience === transcript.audience,
 		};
 	}
 
@@ -245,8 +245,8 @@ describe("validateOwnerLogin", () => {
 		expectTranscriptError(() => validateOwnerLogin(input), "token_endpoint");
 	});
 
-	it("rejects when transcript.audience is not in allowedAudiences", () => {
-		const input = { ...baseInput(), allowedAudiences: ["https://someone-else.example"] };
+	it("rejects when the client may not be issued transcript.audience", () => {
+		const input = { ...baseInput(), allowsAudience: () => false };
 		expectTranscriptError(() => validateOwnerLogin(input), "audience");
 	});
 

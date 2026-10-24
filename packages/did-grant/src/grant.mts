@@ -19,7 +19,14 @@ import { clientAllowance } from "@o3co/auth-provider-oauth/client-allowance";
 import type { Grant, GrantInput, GrantOutcome, Refused } from "@o3co/auth-provider-oauth/grants";
 import type { DidDocuments, SpentNonces } from "./contract.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
-import type { AuthContractId } from "./transcript.mjs";
+import { type RelationshipName, selectVerificationMethod } from "./resolver/selectMethod.mjs";
+import {
+	type AuthContractId,
+	isOwnerContract,
+	parseLoginTranscript,
+	TranscriptError,
+	validateOwnerLogin,
+} from "./transcript.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
 import type { VerifierFactory } from "./verifiers/factory.mjs";
 import type { SignatureVerifier } from "./verifiers/types.mjs";
@@ -39,6 +46,8 @@ export interface DidGrantSettings {
 	readonly accessTokenLifetimeSeconds: number;
 	/** This provider's issuer URL. */
 	readonly issuer: string;
+	/** Where the token endpoint answers; an OWNER contract's transcript must name it. */
+	readonly tokenEndpoint: string | undefined;
 }
 
 export interface DidGrantParts {
@@ -57,6 +66,14 @@ const error = (code: string, description?: string): Answer => ({
 	error: code,
 	...(description === undefined ? {} : { description }),
 });
+
+/**
+ * The DID Document relationship an OWNER contract's key must be listed under:
+ * `authentication` for `OWNER_AUTHENTICATION_LOGIN@1`, `assertionMethod` for
+ * `OWNER_ASSERTION_CONTROL_LOGIN@1`.
+ */
+const relationshipFor = (contract: Exclude<AuthContractId, "LEGACY_DID_LOGIN@1">): RelationshipName =>
+	contract === "OWNER_AUTHENTICATION_LOGIN@1" ? "authentication" : "assertionMethod";
 
 /** A spent nonce's name: one per nonce, whatever DID signed it, and bounded whatever the nonce holds. */
 const spentName = (nonce: string) =>
@@ -112,6 +129,41 @@ export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Gran
 			// 400 for every failure: 401 would make the endpoint challenge for client authentication.
 			if (!verification.valid) return error(verification.error, verification.errorDescription);
 			const { parsedMessage } = verification;
+
+			// OWNER contracts: the signed payload is a login transcript, checked
+			// before the nonce is spent, so a refused transcript leaves it unused.
+			const contract = settings.authContract;
+			if (isOwnerContract(contract)) {
+				try {
+					const transcript = parseLoginTranscript(parsedMessage);
+					const ownerSelected = selectVerificationMethod(resolution.document, {
+						did,
+						methodId: transcript.verification_method,
+						relationship: relationshipFor(contract),
+					});
+					// The method the transcript certifies is the one that verified the signature.
+					if (ownerSelected.id !== resolvedKey.id) {
+						throw new TranscriptError(
+							"verification_method",
+							`OWNER-selected method "${ownerSelected.id}" does not match the crypto-verified method "${resolvedKey.id}"`,
+						);
+					}
+					validateOwnerLogin({
+						transcript,
+						parsedMessage,
+						selected: ownerSelected,
+						did,
+						expectedContract: contract,
+						expectedIssuer: settings.issuer,
+						// Boot refuses an OWNER contract without a located token endpoint.
+						expectedTokenEndpoint: settings.tokenEndpoint ?? "",
+						allowsAudience: (audience) =>
+							clientAllowance.allowsAudience(input.client, audience, settings.issuer),
+					});
+				} catch {
+					return error("invalid_grant", "grant could not be processed");
+				}
+			}
 
 			if (!parsedMessage.nonce || !parsedMessage.timestamp) {
 				return error("invalid_request", "message must include nonce and timestamp");
