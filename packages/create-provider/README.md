@@ -7,7 +7,8 @@ This package generates an [auth.provider](https://github.com/o3co/auth.provider)
 
 1. It calls the generator of `@o3co/auth-provider-scaffold` (pinned at exactly
    `0.18.4`) with a listed app of `@mod/token-endpoint`, `@mod/client-allowance`,
-   `@mod/outbound` and `@mod/discovery`. Upstream adds what they need to run and
+   `@mod/outbound`, `@mod/discovery` and `@mod/token-control` (revocation and
+   introspection). Upstream adds what they need to run and
    writes the app: `package.json`, `src/main.ts`, `config/application.conf`, the
    `.example` settings files, `Dockerfile`, `README.md`, `AGENTS.md`. The app runs
    its sources (`node src/main.ts`); there is no build.

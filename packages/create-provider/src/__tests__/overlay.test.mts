@@ -411,6 +411,12 @@ describe("patchReadme", () => {
 		expect(out).toContain("outbound.plain-internal");
 	});
 
+	it("tells what introspection takes and what a restart forgets", () => {
+		expect(out).toContain("/oauth/introspect");
+		expect(out).toContain("sections.client-secret.hash");
+		expect(out).toMatch(/revoked tokens live in this process/);
+	});
+
 	it("states that boot requires tokens.subject-check", () => {
 		expect(out).toContain("tokens.subject-check");
 		expect(out).toContain("TOKENS_SUBJECT_CHECK");
