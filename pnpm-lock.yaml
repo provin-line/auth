@@ -160,6 +160,39 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  packages/did-grant-store:
+    devDependencies:
+      '@o3co/auth-provider-foundation':
+        specifier: 0.18.4
+        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@o3co/auth-provider-identity':
+        specifier: 0.18.4
+        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@o3co/auth-provider-oauth':
+        specifier: 0.18.4
+        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@provin-line/auth-did-grant':
+        specifier: workspace:*
+        version: link:../did-grant
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      '@vitest/coverage-v8':
+        specifier: ^5.0.5
+        version: 5.0.5(vitest@5.0.5)
+      rimraf:
+        specifier: ^6.1.3
+        version: 6.1.3
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
   packages/policy-verifier-dplaax-module:
     dependencies:
       '@o3co/auth.policy-verifier.builtins':
