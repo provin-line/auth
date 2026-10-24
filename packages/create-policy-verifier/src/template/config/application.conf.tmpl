@@ -14,8 +14,10 @@ oauth {
     secret = ${?OAUTH_JWT_SECRET}
     # HS256 only. How `secret` becomes the HMAC key bytes: "utf8" (the text's
     # own bytes), "hex" or "base64". It must be the reading the issuer applies
-    # to the same string: the paired auth.provider sets
-    # keys.signing.secret-encoding = utf8.
+    # to the same string. auth.provider 0.18 reads keys.signing.secret as hex,
+    # else base64, unless keys.signing.secret-encoding says otherwise: set
+    # secret-encoding = utf8 there, or set this to the provider's reading, or
+    # every token is answered 401.
     secretEncoding = "utf8"
     secretEncoding = ${?OAUTH_JWT_SECRET_ENCODING}
     issuer = ${?OAUTH_JWT_ISSUER}

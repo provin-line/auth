@@ -12,7 +12,12 @@ releases.
 
 ### Changed
 
-- **The policy-verifier baseline is 0.17.0.** Workspace packages require
+- **BREAKING (types, verifier packages): the policy-verifier baseline is
+  0.17.0.** 0.17.0 makes `secretEncoding` required in the `AppConfig`
+  type's `oauth.jwt` and in `Hs256Rotation`, and the dPLaaX verifier module
+  requires `^0.17.0`, so a consumer moves its three verifier packages
+  together. Configuration read through `AppConfigSchema` is unaffected.
+  Workspace packages require
   `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.17.0`, and
   `create-policy-verifier` (now 0.4.0) emits the same as exact pins.
   - 0.17.0 adds `oauth.jwt.secretEncoding`, how the HS256 secret becomes

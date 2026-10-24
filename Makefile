@@ -2,12 +2,12 @@
 #
 # `make instances` regenerates the throwaway composition roots under
 # instances/ from the scaffold generators. instances/ is git-ignored and a
-# pnpm workspace member: the root pnpm.overrides redirect the generated
-# git-subdirectory deps to workspace:* (create-app.md § 6.3.1), so instances
-# always build against the local package state. pnpm prints WARNs that the
-# instances' own pnpm.overrides/onlyBuiltDependencies "will not take
-# effect" — expected: that block is for external consumers (create-app.md
-# § 3.4) and is intentionally inert inside this workspace.
+# pnpm workspace member: the overrides in the root pnpm-workspace.yaml
+# redirect the generated git-subdirectory deps to workspace:* (create-app.md
+# § 6.3.1), so instances always build against the local package state. pnpm
+# prints WARNs that the instances' own pnpm.overrides/onlyBuiltDependencies
+# are not read — expected: that block is for external consumers
+# (create-app.md § 3.4) and is intentionally inert inside this workspace.
 
 HEAD_SHA = $(shell git rev-parse HEAD)
 
@@ -30,7 +30,8 @@ instances:
 # Restores pnpm-lock.yaml as well: with instances/ present, `pnpm install`
 # records instances/* importers in the lockfile. Those are local-only and
 # the committed lockfile must never contain them. NOTE: pnpm's frozen
-# install TOLERATES stale extra importers (verified on pnpm 10.30.2), so
+# install TOLERATES stale extra importers (verified on pnpm 10.30.2; not
+# re-verified on 11), so
 # CI does NOT catch an accidental commit via --frozen-lockfile; a dedicated
 # CI step greps the lockfile for instances/* importers instead. Run this
 # target before committing if you have generated instances.

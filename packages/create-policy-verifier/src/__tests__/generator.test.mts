@@ -105,8 +105,8 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 	});
 
 	it("reads the HS256 secret as UTF-8 unless OAUTH_JWT_SECRET_ENCODING names another reading", async () => {
-		// The paired auth.provider is configured with secret-encoding = utf8,
-		// so both sides take the same string's own bytes as the key.
+		// utf8 is the verifier's default; the override lets an operator match
+		// an issuer that reads the same string as hex or base64.
 		const outDir = join(tmpRoot, "out");
 		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
 		const conf = await readFile(join(outDir, "config/application.conf"), "utf8");
