@@ -49,12 +49,10 @@ export class Ed25519RawVerifier implements SignatureVerifier {
 		// `headerKid` can only ever legitimately come from `jws.mts`'s
 		// `JwsVerifier` (rule `auth.grant.kid-match`) — an attacker-controlled
 		// top-level `headerKid` member in the signed payload must not be able
-		// to forge a match for the OWNER path's three-way kid check.
-		let parsedMessage: ParsedMessage;
+		// to forge a match for the three-way kid check.
+		let rawParsed: Record<string, unknown>;
 		try {
-			const rawParsed = JSON.parse(body.message) as Record<string, unknown>;
-			delete rawParsed.headerKid;
-			parsedMessage = rawParsed as unknown as ParsedMessage;
+			rawParsed = JSON.parse(body.message) as Record<string, unknown>;
 		} catch {
 			return {
 				valid: false,
@@ -62,6 +60,14 @@ export class Ed25519RawVerifier implements SignatureVerifier {
 				errorDescription: "message must be valid JSON",
 			};
 		}
+		delete rawParsed.headerKid;
+		// The payload's verification_method, which the grant matches against the
+		// resolved key (rule auth.grant.kid-match). A non-string can never match.
+		const method = rawParsed.verification_method;
+		if (method !== undefined && typeof method !== "string") {
+			return { valid: false, error: "invalid_request", errorDescription: "verification_method must be a string" };
+		}
+		const parsedMessage = { ...rawParsed, verificationMethod: method } as unknown as ParsedMessage;
 
 		// 3. Validate message.did matches ctx.did
 		if (parsedMessage.did !== did) {

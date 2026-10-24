@@ -36,7 +36,7 @@ A client may use the grant once its `client-allowance` lists the grant type (`di
 
 ### Contributed algorithms
 
-A module contributes a signature algorithm at `signatureAlgorithms`: its name, a `create` that makes the verifier at boot, and `headerBearing: true` when the envelope carries a JWS protected header and the verifier sets `parsedMessage.headerKid` from it (only such algorithms serve an OWNER contract). The verifier reads the request parameters (`DidGrantParams`) and answers `invalid_request` or `invalid_grant`; the grant issues only when its subject and the message's `did` are the DID the request names.
+A module contributes a signature algorithm at `signatureAlgorithms`: its name, a `create` that makes the verifier at boot, and `headerBearing: true` when the envelope carries a JWS protected header and the verifier sets `parsedMessage.headerKid` from it (only such algorithms serve an OWNER contract). A verifier sets `parsedMessage.verificationMethod` from the message's `verification_method`. The verifier reads the request parameters (`DidGrantParams`) and answers `invalid_request` or `invalid_grant`; the grant issues only when its subject and the message's `did` are the DID the request names.
 
 ## Section
 
@@ -68,6 +68,8 @@ Form or JSON, every parameter a string: `grant_type`, `did`, optionally `scope`,
 - `algorithm` names one explicitly, which is how a contributed algorithm is chosen.
 
 The message holds `did`, `timestamp` (RFC 3339), `nonce` and optionally `audience`. Under an OWNER contract it is a `login-transcript-v1`: its issuer, token endpoint, audience, contract and DIDs must be this deployment's, and its `verification_method` must name the JWS header's `kid` and a key listed under the contract's relationship (`authentication` or `assertionMethod`).
+
+Under every contract, each method the request names, the JWS header's `kid` and the message's `verification_method`, must be the method that verified the signature (rule `auth.grant.kid-match`). A message that names neither, such as an `ed25519_raw` message without `verification_method`, has nothing to match.
 
 A message is used once: its nonce is spent before the client's allowance is asked, and kept until the message's window closes. A refused OWNER transcript leaves it unspent: the transcript, its audience included, is checked before.
 

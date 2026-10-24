@@ -232,3 +232,49 @@ describe("did-grant with a contributed signature algorithm", () => {
 		});
 	});
 });
+
+describe("did-grant LEGACY_DID_LOGIN@1 — rule auth.grant.kid-match", () => {
+	const jwsSection = { ...minimalSection, "supported-algorithms": ["ed25519_raw", "ed25519_jws"] };
+
+	it("issues for a JWS whose header kid names the resolved method", async () => {
+		const { key, call } = await registered({ section: jwsSection });
+		await expect(call(await jwsParams(key, legacyMessage(key)))).resolves.toMatchObject({ kind: "issued" });
+	});
+
+	it("issues for a JWS that names no method at all, which cannot diverge", async () => {
+		const { key, call } = await registered({ section: jwsSection });
+		await expect(call(await jwsParams(key, legacyMessage(key), {}))).resolves.toMatchObject({ kind: "issued" });
+	});
+
+	it("refuses a JWS whose header kid names another method, leaving the nonce unspent", async () => {
+		const { key, call, stands: s } = await registered({ section: jwsSection });
+		const outcome = await call(await jwsParams(key, legacyMessage(key), { kid: `${key.did}#key-9` }));
+		expect(outcome).toMatchObject({ kind: "error", error: "invalid_grant" });
+		expect(s.spent.size).toBe(0);
+	});
+
+	it("refuses a JWS whose payload names another method than its header", async () => {
+		const { key, call } = await registered({ section: jwsSection });
+		const payload = legacyMessage(key, { verification_method: `${key.did}#key-9` });
+		await expect(call(await jwsParams(key, payload))).resolves.toMatchObject({ kind: "error", error: "invalid_grant" });
+	});
+
+	it("refuses a raw message whose payload names another method", async () => {
+		const { key, call } = await registered();
+		const outcome = await call(rawParams(key, legacyMessage(key, { verification_method: `${key.did}#key-9` })));
+		expect(outcome).toMatchObject({ kind: "error", error: "invalid_grant" });
+	});
+
+	it("refuses a message whose verification_method is not a string, which can name no method", async () => {
+		const { key, call } = await registered();
+		const outcome = await call(rawParams(key, legacyMessage(key, { verification_method: 1 })));
+		expect(outcome).toMatchObject({ kind: "error", error: "invalid_request" });
+	});
+
+	it("issues for a raw message whose payload names the resolved method", async () => {
+		const { key, call } = await registered();
+		const outcome = await call(rawParams(key, legacyMessage(key, { verification_method: key.methodId })));
+		expect(outcome).toMatchObject({ kind: "issued" });
+	});
+});
+

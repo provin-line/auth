@@ -28,7 +28,7 @@ async function createSignedJws(
 	did: string,
 	options: {
 		headerKid?: string;
-		verificationMethod?: string;
+		verificationMethod?: unknown;
 	} = {},
 ): Promise<{ jws: string; resolvedKey: ExtractedKey }> {
 	const { privateKey, publicKey } = await generateKeyPair("EdDSA");
@@ -38,7 +38,7 @@ async function createSignedJws(
 		did,
 		timestamp: new Date().toISOString(),
 		nonce: crypto.randomUUID(),
-		...(options.verificationMethod ? { verification_method: options.verificationMethod } : {}),
+		...(options.verificationMethod !== undefined ? { verification_method: options.verificationMethod } : {}),
 	});
 
 	const header: { alg: "EdDSA"; kid?: string } = { alg: "EdDSA" };
@@ -97,5 +97,15 @@ describe("JwsVerifier — kid surfacing", () => {
 			expect(result.parsedMessage.headerKid).toBeUndefined();
 			expect(result.parsedMessage.verificationMethod).toBe(methodId);
 		}
+	});
+
+	it("refuses a verification_method that is not a string, which can name no method", async () => {
+		const verifier = new JwsVerifier("EdDSA");
+		const { jws, resolvedKey } = await createSignedJws(did, { headerKid: methodId, verificationMethod: 1 });
+
+		await expect(verifier.verify({ body: { jws }, did, resolvedKey })).resolves.toMatchObject({
+			valid: false,
+			error: "invalid_request",
+		});
 	});
 });

@@ -173,6 +173,13 @@ releases.
 
 ### Security
 
+- **`@provin-line/auth-did-grant`**: rule `auth.grant.kid-match` holds under
+  every contract, `LEGACY_DID_LOGIN@1` included. A JWS whose protected `kid`,
+  or a message whose `verification_method`, names another method than the
+  one resolved and verified is refused with `400 invalid_grant`, its nonce
+  unspent; a `verification_method` that is not a string is
+  `400 invalid_request`. A message that names no method is still taken. The
+  0.15 `auth-provider-did` checked these under an OWNER contract only.
 - body-parser 2.4.0 in the lockfile ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828):
   denial of service via trailing bytes after a compressed request body). It
   is reached through express under the 0.15 provider, the verifier server

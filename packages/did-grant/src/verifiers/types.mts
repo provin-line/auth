@@ -20,9 +20,15 @@ export interface ParsedMessage {
 	timestamp: string;
 	nonce: string;
 	audience?: string;
-	/** Signed payload's `verification_method` member, if present. Not enforced here. */
+	/**
+	 * Signed payload's `verification_method` member, if present. The grant
+	 * requires it to be the resolved method (rule `auth.grant.kid-match`).
+	 */
 	verificationMethod?: string;
-	/** JWS protected header's `kid` member, if present. Not enforced here. */
+	/**
+	 * JWS protected header's `kid` member, if present. The grant requires it to
+	 * be the resolved method (rule `auth.grant.kid-match`).
+	 */
 	headerKid?: string;
 }
 

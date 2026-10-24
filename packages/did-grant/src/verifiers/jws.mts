@@ -103,16 +103,17 @@ export class JwsVerifier implements SignatureVerifier {
 			};
 		}
 
-		// Surface (but do not enforce) the JWS header's kid and the payload's
-		// verification_method; three-way matching against the resolved key is
-		// the caller's (`validateOwnerLogin`, rule auth.grant.kid-match).
+		// Surface the JWS header's kid and the payload's verification_method;
+		// the grant matches them against the resolved key (rule
+		// auth.grant.kid-match). A method id that is not a string can never match.
+		const method = rawPayload.verification_method;
+		if (method !== undefined && typeof method !== "string") {
+			return { valid: false, error: "invalid_request", errorDescription: "verification_method must be a string" };
+		}
 		const parsedMessage: ParsedMessage = {
 			...(rawPayload as unknown as ParsedMessage),
 			headerKid: header.kid,
-			verificationMethod:
-				typeof rawPayload.verification_method === "string"
-					? rawPayload.verification_method
-					: undefined,
+			verificationMethod: method,
 		};
 
 		// 7. Validate payload.did matches ctx.did
