@@ -126,6 +126,15 @@ Inside this repo's workspace the scaffold's own `pnpm` block is inert
 (pnpm honors only workspace-root overrides), so workspace mode (§ 6.3.1)
 is unaffected.
 
+The scaffold keeps its own `packageManager` (pnpm 10, which reads the
+`pnpm` block above). Each git-fetched `@provin-line/*` package's `prepare`
+runs `pnpm install` inside the fetched provin.auth checkout, whose root
+`packageManager` is pnpm 11, so a consumer install fetches that pnpm too
+and needs a Node it runs on (≥ 22.13). When a generator's
+`DEFAULT_PACKAGE_MANAGER` moves to pnpm 11, it emits the `overrides` and
+the build-script allowances in the scaffold's `pnpm-workspace.yaml`
+instead: pnpm 11 no longer reads `package.json#pnpm`.
+
 ## 4. Generator CLI contract
 
 The CLI surface (`create-auth-provider <name> --dplaax-module-ref <ref>
@@ -227,9 +236,10 @@ that resolution is redirected statically — no post-generation mutation:
 
 - `pnpm-workspace.yaml` includes `instances/*`, so generated instances are
   workspace members;
-- the root manifest declares `pnpm.overrides` listing each `@provin-line/*`
-  package **by explicit name** (no wildcard patterns) mapped to
-  `workspace:*`.
+- the root `pnpm-workspace.yaml` declares `overrides` listing each
+  `@provin-line/*` package **by explicit name** (no wildcard patterns)
+  mapped to `workspace:*`. pnpm 11 no longer reads `pnpm.overrides` from
+  `package.json`.
 
 Both declarations are committed, visible, and inert when `instances/` is
 empty. An external consumer install is untouched (overrides apply only to

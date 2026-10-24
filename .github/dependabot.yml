@@ -20,7 +20,8 @@ updates:
     cooldown:
       default-days: 3
     ignore:
-      # engines.node admits Node 24 only; a major move is a deliberate change.
+      # The images build on the engines.node floor (Node 24); moving them to
+      # another major is a deliberate change, not a dependency bump.
       - dependency-name: "node"
         update-types:
           - "version-update:semver-major"

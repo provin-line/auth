@@ -104,6 +104,26 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		expect(conf).toMatch(/^\s*port = 4242$/m);
 	});
 
+	it("reads the HS256 secret as UTF-8 unless OAUTH_JWT_SECRET_ENCODING names another reading", async () => {
+		// utf8 is the verifier's default; the override lets an operator match
+		// an issuer that reads the same string as hex or base64.
+		const outDir = join(tmpRoot, "out");
+		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const conf = await readFile(join(outDir, "config/application.conf"), "utf8");
+		expect(conf).toMatch(
+			/^\s*secretEncoding = "utf8"\n\s*secretEncoding = \$\{\?OAUTH_JWT_SECRET_ENCODING\}$/m,
+		);
+	});
+
+	it("emits @o3co/ts.hocon 1.14.3, the HOCON reader the config loader is written against", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
+			dependencies: Record<string, string>;
+		};
+		expect(pkg.dependencies["@o3co/ts.hocon"]).toBe("1.14.3");
+	});
+
 	it("does not emit @o3co/auth.utils — its helpers ship inside the scaffold", async () => {
 		// auth.policy-verifier's own standalone template moved logger and
 		// shutdown in-tree (#210); a generated instance follows the same shape.
@@ -127,7 +147,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		};
 		// A literal, not DEFAULT_DEP_VERSIONS.pino: sharing the oracle with the
 		// implementation would let a missing key pass as undefined === undefined.
-		expect(pkg.dependencies.pino).toBe("10.3.1");
+		expect(pkg.dependencies.pino).toBe("10.4.0");
 	});
 
 	it("hands its pino logger to createApp, so verifier events such as jwt_verification_unavailable reach the NDJSON log", async () => {
@@ -169,7 +189,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		const pkg = JSON.parse(
 			await readFile(join(outDir, "package.json"), "utf8"),
 		) as { devDependencies: Record<string, string> };
-		expect(pkg.devDependencies.vitest).toBe("4.1.12");
+		expect(pkg.devDependencies.vitest).toBe("5.0.5");
 	});
 
 	it("emits git-subdir form for @provin-line/auth-policy-verifier-dplaax-module", async () => {

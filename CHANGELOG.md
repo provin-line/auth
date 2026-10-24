@@ -10,6 +10,52 @@ releases.
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (types, verifier packages): the policy-verifier baseline is
+  0.17.0.** 0.17.0 makes `secretEncoding` required in the `AppConfig`
+  type's `oauth.jwt` and in `Hs256Rotation`, and the dPLaaX verifier module
+  requires `^0.17.0`, so a consumer moves its three verifier packages
+  together. Configuration read through `AppConfigSchema` is unaffected.
+  Workspace packages require
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.17.0`, and
+  `create-policy-verifier` (now 0.4.0) emits the same as exact pins.
+  - 0.17.0 adds `oauth.jwt.secretEncoding`, how the HS256 secret becomes
+    key bytes. The default, `"utf8"`, is the reading earlier verifiers
+    applied, so nothing changes for a deployment that does not set it. The
+    generated verifier now writes `secretEncoding = "utf8"`, overridable
+    with `OAUTH_JWT_SECRET_ENCODING`. That is the reading the auth.provider
+    0.18 this repository is moving to will be configured with.
+  - 0.16.3 reads the client from `client_id` as well as `azp`, which
+    auth.provider 0.18's tokens need.
+  - The generated verifier also emits `@o3co/ts.hocon` 1.14.3 (was 0.1.5),
+    pino 10.4.0, `@types/node` 26.6.5 and vitest 5.0.5. These are the newest
+    releases inside the ranges upstream's own verifier template declares.
+  - [docs/upstream-compatibility.md](docs/upstream-compatibility.md#moving-an-existing-verifier-instance-to-017)
+    lists what an existing instance changes.
+- **The workspace toolchain follows upstream auth.provider 0.18.4**: pnpm
+  11.28.7, TypeScript 6.0.3, vitest 5.0.5, `@types/node` 26.6.5.
+  - The base tsconfig names `types: ["node"]`, because TypeScript 6 no
+    longer loads every `@types` package by default.
+  - `engines.node` is `>=24.22.1` with no upper bound, and CI builds and
+    tests on Node 24.22 and 26.
+  - Other dependencies move to: jose 6.2.13, `@noble/ed25519` 3.2.0, zod
+    `^4.6.7` (still overridden to 4.6.7).
+- **pnpm settings move from `package.json#pnpm` to `pnpm-workspace.yaml`.**
+  - `overrides` keeps the same entries, with vite raised to `^8.3.3`.
+  - `minimumReleaseAgeExclude` lets a fresh `@o3co/*` release install
+    despite pnpm 11's one-day hold.
+  - `allowBuilds` denies bcrypt's install script. pnpm 11 refuses an install
+    whose dependency build scripts are neither allowed nor denied. bcrypt
+    ships prebuilt binaries, and pnpm 10 had skipped the script too.
+
+### Security
+
+- body-parser 2.4.0 in the lockfile ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828):
+  denial of service via trailing bytes after a compressed request body). It
+  is reached through express under the 0.15 provider, the verifier server
+  and the integration suite.
+
 ## [0.4.0] - 2026-10-22
 
 A minor number, not a patch: the policy-verifier baseline moves to 0.16.1,
