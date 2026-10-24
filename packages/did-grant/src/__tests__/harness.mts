@@ -19,6 +19,8 @@
 // and stand-ins for the two contracts this package owns.
 
 import http from "@o3co/auth-provider-foundation/http/module";
+import keysModule from "@o3co/auth-provider-foundation/keys/module";
+import { keysConfig } from "@o3co/auth-provider-foundation/keys/testing";
 import { httpConfig } from "@o3co/auth-provider-foundation/http/testing";
 import {
 	assemble,
@@ -36,12 +38,14 @@ import { clientsConfig, publicClient } from "@o3co/auth-provider-identity/client
 import clientAllowanceModule from "@o3co/auth-provider-oauth/client-allowance/module";
 import { allowancesFor } from "@o3co/auth-provider-oauth/client-allowance/testing";
 import issuerModule from "@o3co/auth-provider-oauth/issuer/module";
+import senderBindingModule from "@o3co/auth-provider-oauth/sender-binding/module";
 import { issuerConfig } from "@o3co/auth-provider-oauth/issuer/testing";
 import { tokenEndpointLocation } from "@o3co/auth-provider-oauth/token-endpoint";
 import { type Grant, grants } from "@o3co/auth-provider-oauth/grants";
 import { grantCaller, grantCalls, grantInput } from "@o3co/auth-provider-oauth/token-endpoint/testing";
 import { tokens } from "@o3co/auth-provider-oauth/tokens";
-import { tokensStandIn } from "@o3co/auth-provider-oauth/tokens/testing";
+import tokensModule from "@o3co/auth-provider-oauth/tokens/module";
+import { tokensConfig, tokensStandIn } from "@o3co/auth-provider-oauth/tokens/testing";
 import { type DidDocuments, didDocuments, type Resolution, spentNonces } from "../contract.mjs";
 import didGrant from "../module.mjs";
 
@@ -103,6 +107,8 @@ export interface ComposeOptions {
 	location?: string | null;
 	/** Modules added after the DID grant. */
 	extra?: readonly Module[];
+	/** Upstream's tokens and keys, which sign a JWT, in place of the in-memory stand-in. */
+	realTokens?: boolean;
 	stands?: Stands;
 }
 
@@ -127,7 +133,7 @@ export async function compose(options: ComposeOptions = {}) {
 		modules: [
 			location,
 			http,
-			tokensStandIn(),
+			...(options.realTokens ? [keysModule, tokensModule, senderBindingModule] : [tokensStandIn()]),
 			issuerModule,
 			clientsModule,
 			secretHashModule,
@@ -141,6 +147,7 @@ export async function compose(options: ComposeOptions = {}) {
 		config: {
 			...kernelConfig(),
 			...httpConfig(),
+			...(options.realTokens ? { ...keysConfig(), ...tokensConfig() } : {}),
 			...issuerConfig({ url: ISSUER }),
 			...clientsConfig([
 				publicClient({

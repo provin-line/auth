@@ -21,24 +21,9 @@ import { tokenEndpointLocation } from "@o3co/auth-provider-oauth/token-endpoint"
 import { z } from "zod";
 import { didDocuments, signatureAlgorithms, spentNonces } from "./contract.mjs";
 import { didGrant } from "./grant.mjs";
-import { isOwnerContract } from "./transcript.mjs";
-import { BUILTIN_ALGORITHMS, type VerifierFactory } from "./verifiers/factory.mjs";
-
-/** The P0 auth contracts (dplaax.spec). Kept in step with `AuthContractId` in transcript.mts. */
-const authContracts = [
-	"LEGACY_DID_LOGIN@1",
-	"OWNER_AUTHENTICATION_LOGIN@1",
-	"OWNER_ASSERTION_CONTROL_LOGIN@1",
-] as const;
-
-
-/**
- * Algorithms whose signed envelope carries a JWS protected header, the only
- * place a `kid` can come from. An OWNER contract's three-way kid match (rule
- * `auth.grant.kid-match`) cannot hold without one, so an OWNER contract takes
- * these alone.
- */
-const HEADER_BEARING_ALGORITHMS: ReadonlySet<string> = new Set(["ed25519_jws", "es256_jws", "es256k_jws"]);
+import { AUTH_CONTRACT_IDS, isOwnerContract } from "./transcript.mjs";
+import { BUILTIN_ALGORITHMS, type BuiltinAlgorithm } from "./verifiers/factory.mjs";
+import type { SignatureVerifier } from "./verifiers/types.mjs";
 
 /** A whole number of seconds, from `1s` to `1d`. */
 const seconds = () => setting.duration("s").pipe(z.number().int().min(1).max(86_400));
@@ -54,7 +39,7 @@ const section = z
 			.prefault("5m")
 			.describe("How far a signed message's timestamp may be from this host's clock, from `1s` to `1d`."),
 		"auth-contract": z
-			.enum(authContracts)
+			.enum(AUTH_CONTRACT_IDS)
 			.prefault("LEGACY_DID_LOGIN@1")
 			.describe("The auth contract the grant enforces (dplaax.spec)."),
 		"owner-migration-ratified": z
@@ -102,26 +87,42 @@ export default defineModule({ name: "did-grant", section }, (m) => [
 		const owner = isOwnerContract(s["auth-contract"]);
 		const refused: Refusal[] = [];
 
-		const algorithms = new Map<string, VerifierFactory>(BUILTIN_ALGORITHMS);
+		const algorithms = new Map<string, BuiltinAlgorithm>(BUILTIN_ALGORITHMS);
 		for (const contributed of await c.collect(signatureAlgorithms)) {
 			if (BUILTIN_ALGORITHMS.has(contributed.algorithm)) {
 				refused.push({
 					where: "did-grant",
-					reason: `a contributed signature algorithm takes the built-in name "${contributed.algorithm}"`,
+					reason: `a contributed signature algorithm takes the built-in name ${contributed.algorithm}`,
 				});
 				continue;
 			}
-			algorithms.set(contributed.algorithm, () => contributed.create());
+			algorithms.set(contributed.algorithm, {
+				create: () => contributed.create(),
+				headerBearing: contributed.headerBearing === true,
+			});
 		}
+
+		// Each supported algorithm's verifier is made now, so a missing peer or a
+		// broken contribution refuses boot rather than every request.
+		const verifiers = new Map<string, SignatureVerifier>();
 		for (const [at, name] of s["supported-algorithms"].entries()) {
 			const where = `did-grant.supported-algorithms.${at}`;
-			if (!algorithms.has(name)) {
+			const algorithm = algorithms.get(name);
+			if (!algorithm) {
 				refused.push({ where, reason: "is neither built in nor contributed at signatureAlgorithms" });
-			} else if (owner && !HEADER_BEARING_ALGORITHMS.has(name)) {
+				continue;
+			}
+			if (owner && !algorithm.headerBearing) {
 				refused.push({
 					where,
 					reason: `has no JWS protected header, which ${s["auth-contract"]} needs (rule auth.grant.kid-match)`,
 				});
+				continue;
+			}
+			try {
+				verifiers.set(name, await algorithm.create());
+			} catch (err) {
+				refused.push({ where, reason: `its verifier cannot be made: ${err instanceof Error ? err.message : String(err)}` });
 			}
 		}
 
@@ -137,7 +138,6 @@ export default defineModule({ name: "did-grant", section }, (m) => [
 		return didGrant(
 			{
 				authContract: s["auth-contract"],
-				supportedAlgorithms: s["supported-algorithms"],
 				messageMaxAgeMs: s["message-max-age"] * 1000,
 				accessTokenLifetimeSeconds: s["access-token-lifetime"],
 				issuer: (await c.get(issuer)).url,
@@ -146,7 +146,7 @@ export default defineModule({ name: "did-grant", section }, (m) => [
 			{
 				documents: await c.get(didDocuments),
 				nonces: await c.get(spentNonces),
-				algorithms,
+				verifiers,
 				now: () => c.clock.now(),
 			},
 		);

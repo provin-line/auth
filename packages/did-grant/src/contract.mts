@@ -21,11 +21,15 @@ import type { SignatureVerifier } from "./verifiers/types.mjs";
 export type { ExtractedKey } from "./resolver/extractKey.mjs";
 export type { DidDocument, JsonWebKey, Resolution, VerificationMethod } from "./resolver/types.mjs";
 export type {
+	DidGrantParams,
 	ParsedMessage,
 	SignatureVerifier,
 	VerificationContext,
 	VerificationResult,
 } from "./verifiers/types.mjs";
+
+/** The grant type a client names, and its `client-allowance.grants` lists. */
+export const didGrantType = "https://dplaax.dev/oauth/grant-type/did";
 
 /**
  * Resolves the DID a grant request names to its document, with the
@@ -63,8 +67,14 @@ export const spentNoncesNeeds = {
 export interface SignatureAlgorithm {
 	/** The name a request uses (`algorithm`), unique among the composed ones. */
 	readonly algorithm: string;
-	/** Creates the verifier, once, when a request first names the algorithm. */
+	/** Makes the verifier, once, at boot; a failure refuses boot. */
 	create(): Promise<SignatureVerifier>;
+	/**
+	 * Whether the signed envelope carries a JWS protected header and the
+	 * verifier sets `parsedMessage.headerKid` from it. An OWNER contract takes
+	 * such algorithms alone (rule `auth.grant.kid-match`).
+	 */
+	readonly headerBearing?: true;
 }
 export const signatureAlgorithms = extensionPoint<SignatureAlgorithm>("did-grant.signature-algorithms", {
 	multiplicity: "keyed",

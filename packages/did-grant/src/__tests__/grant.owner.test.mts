@@ -76,6 +76,20 @@ describe("did-grant OWNER_AUTHENTICATION_LOGIN@1 (ed25519_jws)", () => {
 		expect(s.spent.size).toBe(0);
 	});
 
+	it("refuses a transcript used once already", async () => {
+		const { key, call } = await registered();
+		const params = await jwsParams(key, transcript(key));
+		await expect(call(params)).resolves.toMatchObject({ kind: "issued" });
+		await expect(call(params)).resolves.toMatchObject({ kind: "error", error: "invalid_request" });
+	});
+
+	it("refuses a transcript stamped further from the clock than message-max-age", async () => {
+		const { key, call } = await registered();
+		const stale = new Date(clock.at - 301_000).toISOString();
+		const outcome = await call(await jwsParams(key, transcript(key, { timestamp: stale })));
+		expect(outcome).toMatchObject({ kind: "error", error: "invalid_request" });
+	});
+
 	it("refuses a header kid that names another method than the transcript", async () => {
 		const { key, call } = await registered();
 		const outcome = await call(await jwsParams(key, transcript(key), { kid: `${key.did}#key-2` }));

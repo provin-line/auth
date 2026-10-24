@@ -21,16 +21,11 @@ export type ExtractedKey =
 	| { format: "multibase"; key: string; id: string };
 
 /**
- * @deprecated One-line delegate to the LEGACY branch of
- * `selectVerificationMethod` (called without `methodId`) — kept for
- * existing callers. Selection is now fail-closed: it inherits
- * `selectVerificationMethod`'s duplicate-id rejection and its
- * `ambiguous-legacy-selection` reason when more than one verificationMethod
- * has a matching `controller`, replacing the old array-order first-match.
- * New callers should use `selectVerificationMethod` directly so they can
- * pass `methodId`/`relationship`.
- *
- * Extract a verification key from a DID Document for the given DID.
+ * The key material of the DID's one controller-matched verification method:
+ * the LEGACY branch of `selectVerificationMethod` (no `methodId`), fail-closed
+ * on a duplicate method id or more than one candidate
+ * (`ambiguous-legacy-selection`). A caller that names a method or a
+ * relationship uses `selectVerificationMethod` directly.
  *
  * @throws {MethodSelectionError} if no controller-matched verificationMethod
  *         is found, more than one is found, or the document has a duplicate

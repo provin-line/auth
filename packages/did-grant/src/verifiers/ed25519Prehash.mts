@@ -21,24 +21,17 @@ import type {
 	VerificationResult,
 } from "./types.mjs";
 
+type VerifyAsync = (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>;
+
 export class Ed25519PrehashVerifier implements SignatureVerifier {
-	private verifyAsync:
-		| ((sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>)
-		| undefined;
-
-	private async loadVerifyAsync(): Promise<
-		(sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>
-	> {
-		if (this.verifyAsync) return this.verifyAsync;
-
+	/** Verifies with \`@noble/ed25519\`, an optional peer, loaded when the verifier is made. */
+	static async load(): Promise<Ed25519PrehashVerifier> {
 		const specifier = "@noble/ed25519";
-		const mod = (await import(specifier)) as {
-			verifyAsync: (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>;
-		};
-
-		this.verifyAsync = mod.verifyAsync;
-		return this.verifyAsync;
+		const mod = (await import(specifier)) as { verifyAsync: VerifyAsync };
+		return new Ed25519PrehashVerifier(mod.verifyAsync);
 	}
+
+	constructor(private readonly verifyAsync: VerifyAsync) {}
 
 	async verify(ctx: VerificationContext): Promise<VerificationResult> {
 		const { body, did, resolvedKey } = ctx;
@@ -93,13 +86,12 @@ export class Ed25519PrehashVerifier implements SignatureVerifier {
 
 		// 5. Compute SHA-256 hash of message, then verify Ed25519 signature against the hash
 		try {
-			const verifyAsync = await this.loadVerifyAsync();
 			const signatureBytes = Buffer.from(body.signature, "base64");
 			const messageBytes = new TextEncoder().encode(body.message);
 			const hashBuffer = await crypto.subtle.digest("SHA-256", messageBytes);
 			const hash = new Uint8Array(hashBuffer);
 
-			const valid = await verifyAsync(signatureBytes, hash, publicKeyBytes);
+			const valid = await this.verifyAsync(signatureBytes, hash, publicKeyBytes);
 			if (!valid) {
 				return {
 					valid: false,

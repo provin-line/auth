@@ -17,7 +17,7 @@
 import { createHash } from "node:crypto";
 import { clientAllowance } from "@o3co/auth-provider-oauth/client-allowance";
 import type { Grant, GrantInput, GrantOutcome, Refused } from "@o3co/auth-provider-oauth/grants";
-import type { DidDocuments, SpentNonces } from "./contract.mjs";
+import { type DidDocuments, didGrantType, type SpentNonces } from "./contract.mjs";
 import { extractVerificationKey } from "./resolver/extractKey.mjs";
 import { type RelationshipName, selectVerificationMethod } from "./resolver/selectMethod.mjs";
 import {
@@ -28,20 +28,26 @@ import {
 	validateOwnerLogin,
 } from "./transcript.mjs";
 import { detectAlgorithm } from "./verifiers/detect.mjs";
-import type { VerifierFactory } from "./verifiers/factory.mjs";
-import type { SignatureVerifier } from "./verifiers/types.mjs";
-
-export const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
+import type { DidGrantParams, SignatureVerifier } from "./verifiers/types.mjs";
 
 /** The request parameters the verifiers read, every one a string. */
 const MESSAGE_PARAMS = ["did", "algorithm", "message", "signature", "prehash", "jws"] as const;
 
-/** Kept longer than a message is accepted by this much, so a store clock behind ours never lets a nonce back. */
+/**
+ * Kept longer than a message is accepted by this much, for clock differences
+ * between the instances that judge a message and a clock that steps back.
+ */
 const USED_ALLOWANCE_MS = 60_000;
+
+/**
+ * The only authorization scope the grant issues (rule
+ * `auth.token.signed-claims`). dplaax.spec also names
+ * `CURRENT_AUTHORIZATION_AT_REQUEST@1`, for a minting mode this grant does not have.
+ */
+export const AUTHZ_SCOPE_AT_ISSUANCE = "AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1";
 
 export interface DidGrantSettings {
 	readonly authContract: AuthContractId;
-	readonly supportedAlgorithms: readonly string[];
 	readonly messageMaxAgeMs: number;
 	readonly accessTokenLifetimeSeconds: number;
 	/** This provider's issuer URL. */
@@ -53,8 +59,8 @@ export interface DidGrantSettings {
 export interface DidGrantParts {
 	readonly documents: DidDocuments;
 	readonly nonces: SpentNonces;
-	/** Every algorithm composed, built in and contributed, by name. */
-	readonly algorithms: ReadonlyMap<string, VerifierFactory>;
+	/** The verifier of each supported algorithm, made at boot. */
+	readonly verifiers: ReadonlyMap<string, SignatureVerifier>;
 	/** The kernel's clock, in epoch ms. */
 	readonly now: () => number;
 }
@@ -81,26 +87,24 @@ const spentName = (nonce: string) =>
 
 /** The DID grant: a client exchanges a login message a DID signed for an access token for that DID. */
 export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Grant {
-	// One verifier per algorithm, made when a request first names it.
-	const verifiers = new Map<string, Promise<SignatureVerifier>>();
-	const verifierFor = (algorithm: string, create: VerifierFactory): Promise<SignatureVerifier> => {
-		const made = verifiers.get(algorithm) ?? create();
-		verifiers.set(algorithm, made);
-		return made;
-	};
-
 	return {
-		grantType: DID_GRANT_TYPE,
+		grantType: didGrantType,
 		bodies: ["form", "json"],
 		readsAmbient: "none",
 		handle: async (input: GrantInput): Promise<Answer> => {
-			const body: Record<string, string> = {};
+			const body: DidGrantParams = {};
 			for (const name of MESSAGE_PARAMS) {
 				const value = input.param(name);
 				if (value !== undefined) body[name] = value;
 			}
 			const did = body.did;
 			if (!did) return error("invalid_request", "did is required");
+
+			// Checked before the registry is asked, so a request refused anyway costs it nothing.
+			const algorithm = detectAlgorithm(body);
+			if (!algorithm) return error("invalid_request", "unable to detect signature algorithm from request body");
+			const verifier = parts.verifiers.get(algorithm);
+			if (!verifier) return error("invalid_request", `algorithm ${algorithm} is not supported by this server`);
 
 			// Resolve (rule auth.resolve.failure-mapping): a rejection is FAILED and
 			// tells its reason; a resolver that cannot tell throws Unavailable (503).
@@ -116,23 +120,21 @@ export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Gran
 				return error("invalid_grant", "grant could not be processed");
 			}
 
-			const algorithm = detectAlgorithm(body);
-			if (!algorithm) return error("invalid_request", "unable to detect signature algorithm from request body");
-			const create = parts.algorithms.get(algorithm);
-			if (!create || !settings.supportedAlgorithms.includes(algorithm)) {
-				return error("invalid_request", `algorithm "${algorithm}" is not supported by this server`);
-			}
-
 			// Nonce and timestamp are checked after verification: the verifier owns
 			// parsing the message, whose format is the algorithm's.
-			const verification = await (await verifierFor(algorithm, create)).verify({ body, did, resolvedKey });
+			const verification = await verifier.verify({ body, did, resolvedKey });
 			// 400 for every failure: 401 would make the endpoint challenge for client authentication.
 			if (!verification.valid) return error(verification.error, verification.errorDescription);
 			const { parsedMessage } = verification;
+			// A token is for the DID the request named and resolved, whichever verifier checked it.
+			if (verification.subject !== did || parsedMessage.did !== did) {
+				return error("invalid_grant", "the signed message is not the requested DID's");
+			}
 
 			// OWNER contracts: the signed payload is a login transcript, checked
 			// before the nonce is spent, so a refused transcript leaves it unused.
 			const contract = settings.authContract;
+			let methodId = resolvedKey.id;
 			if (isOwnerContract(contract)) {
 				try {
 					const transcript = parseLoginTranscript(parsedMessage);
@@ -145,7 +147,7 @@ export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Gran
 					if (ownerSelected.id !== resolvedKey.id) {
 						throw new TranscriptError(
 							"verification_method",
-							`OWNER-selected method "${ownerSelected.id}" does not match the crypto-verified method "${resolvedKey.id}"`,
+							`OWNER-selected method ${ownerSelected.id} does not match the crypto-verified method ${resolvedKey.id}`,
 						);
 					}
 					validateOwnerLogin({
@@ -160,6 +162,7 @@ export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Gran
 						allowsAudience: (audience) =>
 							clientAllowance.allowsAudience(input.client, audience, settings.issuer),
 					});
+					methodId = ownerSelected.id;
 				} catch {
 					return error("invalid_grant", "grant could not be processed");
 				}
@@ -188,16 +191,27 @@ export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Gran
 			let audience = allowed.audience;
 			if (verification.audience !== undefined) {
 				if (!clientAllowance.allowsAudience(input.client, verification.audience, settings.issuer)) {
-					return error("invalid_request", `audience "${verification.audience}" is not allowed`);
+					return error("invalid_request", `audience ${verification.audience} is not allowed`);
 				}
 				audience = [verification.audience];
 			}
 
 			const access = {
-				subject: verification.subject,
+				subject: did,
 				issuedTo: input.client.id,
 				audience,
 				scope: allowed.scope,
+				// The six claims of rule auth.token.signed-claims, from the one
+				// resolution and method this decision was made on (rule
+				// auth.resolve.single-input-binding).
+				claims: {
+					auth_contract_id: contract,
+					verification_method: methodId,
+					did_document_snapshot: resolution.digest,
+					lifecycle_state_ref: resolution.snapshotRef,
+					lifecycle_freshness_ref: resolution.retrievedAt,
+					authorization_scope: AUTHZ_SCOPE_AT_ISSUANCE,
+				},
 			};
 			const admitted = await input.admits(access);
 			if (admitted.kind === "refused") return admitted;

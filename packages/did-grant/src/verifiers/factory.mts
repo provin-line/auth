@@ -13,76 +13,54 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { Ed25519PrehashVerifier } from "./ed25519Prehash.mjs";
+import { Ed25519RawVerifier } from "./ed25519Raw.mjs";
 import { JwsVerifier } from "./jws.mjs";
 import type { SignatureVerifier } from "./types.mjs";
 
-/** Creates the verifier of one algorithm, once, when a request first names it. */
-export type VerifierFactory = () => Promise<SignatureVerifier>;
-
-const JWS_ALG_MAP = {
-	ed25519_jws: "EdDSA",
-	es256_jws: "ES256",
-	es256k_jws: "ES256K",
-} as const;
+/** One algorithm the grant always takes. */
+export interface BuiltinAlgorithm {
+	/** Makes the verifier, once, at boot. */
+	readonly create: () => Promise<SignatureVerifier>;
+	/**
+	 * Whether its envelope carries a JWS protected header, the only place a
+	 * `kid` can come from: an OWNER contract's three-way kid match (rule
+	 * `auth.grant.kid-match`) needs one.
+	 */
+	readonly headerBearing: boolean;
+}
 
 /**
- * Loads a verifier that needs the optional peer `@noble/ed25519`, and tells
+ * Makes a verifier that needs the optional peer `@noble/ed25519`, and tells
  * the operator how to get it when it is missing.
  */
-async function withNoble(
-	algorithm: string,
-	load: () => Promise<SignatureVerifier>,
-): Promise<SignatureVerifier> {
+async function withNoble(algorithm: string, load: () => Promise<SignatureVerifier>): Promise<SignatureVerifier> {
 	try {
 		return await load();
 	} catch (err) {
 		const code =
-			typeof err === "object" && err !== null && "code" in err
-				? (err as { code: unknown }).code
-				: undefined;
+			typeof err === "object" && err !== null && "code" in err ? (err as { code: unknown }).code : undefined;
 		const message = err instanceof Error ? err.message : String(err);
-		if (
-			(code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") &&
-			message.includes("@noble/ed25519")
-		) {
+		if ((code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") && message.includes("@noble/ed25519")) {
 			throw new Error(
-				`${algorithm} algorithm requires @noble/ed25519 package. ` +
-					"Install @noble/ed25519 with your package manager (npm/pnpm/yarn) — or switch to a JWS algorithm (ed25519_jws, es256_jws, es256k_jws).",
+				`${algorithm} requires the @noble/ed25519 package: install it, or use a JWS algorithm (ed25519_jws, es256_jws)`,
 			);
 		}
 		throw err;
 	}
 }
 
-/** The algorithms the grant always takes, by the name a request uses. */
-export const BUILTIN_ALGORITHMS: ReadonlyMap<string, VerifierFactory> = new Map<string, VerifierFactory>([
-	[
-		"ed25519_raw",
-		() =>
-			withNoble("ed25519_raw", async () => {
-				const { Ed25519RawVerifier } = await import("./ed25519Raw.mjs");
-				return new Ed25519RawVerifier();
-			}),
-	],
+/**
+ * The algorithms the grant always takes, by the name a request uses.
+ * `es256k_jws` is not among them: jose does not verify ES256K on Node, so a
+ * deployment that needs it contributes a verifier at `signatureAlgorithms`.
+ */
+export const BUILTIN_ALGORITHMS: ReadonlyMap<string, BuiltinAlgorithm> = new Map<string, BuiltinAlgorithm>([
+	["ed25519_raw", { create: () => withNoble("ed25519_raw", () => Ed25519RawVerifier.load()), headerBearing: false }],
 	[
 		"ed25519_prehash",
-		() =>
-			withNoble("ed25519_prehash", async () => {
-				const { Ed25519PrehashVerifier } = await import("./ed25519Prehash.mjs");
-				return new Ed25519PrehashVerifier();
-			}),
+		{ create: () => withNoble("ed25519_prehash", () => Ed25519PrehashVerifier.load()), headerBearing: false },
 	],
-	["ed25519_jws", async () => new JwsVerifier(JWS_ALG_MAP.ed25519_jws)],
-	["es256_jws", async () => new JwsVerifier(JWS_ALG_MAP.es256_jws)],
-	["es256k_jws", async () => new JwsVerifier(JWS_ALG_MAP.es256k_jws)],
+	["ed25519_jws", { create: async () => new JwsVerifier("EdDSA"), headerBearing: true }],
+	["es256_jws", { create: async () => new JwsVerifier("ES256"), headerBearing: true }],
 ]);
-
-export async function createVerifier(algorithm: string): Promise<SignatureVerifier> {
-	const factory = BUILTIN_ALGORITHMS.get(algorithm);
-	if (!factory) {
-		throw new Error(
-			`Unsupported algorithm: "${algorithm}". Supported: ${[...BUILTIN_ALGORITHMS.keys()].join(", ")}`,
-		);
-	}
-	return factory();
-}

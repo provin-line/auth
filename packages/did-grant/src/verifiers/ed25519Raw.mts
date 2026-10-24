@@ -21,24 +21,17 @@ import type {
 	VerificationResult,
 } from "./types.mjs";
 
+type VerifyAsync = (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>;
+
 export class Ed25519RawVerifier implements SignatureVerifier {
-	private verifyAsync:
-		| ((sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>)
-		| undefined;
-
-	private async loadVerifyAsync(): Promise<
-		(sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>
-	> {
-		if (this.verifyAsync) return this.verifyAsync;
-
+	/** Verifies with \`@noble/ed25519\`, an optional peer, loaded when the verifier is made. */
+	static async load(): Promise<Ed25519RawVerifier> {
 		const specifier = "@noble/ed25519";
-		const mod = (await import(specifier)) as {
-			verifyAsync: (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>;
-		};
-
-		this.verifyAsync = mod.verifyAsync;
-		return this.verifyAsync;
+		const mod = (await import(specifier)) as { verifyAsync: VerifyAsync };
+		return new Ed25519RawVerifier(mod.verifyAsync);
 	}
+
+	constructor(private readonly verifyAsync: VerifyAsync) {}
 
 	async verify(ctx: VerificationContext): Promise<VerificationResult> {
 		const { body, did, resolvedKey } = ctx;
@@ -93,11 +86,10 @@ export class Ed25519RawVerifier implements SignatureVerifier {
 
 		// 5. Verify Ed25519 signature
 		try {
-			const verifyAsync = await this.loadVerifyAsync();
 			const signatureBytes = Buffer.from(body.signature, "base64");
 			const messageBytes = new TextEncoder().encode(body.message);
 
-			const valid = await verifyAsync(signatureBytes, messageBytes, publicKeyBytes);
+			const valid = await this.verifyAsync(signatureBytes, messageBytes, publicKeyBytes);
 			if (!valid) {
 				return {
 					valid: false,

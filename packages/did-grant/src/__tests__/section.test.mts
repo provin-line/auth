@@ -16,7 +16,7 @@
 
 import { BootRefused, defineModule } from "@o3co/auth-provider-foundation/kernel";
 import { describe, expect, it } from "vitest";
-import { signatureAlgorithms } from "../contract.mjs";
+import { type SignatureVerifier, signatureAlgorithms } from "../contract.mjs";
 import { compose, minimalSection } from "./harness.mjs";
 
 /** The places a refused boot names, or a failure when it boots. */
@@ -37,11 +37,19 @@ const owner = {
 	"supported-algorithms": ["ed25519_jws"],
 };
 
-const customAlgorithm = (algorithm: string) =>
+const refusing: SignatureVerifier = {
+	verify: async () => ({ valid: false, error: "invalid_grant", errorDescription: "no" }),
+};
+
+const customAlgorithm = (
+	algorithm: string,
+	options: { headerBearing?: true; create?: () => Promise<SignatureVerifier> } = {},
+) =>
 	defineModule({ name: `algorithm-${algorithm}` }, (m) => [
 		m.contribute(signatureAlgorithms).by(() => ({
 			algorithm,
-			create: async () => ({ verify: async () => ({ valid: false, error: "invalid_grant", errorDescription: "no" }) }),
+			create: options.create ?? (async () => refusing),
+			...(options.headerBearing ? { headerBearing: true as const } : {}),
 		})),
 	]);
 
@@ -116,5 +124,35 @@ describe("did-grant section", () => {
 	it("refuses a key the section does not hold", async () => {
 		const section = { ...minimalSection, "allowed-audiences": ["https://rs.example"] };
 		expect(await refusedAt(compose({ section }))).toContainEqual(expect.stringContaining("did-grant"));
+	});
+
+	it("refuses es256k_jws, which no built-in verifier can check", async () => {
+		const section = { ...minimalSection, "supported-algorithms": ["es256k_jws"] };
+		expect(await refusedAt(compose({ section }))).toEqual([expect.stringContaining("supported-algorithms")]);
+	});
+
+	it("refuses boot when a configured algorithm's verifier cannot be made", async () => {
+		const broken = customAlgorithm("broken_sig", {
+			create: async () => {
+				throw new Error("no key material");
+			},
+		});
+		const section = { ...minimalSection, "supported-algorithms": ["broken_sig"] };
+		expect(await refusedAt(compose({ section, extra: [broken] }))).toEqual([
+			expect.stringContaining("supported-algorithms"),
+		]);
+	});
+
+	it("boots an OWNER contract on a contributed algorithm that carries a JWS header", async () => {
+		const section = { ...owner, "supported-algorithms": ["custom_jws"] };
+		const extra = [customAlgorithm("custom_jws", { headerBearing: true })];
+		await expect(compose({ section, extra })).resolves.toBeDefined();
+	});
+
+	it("refuses an OWNER contract on a contributed algorithm that does not say it carries one", async () => {
+		const section = { ...owner, "supported-algorithms": ["custom_sig"] };
+		expect(await refusedAt(compose({ section, extra: [customAlgorithm("custom_sig")] }))).toEqual([
+			expect.stringContaining("supported-algorithms"),
+		]);
 	});
 });

@@ -62,7 +62,7 @@ describe("Ed25519RawVerifier", () => {
 	});
 
 	it("returns valid result for correct signature (resolvedKey JWK)", async () => {
-		const verifier = new Ed25519RawVerifier();
+		const verifier = await Ed25519RawVerifier.load();
 		const { message, signature, resolvedKey } = await createSignedRequest(did, privateKey);
 
 		const result = await verifier.verify({
@@ -81,7 +81,7 @@ describe("Ed25519RawVerifier", () => {
 	});
 
 	it("returns valid result with audience when present", async () => {
-		const verifier = new Ed25519RawVerifier();
+		const verifier = await Ed25519RawVerifier.load();
 		const audience = "https://api.example.com";
 		const { message, signature, resolvedKey } = await createSignedRequest(did, privateKey, {
 			audience,
@@ -101,7 +101,7 @@ describe("Ed25519RawVerifier", () => {
 	});
 
 	it("returns invalid when signature is wrong", async () => {
-		const verifier = new Ed25519RawVerifier();
+		const verifier = await Ed25519RawVerifier.load();
 		const { message, resolvedKey } = await createSignedRequest(did, privateKey);
 		// Sign with a different key
 		const wrongKey = ed.utils.randomSecretKey();
@@ -121,7 +121,7 @@ describe("Ed25519RawVerifier", () => {
 	});
 
 	it("returns error when signature field is missing", async () => {
-		const verifier = new Ed25519RawVerifier();
+		const verifier = await Ed25519RawVerifier.load();
 		const { message, resolvedKey } = await createSignedRequest(did, privateKey);
 
 		const result = await verifier.verify({
@@ -138,7 +138,7 @@ describe("Ed25519RawVerifier", () => {
 	});
 
 	it("returns error when message is not valid JSON", async () => {
-		const verifier = new Ed25519RawVerifier();
+		const verifier = await Ed25519RawVerifier.load();
 		const publicKeyBytes = await ed.getPublicKeyAsync(privateKey);
 		const x = Buffer.from(publicKeyBytes).toString("base64url");
 		const resolvedKey: ExtractedKey = {
@@ -161,7 +161,7 @@ describe("Ed25519RawVerifier", () => {
 	});
 
 	it("returns error when message.did does not match ctx.did", async () => {
-		const verifier = new Ed25519RawVerifier();
+		const verifier = await Ed25519RawVerifier.load();
 		const { message, signature, resolvedKey } = await createSignedRequest(
 			"did:key:z6MkOther",
 			privateKey,
@@ -180,7 +180,7 @@ describe("Ed25519RawVerifier", () => {
 		}
 	});
 
-	// Security regression (converged review finding): this verifier has no
+	// Security: this verifier has no
 	// JWS protected header at all — `headerKid` can only legitimately come
 	// from one (see `jws.mts`). A signed payload that smuggles its own
 	// top-level `headerKid` member must not let that value flow through to
@@ -188,7 +188,7 @@ describe("Ed25519RawVerifier", () => {
 	// kid match (`auth.grant.kid-match`) could be satisfied from
 	// attacker-controlled payload data instead of a real protected header.
 	it("never surfaces a headerKid forged from the signed payload's own headerKid member", async () => {
-		const verifier = new Ed25519RawVerifier();
+		const verifier = await Ed25519RawVerifier.load();
 		const publicKeyBytes = await ed.getPublicKeyAsync(privateKey);
 		const x = Buffer.from(publicKeyBytes).toString("base64url");
 		const resolvedKey: ExtractedKey = {

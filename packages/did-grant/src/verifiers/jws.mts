@@ -22,7 +22,7 @@ import type {
 	VerificationResult,
 } from "./types.mjs";
 
-type JwsAlgorithm = "EdDSA" | "ES256" | "ES256K";
+type JwsAlgorithm = "EdDSA" | "ES256";
 
 export class JwsVerifier implements SignatureVerifier {
 	constructor(private readonly expectedAlg: JwsAlgorithm) {}

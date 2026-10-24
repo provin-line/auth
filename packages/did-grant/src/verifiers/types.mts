@@ -26,15 +26,26 @@ export interface ParsedMessage {
 	headerKid?: string;
 }
 
+/** The request parameters a verifier reads, as the client sent them; every one a string, and any may be missing. */
+export type DidGrantParams = Partial<
+	Record<"did" | "algorithm" | "message" | "signature" | "prehash" | "jws", string>
+>;
+
 export interface VerificationContext {
-	body: Record<string, unknown>;
+	body: DidGrantParams;
 	did: string;
 	resolvedKey: ExtractedKey;
 }
 
+/**
+ * A valid result names the subject, which the grant requires to be the DID
+ * the request names, as it requires of `parsedMessage.did`. A failure is a
+ * malformed request or a credential that does not hold; the grant answers
+ * either with 400.
+ */
 export type VerificationResult =
 	| { valid: true; subject: string; audience?: string; parsedMessage: ParsedMessage }
-	| { valid: false; error: string; errorDescription: string };
+	| { valid: false; error: "invalid_request" | "invalid_grant"; errorDescription: string };
 
 export interface SignatureVerifier {
 	verify(ctx: VerificationContext): Promise<VerificationResult>;

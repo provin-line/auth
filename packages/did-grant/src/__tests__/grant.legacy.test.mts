@@ -15,10 +15,11 @@
  */
 
 import { generateKeyPairSync } from "node:crypto";
-import { isUnavailable } from "@o3co/auth-provider-foundation/kernel";
+import { defineModule, isUnavailable } from "@o3co/auth-provider-foundation/kernel";
 import { describe, expect, it } from "vitest";
+import { type SignatureVerifier, signatureAlgorithms, type VerificationResult } from "../contract.mjs";
 import { didKey, jwsParams, legacyMessage, rawParams } from "./fixtures.mjs";
-import { AUDIENCE, clock, compose, DID_GRANT_TYPE, ISSUER, stands } from "./harness.mjs";
+import { AUDIENCE, clock, compose, DID_GRANT_TYPE, ISSUER, minimalSection, stands } from "./harness.mjs";
 
 /** A composition whose resolver knows one DID, with that DID's key. */
 async function registered(options: Parameters<typeof compose>[0] = {}) {
@@ -63,10 +64,11 @@ describe("did-grant LEGACY_DID_LOGIN@1 (ed25519_raw)", () => {
 		expect(await verify(String(outcome.body.access_token))).toMatchObject({ grant: { audience: [ISSUER] } });
 	});
 
-	it("refuses an audience the client is not allowed", async () => {
-		const { key, call } = await registered();
+	it("refuses an audience the client is not allowed, spending the message's nonce", async () => {
+		const { key, call, stands: s } = await registered();
 		const outcome = await call(rawParams(key, legacyMessage(key, { audience: "https://other.example" })));
 		expect(outcome).toMatchObject({ kind: "error", error: "invalid_request" });
+		expect(s.spent.size).toBe(1);
 	});
 
 	it("issues the scope asked within the client's allowance, and names it in the answer", async () => {
@@ -86,10 +88,26 @@ describe("did-grant LEGACY_DID_LOGIN@1 (ed25519_raw)", () => {
 		});
 	});
 
-	it("refuses a scope outside the client's allowance", async () => {
-		const { key, call } = await registered();
+	it("refuses a scope outside the client's allowance, spending the message's nonce", async () => {
+		const { key, call, stands: s } = await registered();
 		const outcome = await call({ ...rawParams(key, legacyMessage(key)), scope: "write" });
 		expect(outcome).toMatchObject({ kind: "error", error: "invalid_scope" });
+		expect(s.spent.size).toBe(1);
+	});
+
+	it("keeps the nonce of a message stamped ahead of the clock until the message's own window closes", async () => {
+		const { key, call, stands: s } = await registered();
+		const ahead = clock.at + 240_000;
+		const params = rawParams(key, legacyMessage(key, { timestamp: new Date(ahead).toISOString() }));
+		await expect(call(params)).resolves.toMatchObject({ kind: "issued" });
+		expect([...s.spent.values()]).toEqual([ahead + 300_000 + 60_000]);
+		clock.at += 360_000;
+		try {
+			// Still inside its window (it is stamped 2 minutes ago now): only the spent nonce refuses it.
+			await expect(call(params)).resolves.toMatchObject({ kind: "error", error: "invalid_request" });
+		} finally {
+			clock.at -= 360_000;
+		}
 	});
 
 	it("refuses a message whose nonce was used, kept until the message's window closes", async () => {
@@ -165,6 +183,52 @@ describe("did-grant LEGACY_DID_LOGIN@1 (ed25519_raw)", () => {
 		await expect(call(rawParams(key, legacyMessage(key)))).resolves.toMatchObject({
 			kind: "issued",
 			body: { expires_in: 90 },
+		});
+	});
+});
+
+describe("did-grant with a contributed signature algorithm", () => {
+	const section = { ...minimalSection, "supported-algorithms": ["custom_sig"] };
+	const contributing = (answer: (did: string) => VerificationResult) => {
+		const verifier: SignatureVerifier = { verify: async ({ did }) => answer(did) };
+		return defineModule({ name: "algorithm-custom" }, (m) => [
+			m.contribute(signatureAlgorithms).by(() => ({ algorithm: "custom_sig", create: async () => verifier })),
+		]);
+	};
+	const message = (did: string) => ({
+		did,
+		nonce: `custom-${Math.random()}`,
+		timestamp: new Date(clock.at).toISOString(),
+		audience: AUDIENCE,
+	});
+
+	it("hands a request naming the algorithm to the contributed verifier", async () => {
+		const extra = [contributing((did) => ({ valid: true, subject: did, parsedMessage: message(did) }))];
+		const { key, call } = await registered({ section, extra });
+		await expect(call({ did: key.did, algorithm: "custom_sig", message: "m" })).resolves.toMatchObject({
+			kind: "issued",
+		});
+	});
+
+	it("refuses a verifier's subject that is not the DID the request names", async () => {
+		const extra = [
+			contributing((did) => ({ valid: true, subject: "did:other:victim", parsedMessage: message(did) })),
+		];
+		const { key, call } = await registered({ section, extra });
+		await expect(call({ did: key.did, algorithm: "custom_sig", message: "m" })).resolves.toMatchObject({
+			kind: "error",
+			error: "invalid_grant",
+		});
+	});
+
+	it("refuses a verifier's message whose did is not the DID the request names", async () => {
+		const extra = [
+			contributing((did) => ({ valid: true, subject: did, parsedMessage: message("did:other:victim") })),
+		];
+		const { key, call } = await registered({ section, extra });
+		await expect(call({ did: key.did, algorithm: "custom_sig", message: "m" })).resolves.toMatchObject({
+			kind: "error",
+			error: "invalid_grant",
 		});
 	});
 });

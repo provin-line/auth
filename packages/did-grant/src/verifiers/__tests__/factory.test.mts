@@ -16,48 +16,31 @@
 import { describe, expect, it } from "vitest";
 import { Ed25519PrehashVerifier } from "../ed25519Prehash.mjs";
 import { Ed25519RawVerifier } from "../ed25519Raw.mjs";
-import { BUILTIN_ALGORITHMS, createVerifier } from "../factory.mjs";
+import { BUILTIN_ALGORITHMS } from "../factory.mjs";
 import { JwsVerifier } from "../jws.mjs";
 
-describe("createVerifier", () => {
-	it("returns Ed25519RawVerifier for ed25519_raw", async () => {
-		const verifier = await createVerifier("ed25519_raw");
-		expect(verifier).toBeInstanceOf(Ed25519RawVerifier);
-	});
-
-	it("returns JwsVerifier for ed25519_jws", async () => {
-		const verifier = await createVerifier("ed25519_jws");
-		expect(verifier).toBeInstanceOf(JwsVerifier);
-	});
-
-	it("returns JwsVerifier for es256_jws", async () => {
-		const verifier = await createVerifier("es256_jws");
-		expect(verifier).toBeInstanceOf(JwsVerifier);
-	});
-
-	it("returns JwsVerifier for es256k_jws", async () => {
-		const verifier = await createVerifier("es256k_jws");
-		expect(verifier).toBeInstanceOf(JwsVerifier);
-	});
-
-	it("returns Ed25519PrehashVerifier for ed25519_prehash", async () => {
-		const verifier = await createVerifier("ed25519_prehash");
-		expect(verifier).toBeInstanceOf(Ed25519PrehashVerifier);
-	});
-
-	it("refuses an algorithm it does not hold, naming the ones it does", async () => {
-		await expect(createVerifier("rs256_jws")).rejects.toThrow(/Unsupported algorithm: "rs256_jws"/);
-	});
-});
+const made = (name: string) => {
+	const algorithm = BUILTIN_ALGORITHMS.get(name);
+	if (!algorithm) throw new Error(`no built-in ${name}`);
+	return algorithm.create();
+};
 
 describe("BUILTIN_ALGORITHMS", () => {
-	it("names the five algorithms the grant always takes", () => {
-		expect([...BUILTIN_ALGORITHMS.keys()].sort()).toEqual([
-			"ed25519_jws",
-			"ed25519_prehash",
-			"ed25519_raw",
-			"es256_jws",
-			"es256k_jws",
-		]);
+	it("names the four algorithms the grant always takes", () => {
+		expect([...BUILTIN_ALGORITHMS.keys()].sort()).toEqual(["ed25519_jws", "ed25519_prehash", "ed25519_raw", "es256_jws"]);
+	});
+
+	it.each([
+		["ed25519_raw", Ed25519RawVerifier],
+		["ed25519_prehash", Ed25519PrehashVerifier],
+		["ed25519_jws", JwsVerifier],
+		["es256_jws", JwsVerifier],
+	] as const)("makes %s's verifier", async (name, kind) => {
+		expect(await made(name)).toBeInstanceOf(kind);
+	});
+
+	it("marks the JWS algorithms, and those alone, as carrying a protected header", () => {
+		const bearing = [...BUILTIN_ALGORITHMS].filter(([, a]) => a.headerBearing).map(([name]) => name);
+		expect(bearing.sort()).toEqual(["ed25519_jws", "es256_jws"]);
 	});
 });

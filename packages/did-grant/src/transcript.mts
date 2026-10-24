@@ -47,11 +47,12 @@ export const isOwnerContract = (
 	contract: AuthContractId,
 ): contract is Exclude<AuthContractId, "LEGACY_DID_LOGIN@1"> => contract !== "LEGACY_DID_LOGIN@1";
 
-const AUTH_CONTRACT_IDS: readonly AuthContractId[] = [
+/** Every auth contract, in the order the section lists them. */
+export const AUTH_CONTRACT_IDS = [
 	"OWNER_AUTHENTICATION_LOGIN@1",
 	"OWNER_ASSERTION_CONTROL_LOGIN@1",
 	"LEGACY_DID_LOGIN@1",
-];
+] as const satisfies readonly AuthContractId[];
 
 /**
  * The OWNER-path login transcript: the payload an OWNER_* grant request

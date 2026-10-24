@@ -49,11 +49,8 @@ describe("extractVerificationKey", () => {
 	});
 
 	it("throws method-not-found when id has the DID prefix but controller differs — LEGACY path is controller-only, no id-prefix fallback (fail-closed)", async () => {
-		// The old implementation matched on `vm.controller === did || vm.id.startsWith(did + "#")`,
-		// so an id-prefix match with a mismatched controller used to succeed. The LEGACY branch of
-		// `selectVerificationMethod` this now delegates to only accepts controller-matched
-		// candidates (see packages/provider-did/src/resolver/selectMethod.mts) — that
-		// fallback is intentionally gone, not merely reordered.
+		// The LEGACY branch of `selectVerificationMethod` accepts controller-matched
+		// candidates only: an id under the DID with another controller is no match.
 		const jwk: JsonWebKey = { kty: "EC", crv: "P-256", x: "abc", y: "def" };
 		const doc: DidDocument = {
 			id: did,
