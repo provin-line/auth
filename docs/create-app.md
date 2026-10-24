@@ -304,7 +304,7 @@ experience, no workspace assistance:
 1. Run the generator CLIs into a directory **outside** the repo.
 2. `pnpm install` / build / boot as-is — `@provin-line/*` resolve from their
    pinned git refs (the provider is installed only: it has no build).
-3. Additionally `docker build` each app's standalone Dockerfile (the policy-verifier template's; upstream's for the provider) and run the images: each
+3. Additionally `docker build` each app's standalone Dockerfile (the policy-verifier template's, its `runtime` stage; upstream's for the provider) and run the images: each
    answers its health endpoint, the verifier refuses `/verify` without a
    token (401), and the provider image takes the DID-grant round trip
    (`scripts/smoke-image.sh`, `scripts/smoke-did-grant.mjs --image`).
