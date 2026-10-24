@@ -51,43 +51,14 @@ async function loadVectors(): Promise<Vector[]> {
 
 const vectors = await loadVectors();
 
-/**
- * Vectors whose outcome diverges from `expect` today, with the outcome they
- * give. Each one is asserted to give exactly that outcome and no other, so a
- * broken executor cannot hide behind the divergence; fixing the module makes
- * the entry stale, which fails the test until it is deleted from this table.
- *
- * `auth-grant-kid-mismatch-001` exercises rule `auth.grant.kid-match` ("The
- * JWS protected kid, the signed-payload method id, and the resolver-selected
- * method id MUST be identical; any divergence among the three MUST fail
- * closed", dplaax.spec rules/auth-grant.yaml). The rule is not limited to a
- * contract, but did-grant checks it under an OWNER contract only. The vector
- * names no contract, so the executor runs the default, `LEGACY_DID_LOGIN@1`,
- * which does not compare the header kid: the grant issues (200) where the
- * vector expects 400 `invalid_grant`. The gap is in did-grant's LEGACY path
- * and is being fixed there. Running the vector under an OWNER contract would
- * not test the rule: its payload is no `login-transcript-v1`, so the grant
- * would refuse it for the transcript before the kid is compared.
- */
-const KNOWN_DIVERGENT: ReadonlyMap<string, (outcome: Record<string, unknown>) => void> = new Map([
-	["auth-grant-kid-mismatch-001", (outcome) => expect(outcome).toMatchObject({ status: 200 })],
-]);
-
 describe("conformance vectors (dplaax.spec auth.* / did-resolution-auth rules)", () => {
 	it("found at least one vendored vector", () => {
 		expect(vectors.length).toBeGreaterThan(0);
 	});
 
 	for (const vector of vectors) {
-		const divergence = KNOWN_DIVERGENT.get(vector.id);
 		it(`${vector.id} [${vector.rule}]: ${vector.description}`, async () => {
-			const outcome = await runVector(vector);
-			if (divergence === undefined) {
-				expect(outcome).toEqual(vector.expect);
-				return;
-			}
-			expect(outcome).not.toEqual(vector.expect);
-			divergence(outcome);
+			expect(await runVector(vector)).toEqual(vector.expect);
 		});
 	}
 

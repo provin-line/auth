@@ -214,8 +214,8 @@ releases.
   refused even when it denotes the same key. A `kid` or `verification_method`
   that is not a string, and a message that is not a JSON object, are
   `400 invalid_request`. A message that names no method is still taken. The
-  0.15 `auth-provider-did` checks these under an OWNER contract only, and
-  accepts other spellings under LEGACY.
+  0.15 `auth-provider-did` checked these under an OWNER contract only, and
+  accepted other spellings under LEGACY.
 - body-parser 2.4.0 in the lockfile ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828):
   denial of service via trailing bytes after a compressed request body). It
   is reached through express under the verifier server.
