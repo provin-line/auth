@@ -10,7 +10,9 @@ packages:
 # to the version the o3co packages require; vite to a release past vitest's
 # launch-editor advisories.
 overrides:
-  "@provin-line/auth-provider-dplaax-module": "workspace:*"
+  "@provin-line/auth-did-grant": "workspace:*"
+  "@provin-line/auth-dplaax-registry": "workspace:*"
+  "@provin-line/auth-did-grant-store": "workspace:*"
   "@provin-line/auth-policy-verifier-dplaax-module": "workspace:*"
   vite: "^8.3.3"
   zod: "4.6.7"

@@ -13,7 +13,7 @@
 // repo-level scaffold smoke (create-app.md § 6.3, end-to-end against the
 // generated artifact); this file pins the argument-to-exit-code surface.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -90,17 +90,16 @@ describe("CLI main()", () => {
 		expect(stderr.text()).toMatch(/too many positional/);
 	});
 
-	it("returns 2 when --port is non-numeric", async () => {
-		const code = await main(["foo", "--port", "not-a-number"], io);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/--port must be a positive integer/);
-	});
-
-	it("returns 2 when --port is out of range", async () => {
-		const code = await main(["foo", "--port", "70000"], io);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/--port/);
-	});
+	// The app's port is HTTP_PORT, set by the deployment; the generator has no
+	// port of its own to pass, and the shell package manager is upstream's pnpm.
+	it.each(["--port", "--package-manager"])(
+		"returns 2 for %s, which the generator no longer takes",
+		async (flag) => {
+			const code = await main(["foo", flag, "x"], io);
+			expect(code).toBe(2);
+			expect(stderr.text()).toMatch(/unknown option/i);
+		},
+	);
 
 	it("returns 2 on unknown flag", async () => {
 		const code = await main(["foo", "--unknown-flag"], io);
@@ -286,6 +285,28 @@ describe("CLI main()", () => {
 		expect(stderr.text()).toBe("");
 		expect(code).toBe(0);
 		expect(stdout.text()).toMatch(/Scaffolded \d+ files/);
+		expect(stdout.text()).toMatch(/pnpm start/);
+	});
+
+	it("passes --registry-base-url on as the default registry URL", async () => {
+		const out = join(tmpRoot, "registry");
+		const code = await main(
+			[
+				"foo",
+				"--no-git-init",
+				"--dplaax-module-ref",
+				"1111111111111111111111111111111111111111",
+				"--registry-base-url",
+				"http://registry.internal:8443",
+				"--out",
+				out,
+			],
+			io,
+		);
+		expect(code).toBe(0);
+		expect(await readFile(join(out, ".env.example"), "utf8")).toContain(
+			"# DPLAAX_REGISTRY_URL=http://registry.internal:8443",
+		);
 	});
 
 	it("uses last segment of scoped name as default output dir", async () => {
@@ -300,58 +321,6 @@ describe("CLI main()", () => {
 		);
 		expect(code).toBe(0);
 		expect(stdout.text()).toMatch(/auth-provider/);
-	});
-
-	it("returns 2 when --package-manager is not pnpm", async () => {
-		const code = await main(
-			[
-				"foo",
-				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
-				"--package-manager",
-				"npm",
-				"--out",
-				join(tmpRoot, "out"),
-			],
-			io,
-		);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/--package-manager.*pnpm/);
-	});
-
-	it("returns 2 when --package-manager is yarn", async () => {
-		const code = await main(
-			[
-				"foo",
-				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
-				"--package-manager",
-				"yarn",
-				"--out",
-				join(tmpRoot, "out"),
-			],
-			io,
-		);
-		expect(code).toBe(2);
-	});
-
-	it("accepts --package-manager pnpm", async () => {
-		const code = await main(
-			[
-				"foo",
-				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
-				"--package-manager",
-				"pnpm",
-				"--out",
-				join(tmpRoot, "out"),
-			],
-			io,
-		);
-		expect(code).toBe(0);
 	});
 
 	it("returns 2 when <name> contains path-traversal segments", async () => {

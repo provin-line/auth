@@ -13,64 +13,46 @@
 // version if they want a newer baseline.
 //
 // These constants are the dependency baseline of the canonical template:
-// auth.provider 0.15.0, emitted by generator 0.3.0. When the baseline
-// upgrades, refresh this file in lockstep with a generator MINOR bump (see
-// create-app.md § 3.3).
+// The baseline is auth.provider 0.18.4: the generator package pins
+// @o3co/auth-provider-scaffold at exactly that version, and the app it writes
+// carries upstream's own pins. When the baseline moves, bump the scaffold pin
+// and refresh this file with a generator MINOR bump (create-app.md § 3.3).
 
-/** Exact-pin runtime + dev dep versions emitted into generated package.json. */
+/**
+ * Exact pins of the dependencies the overlay adds to upstream's manifest.
+ * Upstream's own dependencies come with upstream's generator.
+ */
 export const DEFAULT_DEP_VERSIONS = {
-	// Framework (o3co) — runtime
-	"@o3co/auth-provider-core": "0.15.0",
-	"@o3co/ts.hocon": "0.1.5",
-	// Runtime — non-o3co
-	express: "5.2.1",
-	// Peer of @o3co/auth-provider-oauth since 0.11.0; emitted as a direct dep
-	// so the exact-pin baseline covers it.
-	"express-session": "1.19.0",
-	// The scaffold's own logger writes NDJSON through pino (see src/logger.mts);
-	// it used to reach pino only as @o3co/auth.utils' optional peer, which was
-	// never emitted here, so instances silently logged through console.
-	pino: "10.3.1",
-	// The ed25519_raw DID-grant verifier resolves this via the instance's
-	// import.meta.resolve, so it must be a DIRECT runtime dep of the instance
-	// (auth-provider-did declares it only as an optional peer).
-	"@noble/ed25519": "3.1.0",
-	// Dev
-	"@types/express": "5.0.6",
-	"@types/node": "25.6.0",
-	typescript: "5.9.3",
-	vitest: "4.1.12",
+	// The ed25519_raw DID-grant verifier resolves this from the app's root
+	// through import.meta.resolve, so it must be a DIRECT runtime dependency of
+	// the app (did-grant declares it only as an optional peer).
+	"@noble/ed25519": "3.2.0",
 } as const;
 
-/** Default git-subdirectory ref for `@provin-line/auth-provider-dplaax-module`. */
+/**
+ * The modules upstream's generator is asked to compose: what they need to run
+ * (tokens, keys, issuer, clients, store, audit, http, ...) comes with them.
+ */
+export const LISTED_MODULES = [
+	"@mod/token-endpoint",
+	"@mod/client-allowance",
+	"@mod/outbound",
+	"@mod/discovery",
+] as const;
+
+/**
+ * Default git ref of provin-line/auth for the provin modules. Library-only
+ * default: `main` is a MOVING ref, acceptable for tests and tooling but never
+ * for shipped scaffolds; the CLI deliberately requires the flag and accepts
+ * only a commit SHA (create-app.md § 3.3 / § 4.1).
+ */
 export const DEFAULT_DPLAAX_MODULE_REF = "main";
-
-/** Default packageManager field in generated package.json. */
-export const DEFAULT_PACKAGE_MANAGER =
-	"pnpm@10.30.2+sha512.36cdc707e7b7940a988c9c1ecf88d084f8514b5c3f085f53a2e244c2921d3b2545bc20dd4ebe1fc245feec463bb298aecea7a63ed1f7680b877dc6379d8d0cb4";
-
-/** Default http.port in application.conf. */
-export const DEFAULT_PORT = 3000;
 
 /** Default SPDX license id. */
 export const DEFAULT_LICENSE = "Apache-2.0";
 
-/**
- * Default DID registry baseUrl emitted into config/application.conf.
- * The HOCON also exposes `${?DPLAAX_REGISTRY_BASE_URL}` so operators
- * override at runtime via env var.
- */
+/** Default DID registry URL: `DPLAAX_REGISTRY_URL` in the generated `.env.example`. */
 export const DEFAULT_REGISTRY_BASE_URL = "https://registry.dplaax.dev";
-
-/**
- * Build the `@provin-line/auth-provider-dplaax-module` dep value for a given
- * git ref. pnpm 10.x git-subdirectory syntax — NOT npm-compatible.
- *
- * @see https://pnpm.io/10.x/package-sources
- */
-export function buildDplaaxModuleDep(ref: string): string {
-	return `github:provin-line/auth#${ref}&path:/packages/provider-dplaax-module`;
-}
 
 /**
  * The single SPDX license currently supported by the generator.
@@ -87,27 +69,4 @@ export type SupportedLicense = (typeof SUPPORTED_LICENSES)[number];
 
 export function isSupportedLicense(value: string): value is SupportedLicense {
 	return (SUPPORTED_LICENSES as readonly string[]).includes(value);
-}
-
-/**
- * Package managers accepted by `--package-manager`.
- *
- * The scaffold only works under pnpm in v0.1 because the dPLaaX-module dep
- * uses the pnpm 10.x git-subdirectory syntax (`github:...&path:/...`) which
- * npm and yarn do not understand. The flag is kept as a responsibility name
- * — "select the install runner" — so a future PM that gains git-subdirectory
- * support can be added to this allow-list without an API rename.
- *
- * This is an allow-list of bin names used in the emitted Makefile + README;
- * the `packageManager` field in the generated package.json stays pinned to
- * DEFAULT_PACKAGE_MANAGER regardless (Corepack version pinning).
- */
-export const SUPPORTED_PACKAGE_MANAGERS = ["pnpm"] as const;
-export type SupportedPackageManager =
-	(typeof SUPPORTED_PACKAGE_MANAGERS)[number];
-
-export function isSupportedPackageManager(
-	value: string,
-): value is SupportedPackageManager {
-	return (SUPPORTED_PACKAGE_MANAGERS as readonly string[]).includes(value);
 }

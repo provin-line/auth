@@ -54,11 +54,14 @@ jobs:
           # component name to be right, which is the actual fix.
           - generator: policy-verifier
             port: "3001"
-            scaffold_args: ""
+            entry: dist/main.mjs
+            scaffold_args: "--port 3001"
           - generator: provider
             port: "3000"
+            # The generated provider runs its sources; it has no build.
+            entry: src/main.ts
             # Placeholder only — overridden at runtime via
-            # DPLAAX_REGISTRY_BASE_URL (the image stays deployment-generic).
+            # DPLAAX_REGISTRY_URL (the image stays deployment-generic).
             scaffold_args: "--registry-base-url http://localhost:8443"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -131,6 +134,7 @@ jobs:
             GENERATOR=${{ matrix.generator }}
             AUTH_REF=${{ github.sha }}
             PORT=${{ matrix.port }}
+            ENTRY=${{ matrix.entry }}
             SCAFFOLD_ARGS=${{ matrix.scaffold_args }}
           secrets: |
             github_token=${{ secrets.GITHUB_TOKEN }}
