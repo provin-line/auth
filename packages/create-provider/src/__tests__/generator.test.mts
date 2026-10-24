@@ -73,8 +73,14 @@ describe("generateAuthProviderScaffold", () => {
 		expect(main).toContain("client-allowance/module");
 		expect(main).toContain("outbound/module");
 		expect(main).toContain("discovery/module");
-		expect(main).toContain("token-control/module");
-		expect(LISTED_MODULES).toHaveLength(5);
+		expect(main).toContain('from "@o3co/auth-provider-oauth/token-control/module"');
+		expect(LISTED_MODULES).toEqual([
+			"@mod/token-endpoint",
+			"@mod/client-allowance",
+			"@mod/outbound",
+			"@mod/discovery",
+			"@mod/token-control",
+		]);
 	});
 
 	it("composes the provin modules into the assemble list", async () => {

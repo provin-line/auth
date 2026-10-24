@@ -88,10 +88,19 @@ releases.
     0.15 instances do not carry over: auth.provider 0.18 reads different
     keys and records.
   - Revocation (`POST /oauth/revoke`) and introspection
-    (`POST /oauth/introspect`) are `@mod/token-control`'s, as the 0.15
-    provider answered them. Introspection refuses public clients. With
-    `tokens.revocation = denylist` it answers a revoked token inactive; a
-    verifier that reads the JWT alone accepts it until it expires.
+    (`POST /oauth/introspect`) are `@mod/token-control`'s.
+    - Introspection takes client authentication only: a `confidential`
+      client with a `client-secret.hash` whose `client-allowance.audiences`
+      covers the token's audience (the issuer URL for a DID client with no
+      audiences). 0.15's self-introspection, with the caller's own access
+      token as its credential, is gone, and a public client gets `401`.
+    - With `tokens.revocation = denylist`, introspection answers a revoked
+      token inactive. With `unsupported`, `/oauth/revoke` answers
+      `400 unsupported_token_type` for access tokens and the metadata names
+      no `revocation_endpoint`; 0.15 always kept a denylist.
+    - The provin policy-verifier reads the JWT alone and does not see a
+      revocation: a revoked token passes it until it expires, within
+      `did-grant.access-token-lifetime` (provin-line/oss#85).
   - Added to upstream's app: the did-grant, dplaax-registry and
     `keys.signing.secret` / `secret-encoding` keys and variables (a
     deployment sharing an HS256 secret with a policy-verifier sets
@@ -131,7 +140,8 @@ releases.
   - The scaffold smoke, CI and image build follow: `make smoke` boots the
     provider's sources against a throwaway DID registry on loopback and
     checks a DID-grant round trip (HS256 over the secret's UTF-8 bytes, the
-    six signed claims, a tampered signature rejected); its ports are
+    six signed claims, a tampered signature rejected) and the token's
+    introspection, revocation and introspection again; its ports are
     `PROVIDER_PORT` and `VERIFIER_PORT`. The root workspace overrides map the
     three new packages to `workspace:*`. `Dockerfile.instance`,
     `deploy/generated-instance.Dockerfile` and `publish-images.yml` take an

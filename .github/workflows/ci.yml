@@ -131,8 +131,9 @@ jobs:
           (cd "$out/policy-verifier" && pnpm install && pnpm run build && pnpm run typecheck)
           ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck /verify
           # One real DID-grant round trip (assertion → /oauth/token → 200 +
-          # signed claims, tampered-signature reject): the boot smoke alone let
-          # the PDP surface drift and the missing @noble/ed25519 through.
+          # signed claims, tampered-signature reject), then introspection and
+          # revocation: the boot smoke alone let the PDP surface drift and the
+          # missing @noble/ed25519 through.
           node scripts/smoke-did-grant.mjs "$out/provider" 3100
 
       # The standalone Dockerfiles, built and run: each image answers its

@@ -41,7 +41,8 @@ Settings they need, besides upstream's:
 - \`clients.registered\`: a client uses the grant once \`sections.client-allowance.grants\` lists \`${DID_GRANT_TYPE}\`.
 - \`keys.signing.secret\` and \`keys.signing.secret-encoding\`: with HS256 shared with a policy-verifier, \`utf8\`, the verifier's reading of the same string.
 - \`tokens.subject-check = none\` (\`TOKENS_SUBJECT_CHECK\`): boot requires it, because this composition has no module that checks subject revocation.
-- \`store.accept-volatile = true\` with \`kernel.deployment = single\`: the spent nonces live in this process, so a restart forgets them and reopens a replay window of \`did-grant.message-max-age\` (5m by default) for messages signed just before it.
+- \`store.accept-volatile = true\` with \`kernel.deployment = single\`: the spent nonces and the revoked tokens live in this process, so a restart forgets them. It reopens a replay window of \`did-grant.message-max-age\` (5m by default) for messages signed just before it, and a revoked token introspects active again until it expires (within \`did-grant.access-token-lifetime\`).
+- Introspection (\`POST /oauth/introspect\`) answers \`confidential\` clients only: one with \`sections.client-secret.hash\` (bcrypt or scrypt) whose \`sections.client-allowance.audiences\` covers the token's audience. A DID client with no audiences is issued tokens for the issuer URL.
 
 ## Installing from git
 
