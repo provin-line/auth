@@ -171,7 +171,7 @@ workspace mode (§ 6.3.1) is unaffected.
 `generateAuthProviderScaffold` calls `generate` of
 `@o3co/auth-provider-scaffold/create-app` with a *listed app*
 (`@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound`,
-`@mod/discovery`); upstream adds what these need to run (tokens, keys,
+`@mod/discovery`, `@mod/token-control`); upstream adds what these need to run (tokens, keys,
 issuer, clients, store, audit, http, rate-limit, metrics, ...) and writes
 `package.json`, `src/main.ts`, `config/application.conf`, the `.example`
 settings files, `Dockerfile`, `README.md` and `AGENTS.md`. The generated app
@@ -297,8 +297,11 @@ package state:
    UTF-8, against a throwaway DID registry on loopback (`outbound.allow` and
    `outbound.plain-loopback` name it), and takes one DID-grant round trip: a
    200 with a token signed over the secret's UTF-8 bytes and carrying the six
-   signed claims, and a 4xx for a tampered signature. `make smoke` takes
-   `PROVIDER_PORT` and `VERIFIER_PORT`.
+   signed claims, and a 4xx for a tampered signature. Then token-control:
+   the metadata names both endpoints, a confidential client introspects the
+   token active (the public client gets 401), the token's client revokes it,
+   and it introspects inactive. `make smoke` takes `PROVIDER_PORT` and
+   `VERIFIER_PORT`.
 
 **Consumer mode (`main` + release)** — verifies the exact consumer
 experience, no workspace assistance:

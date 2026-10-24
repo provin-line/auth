@@ -219,4 +219,45 @@ describe("Ed25519RawVerifier", () => {
 			expect(result.parsedMessage.headerKid).toBeUndefined();
 		}
 	});
+
+	describe("the payload's verification_method (rule auth.grant.kid-match)", () => {
+		async function verifyWith(method: unknown) {
+			const verifier = await Ed25519RawVerifier.load();
+			const x = Buffer.from(await ed.getPublicKeyAsync(privateKey)).toString("base64url");
+			const resolvedKey: ExtractedKey = { format: "jwk", key: { kty: "OKP", crv: "Ed25519", x }, id: `${did}#key-1` };
+			const message = JSON.stringify({
+				did,
+				timestamp: new Date().toISOString(),
+				nonce: crypto.randomUUID(),
+				verification_method: method,
+			});
+			const messageBytes = new TextEncoder().encode(message);
+			const signatureBytes = await ed.signAsync(messageBytes, privateKey);
+			return verifier.verify({
+				body: { signature: Buffer.from(signatureBytes).toString("base64"), message },
+				did,
+				resolvedKey,
+			});
+		}
+
+		it("surfaces it as verificationMethod, for the grant to match", async () => {
+			const result = await verifyWith(`${did}#key-9`);
+			expect(result.valid && result.parsedMessage.verificationMethod).toBe(`${did}#key-9`);
+		});
+
+		it("refuses a message that is JSON but no object", async () => {
+			const verifier = await Ed25519RawVerifier.load();
+			const x = Buffer.from(await ed.getPublicKeyAsync(privateKey)).toString("base64url");
+			const resolvedKey: ExtractedKey = { format: "jwk", key: { kty: "OKP", crv: "Ed25519", x }, id: `${did}#key-1` };
+			for (const message of ["null", "[]", "1"]) {
+				await expect(
+					verifier.verify({ body: { signature: "AAAA", message }, did, resolvedKey }),
+				).resolves.toMatchObject({ valid: false, error: "invalid_request" });
+			}
+		});
+
+		it("refuses one that is not a string, which can name no method", async () => {
+			await expect(verifyWith(1)).resolves.toMatchObject({ valid: false, error: "invalid_request" });
+		});
+	});
 });

@@ -24,6 +24,9 @@
  * = utf8) and carrying the six claims of dplaax.spec's auth.token.signed-claims.
  * One negative follows: a tampered signature must NOT mint a token — proves the
  * verification actually runs rather than the endpoint 200-ing everything.
+ * Last, token-control: the metadata names the revocation and introspection
+ * endpoints, a confidential client introspects the token active, its client
+ * revokes it, and introspection then answers it inactive.
  *
  * Self-contained: Ed25519 via node:crypto (no deps), a throwaway in-process
  * DID registry serving the owner DID document on loopback, and the instance's
@@ -136,6 +139,18 @@ const registryPort = registry.address().port;
 // A shared secret both an HS256 provider and a policy-verifier read as UTF-8.
 const SECRET = "smoke.only.secret.at.least.32.bytes.long";
 const CLIENT_ID = "smoke-did-client";
+// A confidential client to introspect with (introspection refuses public
+// ones), its secret held as the scrypt hash secret-hash reads. The DID client
+// names no audience, so its tokens are for the issuer: the introspector may
+// see that audience.
+const INTROSPECTOR_ID = "smoke-introspector";
+const INTROSPECTOR_SECRET = crypto.randomBytes(24).toString("base64url");
+const introspectorHash = (() => {
+	const salt = crypto.randomBytes(16);
+	const key = crypto.scryptSync(INTROSPECTOR_SECRET, salt, 32, { N: 1024, r: 8, p: 1 });
+	const b64 = (bytes) => bytes.toString("base64").replace(/=+$/, "");
+	return `$scrypt$ln=10,r=8,p=1$${b64(salt)}$${b64(key)}`;
+})();
 const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 const origin = `http://localhost:${port}`;
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "smoke-did-grant-"));
@@ -161,6 +176,15 @@ clients.registered = [
 			client-allowance {
 				grants = ["${DID_GRANT_TYPE}"]
 			}
+		}
+	}
+	{
+		id = "${INTROSPECTOR_ID}"
+		kind = confidential
+		method = client_secret_basic
+		sections {
+			client-secret { hash = "${introspectorHash}" }
+			client-allowance { audiences = ["${origin}"] }
 		}
 	}
 ]
@@ -370,7 +394,63 @@ if (badRes.status < 400 || badRes.status > 499) {
 	process.exit(1);
 }
 
+// token-control: the metadata names both endpoints; introspection answers the
+// token active to the confidential client and refuses the public one; the
+// client the token was issued to revokes it, and introspection then answers it
+// inactive. Revocation answers 200 for a token it does not revoke too, so only
+// the second introspection shows the revocation held.
+const metaRes = await fetch(`${base}/.well-known/oauth-authorization-server`, {
+	signal: AbortSignal.timeout(10_000),
+});
+const meta = metaRes.status === 200 ? await metaRes.json() : {};
+for (const [name, route] of [
+	["revocation_endpoint", "/oauth/revoke"],
+	["introspection_endpoint", "/oauth/introspect"],
+]) {
+	if (meta[name] !== `${origin}${route}`) {
+		fail(`metadata ${name} = ${JSON.stringify(meta[name])}, want ${origin}${route} (HTTP ${metaRes.status})`);
+		process.exit(1);
+	}
+}
+const introspect = (token, authorization) =>
+	fetch(`${base}/oauth/introspect`, {
+		method: "POST",
+		headers: { "content-type": "application/x-www-form-urlencoded", ...authorization },
+		body: new URLSearchParams({ token, ...(authorization ? {} : { client_id: CLIENT_ID }) }),
+		signal: AbortSignal.timeout(10_000),
+	});
+const asIntrospector = {
+	authorization: `Basic ${Buffer.from(`${INTROSPECTOR_ID}:${INTROSPECTOR_SECRET}`).toString("base64")}`,
+};
+const activeBefore = await introspect(body.access_token, asIntrospector);
+const before = activeBefore.status === 200 ? await activeBefore.json() : {};
+if (before.active !== true || before.sub !== DID) {
+	fail(`introspection before revocation: HTTP ${activeBefore.status} ${JSON.stringify(before)}, want active for ${DID}`);
+	process.exit(1);
+}
+const asPublic = await introspect(body.access_token);
+if (asPublic.status !== 401) {
+	fail(`introspection by the public client returned HTTP ${asPublic.status}, want 401`);
+	process.exit(1);
+}
+const revokeRes = await fetch(`${base}/oauth/revoke`, {
+	method: "POST",
+	headers: { "content-type": "application/x-www-form-urlencoded" },
+	body: new URLSearchParams({ token: body.access_token, client_id: CLIENT_ID }),
+	signal: AbortSignal.timeout(10_000),
+});
+if (revokeRes.status !== 200) {
+	fail(`revocation returned HTTP ${revokeRes.status}, want 200 — body: ${await revokeRes.text()}`);
+	process.exit(1);
+}
+const activeAfter = await introspect(body.access_token, asIntrospector);
+const after = activeAfter.status === 200 ? await activeAfter.json() : {};
+if (activeAfter.status !== 200 || after.active !== false) {
+	fail(`introspection after revocation: HTTP ${activeAfter.status} ${JSON.stringify(after)}, want inactive`);
+	process.exit(1);
+}
+
 console.log(
-	`smoke-did-grant: OK — DID grant minted a Bearer token with the six signed claims on :${port} (tampered signature rejected with HTTP ${badRes.status})`,
+	`smoke-did-grant: OK — DID grant minted a Bearer token with the six signed claims on :${port} (tampered signature rejected with HTTP ${badRes.status}; introspected active, revoked, then inactive)`,
 );
 process.exit(0);
