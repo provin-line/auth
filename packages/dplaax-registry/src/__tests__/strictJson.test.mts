@@ -1,0 +1,124 @@
+/*
+ * Copyright 2026 1o1 Co. Ltd.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import { describe, expect, it } from "vitest";
+import { StrictJsonError, strictJsonDecode, strictJsonParse } from "../strictJson.mjs";
+
+describe("strictJsonParse", () => {
+	it("rejects duplicate object keys at any depth", () => {
+		expect(() => strictJsonParse(`{"a":1,"a":2}`)).toThrow(StrictJsonError);
+		expect(() => strictJsonParse(`{"o":{"x":1,"x":2}}`)).toThrow(StrictJsonError);
+	});
+
+	it("rejects trailing data", () => {
+		expect(() => strictJsonParse(`{"a":1} garbage`)).toThrow(StrictJsonError);
+	});
+
+	it("preserves unknown members", () => {
+		expect(strictJsonParse(`{"id":"d","futureMember":[1]}`)).toEqual({ id: "d", futureMember: [1] });
+	});
+
+	it("tags duplicate-key rejections with reason \"duplicate-key\"", () => {
+		expect.assertions(1);
+		try {
+			strictJsonParse(`{"a":1,"a":2}`);
+		} catch (err) {
+			expect(err).toMatchObject({ reason: "duplicate-key" });
+		}
+	});
+
+	it("tags trailing-data rejections with reason \"trailing-data\"", () => {
+		expect.assertions(1);
+		try {
+			strictJsonParse(`{"a":1} garbage`);
+		} catch (err) {
+			expect(err).toMatchObject({ reason: "trailing-data" });
+		}
+	});
+
+	it("tags syntax failures with reason \"syntax\"", () => {
+		expect.assertions(1);
+		try {
+			strictJsonParse(`{a:1}`);
+		} catch (err) {
+			expect(err).toMatchObject({ reason: "syntax" });
+		}
+	});
+
+	it("parses standard JSON values equivalently to JSON.parse for a well-formed document", () => {
+		const text = `{"id":"d","n":1.5e2,"neg":-3,"b":true,"nil":null,"arr":[1,"two",false],"esc":"a\\n\\tb\\"c"}`;
+		expect(strictJsonParse(text)).toEqual(JSON.parse(text));
+	});
+
+	it("treats \"__proto__\" as an own data property, not a prototype reassignment", () => {
+		const text = `{"__proto__":{"polluted":true},"id":"safe"}`;
+		const parsed = strictJsonParse(text);
+
+		expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+		expect((parsed as Record<string, unknown>).polluted).toBeUndefined();
+
+		const names = Object.getOwnPropertyNames(parsed);
+		expect(names).toContain("__proto__");
+		expect(names).toContain("id");
+
+		expect(JSON.stringify(parsed)).toEqual(JSON.stringify(JSON.parse(text)));
+	});
+});
+
+// Rule canon.strict-decode: integer precision beyond 2^53 is kept, and invalid
+// UTF-8 and unpaired surrogate escapes are refused.
+describe("strictJsonParse — canon.strict-decode", () => {
+	it("keeps an integer beyond 2^53 exactly, as a bigint", () => {
+		expect(strictJsonParse('{"n":9007199254740993}')).toEqual({ n: 9007199254740993n });
+	});
+
+	it("keeps a safe integer as a number", () => {
+		expect(strictJsonParse('{"n":9007199254740991}')).toEqual({ n: 9007199254740991 });
+	});
+
+	it("takes a surrogate pair written as two escapes", () => {
+		expect(strictJsonParse('"\\uD83D\\uDE00"')).toBe("\u{1F600}");
+	});
+
+	it.each([
+		["a high surrogate with nothing after it", '"\\uD83D"'],
+		["a high surrogate before another character", '"\\uD83Dx"'],
+		["a lone low surrogate", '"\\uDE00"'],
+	])("refuses %s", (_, text) => {
+		expect(() => strictJsonParse(text)).toThrow(StrictJsonError);
+		try {
+			strictJsonParse(text);
+		} catch (err) {
+			expect((err as StrictJsonError).reason).toBe("unpaired-surrogate");
+		}
+	});
+});
+
+describe("strictJsonDecode", () => {
+	it("refuses bytes that are not UTF-8", () => {
+		const bytes = new Uint8Array([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x7d]);
+		expect(() => strictJsonDecode(bytes)).toThrow(StrictJsonError);
+		try {
+			strictJsonDecode(bytes);
+		} catch (err) {
+			expect((err as StrictJsonError).reason).toBe("invalid-utf8");
+		}
+	});
+
+	it("takes a document that begins with a byte order mark", () => {
+		const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"id":"x"}')]);
+		expect(strictJsonDecode(bytes)).toEqual({ id: "x" });
+	});
+});
