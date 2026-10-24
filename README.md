@@ -26,7 +26,7 @@ its own composition roots with the scaffold generators
 
 | Generator | Generates | Default port |
 | --- | --- | --- |
-| [create-auth-provider](packages/create-provider/) | DID-grant-only OAuth provider with `did:dplaax` resolver | 3000 |
+| [create-auth-provider](packages/create-provider/) | auth.provider 0.18 app with the DID grant and a `did:dplaax` registry resolver | 8080 (`HTTP_PORT`) |
 | [create-policy-verifier](packages/create-policy-verifier/) | Scope-based ABAC policy engine | 3001 |
 
 ## Packages

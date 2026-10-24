@@ -74,6 +74,51 @@ releases.
 
 ### Changed
 
+- **BREAKING (`create-auth-provider` 0.4.0): the generated provider is an
+  auth.provider 0.18.4 app.** The generator calls auth.provider's own
+  (`@o3co/auth-provider-scaffold`, pinned at exactly 0.18.4) for a listed app
+  of `@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound` and
+  `@mod/discovery`, then composes `@provin-line/auth-did-grant`,
+  `auth-dplaax-registry` and `auth-did-grant-store` into it
+  (`packages/create-provider/src/overlay/`, one function per patched file).
+  - The 0.15 template is gone. The app runs its sources
+    (`node src/main.ts`), with no build, no `tsconfig.json` and no `dist/`;
+    its settings are env variables read by `config/application.conf`, a local
+    layer (`APP_CONFIG`) for lists, and a refused boot exits 78. Existing
+    0.15 instances do not carry over: auth.provider 0.18 reads different
+    keys and records.
+  - Added to upstream's app: the did-grant, dplaax-registry and
+    `keys.signing.secret` / `secret-encoding` keys and variables (a
+    deployment sharing an HS256 secret with a policy-verifier sets
+    `utf8`), the DID grant type in the example client's allowance, the
+    registry in `outbound.allow` and `outbound.plain-internal`, and
+    `tokens.subject-check` (boot requires it, or a module that checks
+    subject revocation, which this app does not compose).
+  - `pnpm-workspace.yaml` (pnpm 11 no longer reads `package.json#pnpm`)
+    pins `@provin-line/did-dplaax` and `@provin-line/auth-did-grant` to the
+    same ref, sets `blockExoticSubdeps: false` for those git sources below the
+    app's direct dependencies, and allows the git-fetched packages their
+    `prepare` through `allowBuilds`, keyed by the source pnpm resolves
+    (docs/create-app.md § 3.4). For a branch or tag under
+    `--allow-unpinned-ref` no `allowBuilds` is written and the first install
+    names the key to add.
+  - Removed CLI flags and exports: `--port` (the port is `HTTP_PORT`),
+    `--package-manager` (upstream's app is pnpm), and `DEFAULT_PORT` and
+    `DEFAULT_PACKAGE_MANAGER` from the package. `DEFAULT_DEP_VERSIONS` now
+    holds only what the overlay adds (`@noble/ed25519`), and
+    `LISTED_MODULES` is new. `--registry-base-url` is the default
+    `DPLAAX_REGISTRY_URL` of `.env.example`.
+  - The scaffold smoke, CI and image build follow: `make smoke` boots the
+    provider's sources against a throwaway DID registry on loopback and
+    checks a DID-grant round trip (HS256 over the secret's UTF-8 bytes, the
+    six signed claims, a tampered signature rejected); its ports are
+    `PROVIDER_PORT` and `VERIFIER_PORT`. The root workspace overrides map the
+    three new packages to `workspace:*`. `Dockerfile.instance`,
+    `deploy/generated-instance.Dockerfile` and `publish-images.yml` take an
+    `ENTRY` (`src/main.ts` for the provider, `dist/main.mjs` for the
+    policy-verifier) and build only if the instance has a build script. The
+    dev `docker-compose.yml` configures the provider with the 0.18 variables
+    and `deploy/dev/provider.local.conf`.
 - **BREAKING (types, verifier packages): the policy-verifier baseline is
   0.17.0.** 0.17.0 makes `secretEncoding` required in the `AppConfig`
   type's `oauth.jwt` and in `Hs256Rotation`, and the dPLaaX verifier module
