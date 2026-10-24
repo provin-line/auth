@@ -15,7 +15,7 @@
  */
 
 /**
- * Conformance vector runner (Task 11, rule `auth.contract.normative-sot`).
+ * Conformance vector runner (rule `auth.contract.normative-sot`).
  *
  * dplaax.spec is the normative source of truth for the DID
  * authentication verification contract; provin.auth's implementation is a

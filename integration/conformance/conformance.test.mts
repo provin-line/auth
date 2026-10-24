@@ -15,7 +15,7 @@
  */
 
 /**
- * Conformance test suite (Task 11, rule `auth.contract.normative-sot`).
+ * Conformance test suite (rule `auth.contract.normative-sot`).
  *
  * Loads every `*.json` vector in `./vectors/`, runs it through `runVector`,
  * and asserts the outcome equals the vector's `expect`. As of P2, these
@@ -52,36 +52,24 @@ async function loadVectors(): Promise<Vector[]> {
 const vectors = await loadVectors();
 
 /**
- * Known, tracked gap — NOT a runner/vector bug.
+ * Known, tracked gap, not a runner or vector bug.
  *
- * `auth-grant-kid-mismatch-001` exercises rule `auth.grant.kid-match`
- * ("The JWS protected kid, the signed-payload method id, and the
- * resolver-selected method id MUST be identical; any divergence among the
- * three MUST fail closed" — dplaax.spec rules/auth-grant.yaml).
- * `createDidGrant` (packages/provider-did/src/did.mts) does not
- * perform this three-way check today: `validateOwnerLogin` — the function
- * that implements it (packages/provider-did/src/transcript.mts) — is
- * exported from the package's public barrel but is never called from
- * `did.mts`'s `handle()`. This is a *deliberate*, reviewed scope boundary:
- * `did.mts` was left untouched with `validateOwnerLogin` extracted as a
- * pure, unit-tested function, and the request-flow `relationship` is
- * hardcoded to `"legacy"` — wiring the OWNER path (three-way kid match,
- * Fork-Y relationship check) into `handle()` is tracked as follow-up work,
- * not an oversight this task should silently patch (out of this file's
- * scope: runner + seed vectors, not `did.mts` itself — see the README's "P0
- * Auth Contract" section for the current OWNER-path fail-closed posture).
+ * `auth-grant-kid-mismatch-001` exercises rule `auth.grant.kid-match` ("The
+ * JWS protected kid, the signed-payload method id, and the resolver-selected
+ * method id MUST be identical; any divergence among the three MUST fail
+ * closed", dplaax.spec rules/auth-grant.yaml). The did-grant module checks
+ * that match under an OWNER contract. The vector names no contract, so the
+ * executor runs the module's default, `LEGACY_DID_LOGIN@1`, which does not
+ * compare the header kid, and the grant issues (200) where the vector expects
+ * 400 `invalid_grant`. Running it under an OWNER contract would not test the
+ * rule either: the vector's payload is no `login-transcript-v1`, so the
+ * grant would refuse it for the transcript before the kid is compared.
  *
- * The vector's `expect` stays normatively correct (`invalid_grant`) so P2
- * can vendor it unmodified. `it.fails` keeps this test green today while
- * making it a tripwire: the moment `did.mts` wires the three-way match in,
- * this test starts *passing for real* — which `it.fails` reports as a
- * failure (an unexpectedly-passing expected-failure), a loud, impossible-
- * to-miss signal to delete this entry from `KNOWN_FAILING_VECTOR_IDS`.
- *
- * A live `createDidGrant` run against this exact vector's request confirms
- * it mints a 200 today (not the 400 `invalid_grant` the vector expects) —
- * proving the three-way check genuinely isn't wired in, not merely a
- * hypothetical gap.
+ * The vector's `expect` stays normatively correct (`invalid_grant`), so it is
+ * vendored unmodified. `it.fails` keeps this test green while making it a
+ * tripwire: once the vector passes for real, `it.fails` reports an
+ * unexpectedly-passing expected-failure, the signal to delete this entry from
+ * `KNOWN_FAILING_VECTOR_IDS`.
  */
 const KNOWN_FAILING_VECTOR_IDS: ReadonlySet<string> = new Set(["auth-grant-kid-mismatch-001"]);
 
