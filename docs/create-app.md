@@ -56,7 +56,6 @@ for a listed set of modules, plus the overlay of provin modules in
 | `packages/create-provider` | Generator for an auth-provider instance: upstream's app plus the provin-module overlay (§ 3.5) | not yet — run from a repo clone |
 | `packages/create-policy-verifier` | Generator + canonical template for a policy-verifier instance | not yet — run from a repo clone |
 | `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.18 modules) and the `did:dplaax` method library | not yet — consumed as git-subdirectory refs (§ 3.3) |
-| `packages/provider-did`, `packages/provider-dplaax-module` | The auth.provider 0.15 composition, which no generator emits any more | not yet — removed once nothing uses them |
 | `packages/policy-verifier-dplaax-module` | dPLaaX composition module consumed by generated policy-verifier instances | not yet — consumed as git-subdirectory refs (§ 3.3) |
 | `integration/` | Private workspace package: cross-package flow tests (§ 6.2) | no |
 | `instances/` | Git-ignored output directory for locally generated dev instances (§ 5) | no |
@@ -272,11 +271,14 @@ temporary directory.
 
 ### 6.2 Integration tests — `integration/` package
 
-The in-process cross-package flow test (currently
-`services/provider/tests/integration.test.mts`: mock DID registry →
-auth-provider → policy-verifier) moves to a private workspace package
-`integration/`. It composes from the **library packages** (`@provin-line/*`
-modules + `@o3co/*` framework) directly, as it already does today; it has no
+The cross-package flow test runs in one process, over real HTTP: a DID
+registry served on loopback, a provider assembled from auth.provider's modules
+with `@provin-line/auth-did-grant`, `auth-dplaax-registry` and
+`auth-did-grant-store` (HS256 over the secret's UTF-8 bytes, through the real
+`outbound`), and the real policy-verifier with the dPLaaX module reading the
+same secret. The conformance executors run the same modules against the
+vendored dplaax.spec vectors. It composes from the **library packages**
+(`@provin-line/*` modules + `@o3co/*` framework) directly and has no
 dependency on any instance directory.
 
 ### 6.3 Scaffold smoke (CI dogfood)
