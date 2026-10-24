@@ -18,7 +18,7 @@
  * Conformance test suite (rule `auth.contract.normative-sot`).
  *
  * Loads every `*.json` vector in `./vectors/`, runs it through `runVector`,
- * and asserts the outcome equals the vector's `expect`. As of P2, these
+ * and asserts the outcome equals the vector's `expect`. The
  * vectors are vendored from dplaax.spec's real `auth-*.json` /
  * `did-resolution-*.json` vectors (via `scripts/sync-spec-vectors.sh`,
  * tracked by `vectors/SYNC_MANIFEST.json`) — the spec repo is the normative
@@ -26,7 +26,7 @@
  * mirrors it.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -52,26 +52,26 @@ async function loadVectors(): Promise<Vector[]> {
 const vectors = await loadVectors();
 
 /**
- * Known, tracked gap, not a runner or vector bug.
+ * Vectors whose outcome diverges from `expect` today, with the outcome they
+ * give. Each one is asserted to give exactly that outcome and no other, so a
+ * broken executor cannot hide behind the divergence; fixing the module makes
+ * the entry stale, which fails the test until it is deleted from this table.
  *
  * `auth-grant-kid-mismatch-001` exercises rule `auth.grant.kid-match` ("The
  * JWS protected kid, the signed-payload method id, and the resolver-selected
  * method id MUST be identical; any divergence among the three MUST fail
- * closed", dplaax.spec rules/auth-grant.yaml). The did-grant module checks
- * that match under an OWNER contract. The vector names no contract, so the
- * executor runs the module's default, `LEGACY_DID_LOGIN@1`, which does not
- * compare the header kid, and the grant issues (200) where the vector expects
- * 400 `invalid_grant`. Running it under an OWNER contract would not test the
- * rule either: the vector's payload is no `login-transcript-v1`, so the
- * grant would refuse it for the transcript before the kid is compared.
- *
- * The vector's `expect` stays normatively correct (`invalid_grant`), so it is
- * vendored unmodified. `it.fails` keeps this test green while making it a
- * tripwire: once the vector passes for real, `it.fails` reports an
- * unexpectedly-passing expected-failure, the signal to delete this entry from
- * `KNOWN_FAILING_VECTOR_IDS`.
+ * closed", dplaax.spec rules/auth-grant.yaml). The rule is not limited to a
+ * contract, but did-grant checks it under an OWNER contract only. The vector
+ * names no contract, so the executor runs the default, `LEGACY_DID_LOGIN@1`,
+ * which does not compare the header kid: the grant issues (200) where the
+ * vector expects 400 `invalid_grant`. The gap is in did-grant's LEGACY path
+ * and is being fixed there. Running the vector under an OWNER contract would
+ * not test the rule: its payload is no `login-transcript-v1`, so the grant
+ * would refuse it for the transcript before the kid is compared.
  */
-const KNOWN_FAILING_VECTOR_IDS: ReadonlySet<string> = new Set(["auth-grant-kid-mismatch-001"]);
+const KNOWN_DIVERGENT: ReadonlyMap<string, (outcome: Record<string, unknown>) => void> = new Map([
+	["auth-grant-kid-mismatch-001", (outcome) => expect(outcome).toMatchObject({ status: 200 })],
+]);
 
 describe("conformance vectors (dplaax.spec auth.* / did-resolution-auth rules)", () => {
 	it("found at least one vendored vector", () => {
@@ -79,12 +79,57 @@ describe("conformance vectors (dplaax.spec auth.* / did-resolution-auth rules)",
 	});
 
 	for (const vector of vectors) {
-		const runIt = KNOWN_FAILING_VECTOR_IDS.has(vector.id) ? it.fails : it;
-		runIt(`${vector.id} [${vector.rule}]: ${vector.description}`, async () => {
+		const divergence = KNOWN_DIVERGENT.get(vector.id);
+		it(`${vector.id} [${vector.rule}]: ${vector.description}`, async () => {
 			const outcome = await runVector(vector);
-			expect(outcome).toEqual(vector.expect);
+			if (divergence === undefined) {
+				expect(outcome).toEqual(vector.expect);
+				return;
+			}
+			expect(outcome).not.toEqual(vector.expect);
+			divergence(outcome);
 		});
 	}
+
+	it("a LEGACY ed25519_jws request is issued with the six signed claims", async () => {
+		const did = "did:dplaax:registry.test.local:org:self-test-001";
+		const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+		const methodId = `${did}#key-1`;
+		const timestamp = "2026-07-17T00:00:00.000Z";
+		const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+		const signingInput = `${part({ alg: "EdDSA", kid: methodId })}.${part({ did, timestamp, nonce: "self-test-nonce" })}`;
+		const jws = `${signingInput}.${sign(null, Buffer.from(signingInput), privateKey).toString("base64url")}`;
+		const outcome = await runVector({
+			id: "self-test-legacy-jws",
+			rule: "auth.grant.self-test",
+			description: "constructed, not synced from dplaax.spec",
+			input: {
+				did,
+				did_document: {
+					id: did,
+					verificationMethod: [
+						{ id: methodId, type: "JsonWebKey2020", controller: did, publicKeyJwk: publicKey.export({ format: "jwk" }) },
+					],
+				},
+				request: { did, jws },
+			},
+			expect: undefined,
+		});
+
+		expect(outcome).toMatchObject({
+			status: 200,
+			token_claims: {
+				sub: did,
+				auth_contract_id: "LEGACY_DID_LOGIN@1",
+				verification_method: methodId,
+				authorization_scope: "AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1",
+			},
+		});
+		const claims = (outcome as { token_claims: Record<string, unknown> }).token_claims;
+		expect(claims.did_document_snapshot).toMatch(/^sha256:[0-9a-f]{64}$/);
+		expect(claims.lifecycle_state_ref).toEqual(expect.stringContaining(String(claims.did_document_snapshot)));
+		expect(claims.lifecycle_freshness_ref).toBe(timestamp);
+	});
 
 	it("throws — never silently skips — when a vector names a rule with no executor", async () => {
 		// Test-only throwaway fixture, deliberately NOT placed under
@@ -129,11 +174,9 @@ interface DriftCheckInput {
  * manifest-listed file against the manifest's recorded digest.
  *
  * Returns a list of human-readable drift descriptions; empty means fully in
- * sync. The original check (Codex review, C3) only iterated
- * `manifest.files` and hashed the upstream copy — it missed a NEW spec
- * vector not yet in the manifest, and a stale/edited LOCAL vendored copy.
- * This catches both, plus a manifest entry whose vendored copy or upstream
- * source went missing.
+ * sync. It catches a new spec vector not yet in the manifest, a stale or
+ * edited local vendored copy, and a manifest entry whose vendored copy or
+ * upstream source went missing.
  */
 async function computeVectorDrift(input: DriftCheckInput): Promise<string[]> {
 	const { manifest, upstreamVectorsDir, vendoredVectorsDir } = input;

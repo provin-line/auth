@@ -83,7 +83,8 @@ function isGrantVectorInput(input: Record<string, unknown>): input is GrantVecto
 		typeof input.did_document === "object" &&
 		input.did_document !== null &&
 		typeof input.request === "object" &&
-		input.request !== null
+		input.request !== null &&
+		Object.values(input.request).every((value) => typeof value === "string")
 	);
 }
 
@@ -196,5 +197,7 @@ export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
 		// An unavailable registry or nonce store is the token endpoint's 503.
 		if (isUnavailable(err)) return { status: 503, error: "temporarily_unavailable" };
 		throw err;
+	} finally {
+		await app.stop();
 	}
 }

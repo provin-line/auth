@@ -89,6 +89,10 @@ let provider: Awaited<ReturnType<typeof startProvider>>;
 
 let privateKey: KeyObject;
 const testDid = `did:dplaax:${REGISTRY_NAME}:org:test-integration-001`;
+/** `did-grant.access-token-lifetime` of the provider (1h). */
+const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
+/** The account the registry answers 503 for. */
+const OUTAGE_ACCOUNT = "outage";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -114,14 +118,14 @@ beforeAll(async () => {
 	registryServer = http.createServer((req, res) => {
 		const id = /^\/did\/org\/([^/]+)\/did\.json$/.exec(req.url ?? "")?.[1];
 		const document = id === undefined ? undefined : documents.get(id);
-		res.statusCode = document ? 200 : 404;
+		res.statusCode = id === OUTAGE_ACCOUNT ? 503 : document ? 200 : 404;
 		res.setHeader("content-type", "application/json");
 		res.end(JSON.stringify(document ?? { error: "not found" }));
 	});
 	const registryPort = await listenOnFreePort(registryServer);
 
 	// 3. The provider.
-	provider = await startProvider({ registryPort, didGrantType });
+	provider = await startProvider({ registryPort });
 
 	// 4. The policy-verifier, with the secret the provider signs with.
 	const pvConfig = AppConfigSchema.parse({
@@ -187,13 +191,13 @@ function policyVerifierUrl(path: string): string {
 	return `http://127.0.0.1:${verifierPort}${path}`;
 }
 
-function signedRequest(overrides: { did?: string; audience?: string; nonce?: string } = {}) {
+function signedRequest(overrides: { did?: string; audience?: string } = {}) {
 	const did = overrides.did ?? testDid;
 	const message = JSON.stringify({
 		did,
 		audience: overrides.audience ?? JWT_AUDIENCE,
 		timestamp: new Date().toISOString(),
-		nonce: overrides.nonce ?? crypto.randomBytes(16).toString("hex"),
+		nonce: crypto.randomBytes(16).toString("hex"),
 	});
 	const signature = crypto.sign(null, Buffer.from(message), privateKey).toString("base64");
 	return { did, message, signature };
@@ -284,6 +288,7 @@ describe("DID grant → JWT → policy verification", () => {
 		);
 		expect(Number.isNaN(Date.parse(String(claims.lifecycle_freshness_ref)))).toBe(false);
 		expect(claims).not.toHaveProperty("azp");
+		expect((claims.exp ?? 0) - (claims.iat ?? 0)).toBe(ACCESS_TOKEN_LIFETIME_SECONDS);
 	});
 
 	it("Test 2: introspection returns active=true for the DID-issued token", async () => {
@@ -384,6 +389,37 @@ describe("the grant refuses what it must", () => {
 		expect(await res.json()).toMatchObject({ error: "invalid_request" });
 	});
 
+	it("a registry outage mints no token (503 temporarily_unavailable, no description)", async () => {
+		const res = await requestToken(signedRequest({ did: `did:dplaax:${REGISTRY_NAME}:org:${OUTAGE_ACCOUNT}` }));
+
+		expect(res.status).toBe(503);
+		expect(await res.json()).toEqual({ error: "temporarily_unavailable" });
+	});
+
+	it.each([
+		["a non-owner DID", `${testDid}:pipeline:child`],
+		["a DID of a registry this provider does not resolve", "did:dplaax:other-registry.invalid:org:test-integration-001"],
+	])("%s mints no token (400 invalid_grant)", async (_label, did) => {
+		const res = await requestToken(signedRequest({ did }));
+
+		expect(res.status).toBe(400);
+		expect(await res.json()).toMatchObject({ error: "invalid_grant" });
+	});
+
+	it("a message refused by the client's allowance stays spent (the nonce is spent before the allowance is asked)", async () => {
+		const request = signedRequest({ audience: "https://other-api.invalid" });
+		const first = await requestToken(request);
+		expect(first.status).toBe(400);
+		expect(await first.json()).toMatchObject({ error: "invalid_request", error_description: expect.stringContaining("not allowed") });
+
+		const replay = await requestToken(request);
+		expect(replay.status).toBe(400);
+		expect(await replay.json()).toMatchObject({
+			error: "invalid_request",
+			error_description: expect.stringContaining("nonce already used"),
+		});
+	});
+
 	it("a DID the registry does not hold mints no token (400 invalid_grant)", async () => {
 		const res = await requestToken(signedRequest({ did: `did:dplaax:${REGISTRY_NAME}:org:nobody` }));
 
@@ -395,12 +431,17 @@ describe("the grant refuses what it must", () => {
 // ─── Revocation and audit ────────────────────────────────────────────────────
 
 describe("revocation and audit are wired, not declared absent", () => {
-	it("records DID token issuance on the audit receiver", async () => {
+	it("records one token.issued event for a DID token issuance on the audit receiver", async () => {
+		// The `log` receiver writes the kind and the names of the attributes, never
+		// their values, so the issuance is told by its kind alone; the tests of
+		// this file run one at a time.
+		const issuances = () =>
+			provider.log.lines().filter((l) => l.event === "audit" && l.fields.kind === "token.issued").length;
+		const before = issuances();
+
 		await issueDidToken();
 
-		await expect
-			.poll(() => provider.log.lines().filter((l) => JSON.stringify(l).includes("token.issued")))
-			.not.toHaveLength(0);
+		await expect.poll(issuances).toBe(before + 1);
 	});
 
 	// The token is bound to the authenticated client (client_id), so

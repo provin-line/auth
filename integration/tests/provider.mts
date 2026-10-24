@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-// The provider the way a generated app composes it: auth.provider's modules,
-// the DID grant, the dPLaaX registry and the nonce store, serving the token
-// endpoint over HTTP and signing HS256 with a secret read as UTF-8, which is
-// how the policy-verifier reads the same string.
+// The provider the way a generated app composes it: the modules it composes,
+// the DID grant, the dPLaaX registry and the nonce store, and `token-control`
+// (the introspection and revocation endpoints), serving the token endpoint
+// over HTTP and signing HS256 with a secret read as UTF-8, which is how the
+// policy-verifier reads the same string.
 
 import auditModule from "@o3co/auth-provider-foundation/audit/module";
 import { auditConfig } from "@o3co/auth-provider-foundation/audit/testing";
@@ -45,6 +46,7 @@ import tokenEndpointModule from "@o3co/auth-provider-oauth/token-endpoint/module
 import tokensModule from "@o3co/auth-provider-oauth/tokens/module";
 import { tokensConfig } from "@o3co/auth-provider-oauth/tokens/testing";
 import tokensStoreModule from "@o3co/auth-provider-templates/tokens-store/module";
+import { didGrantType } from "@provin-line/auth-did-grant";
 import didGrant from "@provin-line/auth-did-grant/module";
 import didGrantStore from "@provin-line/auth-did-grant-store/module";
 import dplaaxRegistry from "@provin-line/auth-dplaax-registry/module";
@@ -65,9 +67,6 @@ export const REGISTRY_NAME = "registry.test.local";
 export interface ProviderOptions {
 	/** Where the registry listens on 127.0.0.1. */
 	readonly registryPort: number;
-	/** The grant type to allow the DID client, from the grant's contract. */
-	readonly didGrantType: string;
-	readonly random?: (length: number) => Uint8Array;
 }
 
 export async function startProvider(options: ProviderOptions) {
@@ -107,7 +106,7 @@ export async function startProvider(options: ProviderOptions) {
 				publicClient({
 					id: DID_CLIENT_ID,
 					sections: allowancesFor({
-						grants: [options.didGrantType],
+						grants: [didGrantType],
 						scopes: [],
 						"default-scopes": [],
 						audiences: [JWT_AUDIENCE],
@@ -138,9 +137,7 @@ export async function startProvider(options: ProviderOptions) {
 				"access-token-lifetime": "1h",
 			},
 		},
-		runtime: quietRuntime(
-			options.random ? { log: log.log, random: { bytes: options.random } } : { log: log.log },
-		),
+		runtime: quietRuntime({ log: log.log }),
 	});
 	await app.start();
 	return {

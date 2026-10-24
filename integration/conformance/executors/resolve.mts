@@ -38,8 +38,9 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
  * The dplaax-registry module resolves against an outbound that answers the
  * vector's status and body. The module answers a rejection with a sentence for
  * the client and an unavailable registry with `Unavailable`, neither with the
- * spec's reason code, so `reasonOf` names the code for the answers the vectors
- * pin and refuses any other: a new answer fails the run until it is mapped.
+ * spec's reason code, so `reasonOf` names the code from the module's answer for
+ * the answers the vectors pin and refuses any other: a new answer fails the
+ * run until it is mapped.
  */
 interface ResolveVectorInput {
 	did: string;
@@ -57,11 +58,14 @@ function isResolveVectorInput(input: Record<string, unknown>): input is ResolveV
 	);
 }
 
-/** The spec's reason code for an answer, or a refusal to guess one. */
-function reasonOf(v: Vector, answer: { class: "FAILED"; reason: string } | { class: "INDETERMINATE"; status: number }): string {
-	if (answer.class === "INDETERMINATE" && answer.status >= 500) return "registry-5xx";
+/**
+ * The spec's reason code for an answer of the module, or a refusal to guess
+ * one. An unavailable registry is told by what the module says it was.
+ */
+function reasonOf(v: Vector, answer: { class: "FAILED"; reason: string } | { class: "INDETERMINATE"; what: string }): string {
+	if (answer.class === "INDETERMINATE" && /HTTP 5\d\d$/.test(answer.what)) return "registry-5xx";
 	if (answer.class === "FAILED" && /names another DID/.test(answer.reason)) return "id-mismatch";
-	throw new Error(`vector "${v.id}": no reason code for ${JSON.stringify(answer)} — map it in reasonOf`);
+	throw new Error(`vector "${v.id}": no reason code for ${JSON.stringify(answer)}; map it in reasonOf`);
 }
 
 export async function runResolveVector(v: Vector): Promise<VectorOutcome> {
@@ -104,12 +108,14 @@ export async function runResolveVector(v: Vector): Promise<VectorOutcome> {
 		if (isUnavailable(err)) {
 			return {
 				result: "INDETERMINATE",
-				reason: reasonOf(v, { class: "INDETERMINATE", status: registry_response.status }),
+				reason: reasonOf(v, { class: "INDETERMINATE", what: err.what }),
 			};
 		}
 		// An error outside the two-class taxonomy is a bug (in the module or in
 		// this executor's fixture), not a conformance verdict: it propagates so
 		// the test fails loudly instead of mapping to some guessed outcome.
 		throw err;
+	} finally {
+		await app.stop();
 	}
 }
