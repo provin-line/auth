@@ -15,14 +15,27 @@
  */
 import type { ExtractedKey } from "../resolver/extractKey.mjs";
 
+/**
+ * The signed message as a verifier read it. The two method references feed
+ * rule `auth.grant.kid-match`: the grant refuses a request where either is
+ * present and is not, as an exact string, the resolved method's absolute id.
+ * Nothing resolves a relative reference or normalises one.
+ */
 export interface ParsedMessage {
 	did: string;
 	timestamp: string;
 	nonce: string;
 	audience?: string;
-	/** Signed payload's `verification_method` member, if present. Not enforced here. */
+	/**
+	 * The signed payload's `verification_method` member. A verifier sets it
+	 * whenever the message carries one, and leaves it unset only when the
+	 * message names no method: left unset, the grant has nothing to match.
+	 */
 	verificationMethod?: string;
-	/** JWS protected header's `kid` member, if present. Not enforced here. */
+	/**
+	 * The JWS protected header's `kid`. Set only from a protected header, never
+	 * from the payload, and unset for an envelope without one.
+	 */
 	headerKid?: string;
 }
 
@@ -47,6 +60,11 @@ export type VerificationResult =
 	| { valid: true; subject: string; audience?: string; parsedMessage: ParsedMessage }
 	| { valid: false; error: "invalid_request" | "invalid_grant"; errorDescription: string };
 
+/**
+ * Checks a request's signature against the resolved key and reads its message.
+ * It takes `parsedMessage`'s values from signed data only, and refuses a
+ * method reference that is not a string (`invalid_request`).
+ */
 export interface SignatureVerifier {
 	verify(ctx: VerificationContext): Promise<VerificationResult>;
 }

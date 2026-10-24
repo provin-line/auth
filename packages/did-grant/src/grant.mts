@@ -130,6 +130,13 @@ export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Gran
 			if (verification.subject !== did || parsedMessage.did !== did) {
 				return error("invalid_grant", "the signed message is not the requested DID's");
 			}
+			// Rule auth.grant.kid-match, for every contract: each method the message
+			// names (the JWS protected kid, the signed verification_method) is the one
+			// that verified it. A message naming none has nothing to diverge.
+			const named = [parsedMessage.headerKid, parsedMessage.verificationMethod];
+			if (named.some((id) => id !== undefined && id !== resolvedKey.id)) {
+				return error("invalid_grant", "grant could not be processed");
+			}
 
 			// OWNER contracts: the signed payload is a login transcript, checked
 			// before the nonce is spent, so a refused transcript leaves it unused.

@@ -40,7 +40,7 @@ export class JwsVerifier implements SignatureVerifier {
 		}
 
 		// 2. Decode protected header and check algorithm
-		let header: { alg?: string; kid?: string };
+		let header: { alg?: string; kid?: unknown };
 		try {
 			header = decodeProtectedHeader(body.jws);
 		} catch {
@@ -49,6 +49,11 @@ export class JwsVerifier implements SignatureVerifier {
 				error: "invalid_request",
 				errorDescription: "invalid JWS protected header",
 			};
+		}
+
+		// A kid that is not a string can never name a method (rule auth.grant.kid-match).
+		if (header.kid !== undefined && typeof header.kid !== "string") {
+			return { valid: false, error: "invalid_request", errorDescription: "kid must be a string" };
 		}
 
 		if (header.alg !== this.expectedAlg) {
@@ -92,9 +97,9 @@ export class JwsVerifier implements SignatureVerifier {
 		}
 
 		// 6. Parse payload as JSON -> ParsedMessage
-		let rawPayload: Record<string, unknown>;
+		let parsedPayload: unknown;
 		try {
-			rawPayload = JSON.parse(new TextDecoder().decode(payload)) as Record<string, unknown>;
+			parsedPayload = JSON.parse(new TextDecoder().decode(payload));
 		} catch {
 			return {
 				valid: false,
@@ -102,17 +107,22 @@ export class JwsVerifier implements SignatureVerifier {
 				errorDescription: "payload must be valid JSON",
 			};
 		}
+		if (typeof parsedPayload !== "object" || parsedPayload === null || Array.isArray(parsedPayload)) {
+			return { valid: false, error: "invalid_request", errorDescription: "payload must be a JSON object" };
+		}
+		const rawPayload = parsedPayload as Record<string, unknown>;
 
-		// Surface (but do not enforce) the JWS header's kid and the payload's
-		// verification_method; three-way matching against the resolved key is
-		// the caller's (`validateOwnerLogin`, rule auth.grant.kid-match).
+		// Surface the JWS header's kid and the payload's verification_method;
+		// the grant matches them against the resolved key (rule
+		// auth.grant.kid-match). A method id that is not a string can never match.
+		const method = rawPayload.verification_method;
+		if (method !== undefined && typeof method !== "string") {
+			return { valid: false, error: "invalid_request", errorDescription: "verification_method must be a string" };
+		}
 		const parsedMessage: ParsedMessage = {
 			...(rawPayload as unknown as ParsedMessage),
 			headerKid: header.kid,
-			verificationMethod:
-				typeof rawPayload.verification_method === "string"
-					? rawPayload.verification_method
-					: undefined,
+			verificationMethod: method,
 		};
 
 		// 7. Validate payload.did matches ctx.did
