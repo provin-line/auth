@@ -10,6 +10,29 @@ releases.
 
 ## [Unreleased]
 
+### Added
+
+- **`@provin-line/auth-did-grant`**: the DID grant as an auth.provider 0.18
+  module (`packages/did-grant`), beside the 0.15 `auth-provider-did`.
+  - The package exports the contract at `.`, the module at `./module` and
+    `spentNoncesContract` at `./testing`. auth.provider's packages and zod
+    are peers.
+  - It takes two contracts it owns: `didDocuments` (the resolver) and
+    `spentNonces` (the nonces already used). Custom signature algorithms
+    are contributed at `signatureAlgorithms` instead of an injected
+    `VerifierRegistry`.
+  - Its section `did-grant` replaces `oauth.grants.did`: lifetimes carry a
+    unit, and `access-token-lifetime` is the grant's own. Audiences and
+    scopes come from the client's `client-allowance` (`allowedAudiences` is
+    gone), and the OWNER token endpoint comes from auth.provider's
+    `tokenEndpointLocation` (`tokenEndpoint` is gone).
+  - A failed signature is `400 invalid_grant`, never `401`. A resolver or
+    nonce store that cannot tell answers `503`.
+  - A message's nonce is kept until the message's own window closes, plus a
+    minute for store clock skew. It was kept for `message-max-age` from
+    the request, which left a message stamped ahead of the clock usable
+    once more.
+
 ### Changed
 
 - **BREAKING (types, verifier packages): the policy-verifier baseline is
