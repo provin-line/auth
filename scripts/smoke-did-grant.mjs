@@ -12,21 +12,24 @@
  * Smoke: one real DID-grant round trip against a GENERATED auth-provider
  * instance (create-app.md § 6.3, hardened).
  *
- * The boot smoke (scripts/smoke-instance.sh) only proves the instance serves
- * its health endpoint — both historical consumer-install gaps (the PDP surface
- * drift and the generated provider's missing @noble/ed25519) sailed through
- * it. This script exercises the path those gaps lived on:
+ * A boot alone proves little: the consumer-install gaps this repo has had
+ * (the PDP surface drift, a missing @noble/ed25519) all booted. This script
+ * exercises the path they lived on:
  *
  *   DID-signed assertion → POST /oauth/token (https://dplaax.dev/oauth/grant-type/did)
  *   → 200 + access_token
  *
- * plus one negative (tampered signature must NOT mint a token — proves the
- * verification actually runs rather than the endpoint 200-ing everything).
+ * The token is checked as a consumer would read it: signed with the HS256
+ * secret as UTF-8 bytes (the policy-verifier's reading, keys.signing.secret-encoding
+ * = utf8) and carrying the six claims of dplaax.spec's auth.token.signed-claims.
+ * One negative follows: a tampered signature must NOT mint a token — proves the
+ * verification actually runs rather than the endpoint 200-ing everything.
  *
  * Self-contained: Ed25519 via node:crypto (no deps), a throwaway in-process
- * DID registry serving the owner DID document, and a public smoke client
- * injected via CLIENT_REPOSITORY_PATH — the instance under test is never
- * mutated.
+ * DID registry serving the owner DID document on loopback, and the instance's
+ * settings supplied from outside — its environment for the keys application.conf
+ * reads, and a local layer file (APP_CONFIG) for the lists. The instance under
+ * test is never mutated.
  *
  * Usage: node scripts/smoke-did-grant.mjs <instance-dir> <port>
  */
@@ -49,9 +52,13 @@ if (!Number.isInteger(port) || port <= 0 || port > 65535) {
 	process.exit(1);
 }
 
-const mainMjs = path.join(instanceDir, "dist", "main.mjs");
-if (!fs.existsSync(mainMjs)) {
-	console.error(`smoke-did-grant: ${mainMjs} missing — run the build first`);
+const mainTs = path.join(instanceDir, "src", "main.ts");
+if (!fs.existsSync(mainTs)) {
+	console.error(`smoke-did-grant: ${mainTs} missing — generate the instance first`);
+	process.exit(1);
+}
+if (!fs.existsSync(path.join(instanceDir, "node_modules"))) {
+	console.error(`smoke-did-grant: ${instanceDir}/node_modules missing — install first`);
 	process.exit(1);
 }
 
@@ -79,8 +86,7 @@ const fail = (msg) => {
 // mask itself) ────────────────────────────────────────────────────────────────
 const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
 const ACCOUNT_ID = "smoke-ci-001";
-// Registry segment must equal the registry base URL's hostname (the resolver's
-// allow-list is hostname-based, ports stripped).
+// The DID's registry segment must be the registry URL's host.
 const DID = `did:dplaax:127.0.0.1:org:${ACCOUNT_ID}`;
 const didDocument = {
 	id: DID,
@@ -110,29 +116,59 @@ await new Promise((resolve, reject) => {
 });
 const registryPort = registry.address().port;
 
-// ── public smoke client, injected without touching the instance ─────────────
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "smoke-did-grant-"));
-const clientsPath = path.join(tmpDir, "clients.yaml");
+// ── the instance's settings, from outside the instance ──────────────────────
+// A shared secret both an HS256 provider and a policy-verifier read as UTF-8.
+const SECRET = "smoke.only.secret.at.least.32.bytes.long";
 const CLIENT_ID = "smoke-did-client";
+const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
+const origin = `http://localhost:${port}`;
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "smoke-did-grant-"));
+const localConf = path.join(tmpDir, "local.conf");
+// Plain http to the loopback registry: outbound admits the pair by name, and
+// the host must pass its allow list too.
 fs.writeFileSync(
-	clientsPath,
-	`${CLIENT_ID}:\n  tokenEndpointAuthMethod: "none"\n  allowedRedirectUris: []\n  allowedScopes: []\n`,
+	localConf,
+	`outbound.allow = ["127.0.0.1"]
+outbound.plain-loopback = ["127.0.0.1:${registryPort}"]
+audit.receivers = [log]
+clients.registered = [
+	{
+		id = "${CLIENT_ID}"
+		kind = public
+		method = none
+		sections {
+			client-allowance {
+				grants = ["${DID_GRANT_TYPE}"]
+			}
+		}
+	}
+]
+`,
 );
 
 // ── boot the instance under test ─────────────────────────────────────────────
-const child = spawn("node", ["dist/main.mjs"], {
+const child = spawn("node", ["src/main.ts"], {
 	cwd: instanceDir,
 	stdio: ["ignore", "inherit", "inherit"],
 	env: {
 		...process.env,
-		OAUTH_JWT_ALGORITHM: "HS256",
-		OAUTH_JWT_SECRET: "smoke.only.secret.at.least.32.bytes.long",
-		OAUTH_JWT_ISSUER: "https://smoke.invalid",
+		APP_CONFIG: `${localConf},config/application.conf`,
+		KERNEL_DEPLOYMENT: "single",
+		STORE_ACCEPT_VOLATILE: "true",
+		TOKENS_REVOCATION: "denylist",
+		TOKENS_SUBJECT_CHECK: "none",
+		HTTP_HOST: "127.0.0.1",
 		HTTP_PORT: String(port),
-		// The DID grant is not OIDC; allow the non-OIDC token path.
-		OAUTH_OIDC_MODE: "dual",
-		DPLAAX_REGISTRY_BASE_URL: `http://127.0.0.1:${registryPort}`,
-		CLIENT_REPOSITORY_PATH: clientsPath,
+		HTTP_PUBLIC_ORIGIN: origin,
+		HTTP_INSECURE_ORIGIN: "true",
+		ISSUER_URL: origin,
+		KEYS_SIGNING_KID: "smoke-1",
+		KEYS_SIGNING_ALG: "HS256",
+		KEYS_SIGNING_SECRET: SECRET,
+		KEYS_SIGNING_SECRET_ENCODING: "utf8",
+		DID_GRANT_REVOCATION_LATENCY_BOUND: "15m",
+		DID_GRANT_ACCESS_TOKEN_LIFETIME: "10m",
+		DPLAAX_REGISTRY_URL: `http://127.0.0.1:${registryPort}`,
 	},
 });
 let childExited = false;
@@ -151,7 +187,7 @@ process.on("SIGINT", () => process.exit(130));
 process.on("SIGTERM", () => process.exit(143));
 
 // ── wait for health ──────────────────────────────────────────────────────────
-const base = `http://localhost:${port}`;
+const base = origin;
 let healthy = false;
 for (let i = 0; i < 30; i++) {
 	try {
@@ -194,7 +230,7 @@ const tokenRequest = (msg, sig) =>
 		method: "POST",
 		headers: { "content-type": "application/x-www-form-urlencoded" },
 		body: new URLSearchParams({
-			grant_type: "https://dplaax.dev/oauth/grant-type/did",
+			grant_type: DID_GRANT_TYPE,
 			client_id: CLIENT_ID,
 			did: DID,
 			message: msg,
@@ -226,6 +262,36 @@ if (body.token_type !== "Bearer") {
 	process.exit(1);
 }
 
+// The token as a consumer reads it: HS256 over the secret's UTF-8 bytes, for
+// the DID, with the six claims dplaax.spec asks of a DID grant's token.
+const [encHeader, encPayload, encSignature] = body.access_token.split(".");
+const expected = crypto
+	.createHmac("sha256", Buffer.from(SECRET, "utf8"))
+	.update(`${encHeader}.${encPayload}`)
+	.digest("base64url");
+if (expected !== encSignature) {
+	fail("access_token is not signed with the secret read as UTF-8");
+	process.exit(1);
+}
+const claims = JSON.parse(Buffer.from(encPayload, "base64url").toString("utf8"));
+if (claims.sub !== DID || claims.client_id !== CLIENT_ID || claims.iss !== origin) {
+	fail(`unexpected sub/client_id/iss in ${JSON.stringify(claims)}`);
+	process.exit(1);
+}
+for (const name of [
+	"auth_contract_id",
+	"verification_method",
+	"did_document_snapshot",
+	"lifecycle_state_ref",
+	"lifecycle_freshness_ref",
+	"authorization_scope",
+]) {
+	if (typeof claims[name] !== "string" || claims[name] === "") {
+		fail(`access_token lacks the signed claim ${name}`);
+		process.exit(1);
+	}
+}
+
 // Negative: a tampered signature over a FRESH message must be rejected as a
 // client error. Without this, a provider that 200s everything would pass the
 // positive leg; with a reused nonce, a broken verifier could hide behind the
@@ -247,6 +313,6 @@ if (badRes.status < 400 || badRes.status > 499) {
 }
 
 console.log(
-	`smoke-did-grant: OK — DID grant minted a Bearer token on :${port} (tampered signature rejected with HTTP ${badRes.status})`,
+	`smoke-did-grant: OK — DID grant minted a Bearer token with the six signed claims on :${port} (tampered signature rejected with HTTP ${badRes.status})`,
 );
 process.exit(0);

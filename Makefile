@@ -4,10 +4,10 @@
 # instances/ from the scaffold generators. instances/ is git-ignored and a
 # pnpm workspace member: the overrides in the root pnpm-workspace.yaml
 # redirect the generated git-subdirectory deps to workspace:* (create-app.md
-# § 6.3.1), so instances always build against the local package state. pnpm
-# prints WARNs that the instances' own pnpm.overrides/onlyBuiltDependencies
-# are not read — expected: that block is for external consumers
-# (create-app.md § 3.4) and is intentionally inert inside this workspace.
+# § 6.3.1), so instances always build against the local package state. The
+# overrides and build allowances an instance carries in its own
+# pnpm-workspace.yaml (create-app.md § 3.4) are for external consumers and
+# inert inside this workspace.
 
 HEAD_SHA = $(shell git rev-parse HEAD)
 
@@ -39,14 +39,18 @@ clean-instances:
 	rm -rf instances
 	pnpm install
 
-# Workspace-mode scaffold smoke (create-app.md § 6.3): build, typecheck,
-# boot each generated instance and assert its health endpoint responds, then
-# drive one real DID-grant round trip against the provider (the boot smoke
-# alone let two consumer-install gaps through — the PDP surface drift and the
-# generated provider's missing @noble/ed25519).
+# Ports of the smoke's servers. Override when one is taken locally:
+#   make smoke PROVIDER_PORT=3200 VERIFIER_PORT=3201
+PROVIDER_PORT ?= 3100
+VERIFIER_PORT ?= 3001
+
+# Workspace-mode scaffold smoke (create-app.md § 6.3). The policy-verifier
+# instance is built, typechecked and booted, and its health endpoint asserted.
+# The provider instance runs its sources (`node src/main.ts`, no build): the
+# smoke boots it and drives one real DID-grant round trip (a boot alone let
+# the PDP surface drift and the missing @noble/ed25519 through).
 smoke:
-	pnpm --filter ./instances/provider --filter ./instances/policy-verifier run build
-	pnpm --filter ./instances/provider --filter ./instances/policy-verifier run typecheck
-	./scripts/smoke-instance.sh instances/provider 3000 /_healthcheck
-	./scripts/smoke-instance.sh instances/policy-verifier 3001 /healthcheck
-	node scripts/smoke-did-grant.mjs instances/provider 3100
+	pnpm --filter ./instances/policy-verifier run build
+	pnpm --filter ./instances/policy-verifier run typecheck
+	./scripts/smoke-instance.sh instances/policy-verifier $(VERIFIER_PORT) /healthcheck
+	node scripts/smoke-did-grant.mjs instances/provider $(PROVIDER_PORT)

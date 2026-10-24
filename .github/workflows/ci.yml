@@ -57,8 +57,9 @@ jobs:
       - run: pnpm -r run test
 
   # Workspace-mode scaffold smoke (create-app.md § 6.3): generate instances
-  # from the generators, then install / build / typecheck / boot each one
-  # against the PR's package state (root pnpm.overrides → workspace:*).
+  # from the generators, then boot them against the PR's package state (root
+  # overrides → workspace:*). The policy-verifier is built and typechecked; the
+  # provider runs its sources and takes a DID-grant round trip.
   smoke-workspace:
     runs-on: ubuntu-latest
     steps:
@@ -125,14 +126,13 @@ jobs:
             --dplaax-module-ref "$GITHUB_SHA" --out "$out/provider" --no-git-init
           node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
             --dplaax-module-ref "$GITHUB_SHA" --port 3001 --out "$out/policy-verifier" --no-git-init
-          for inst in provider policy-verifier; do
-            (cd "$out/$inst" && pnpm install && pnpm run build && pnpm run typecheck)
-          done
-          ./scripts/smoke-instance.sh "$out/provider" 3000 /_healthcheck
+          # The provider runs its sources: install only.
+          (cd "$out/provider" && pnpm install)
+          (cd "$out/policy-verifier" && pnpm install && pnpm run build && pnpm run typecheck)
           ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck
           # One real DID-grant round trip (assertion → /oauth/token → 200 +
-          # tampered-signature reject): the boot smoke alone let the PDP
-          # surface drift and the missing @noble/ed25519 through.
+          # signed claims, tampered-signature reject): the boot smoke alone let
+          # the PDP surface drift and the missing @noble/ed25519 through.
           node scripts/smoke-did-grant.mjs "$out/provider" 3100
 
       - name: docker build the standalone Dockerfile
