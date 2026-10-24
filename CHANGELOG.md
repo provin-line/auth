@@ -73,7 +73,7 @@ releases.
 
 ### Changed
 
-- **BREAKING (`create-auth-provider` 0.4.0): the generated provider is an
+- **BREAKING (`@provin-line/create-auth-provider` 0.4.0): the generated provider is an
   auth.provider 0.18.4 app.** The generator calls auth.provider's own
   (`@o3co/auth-provider-scaffold`, pinned at exactly 0.18.4) for a listed app
   of `@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound` and
