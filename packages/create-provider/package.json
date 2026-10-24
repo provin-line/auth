@@ -1,7 +1,7 @@
 {
 	"name": "@provin-line/create-auth-provider",
 	"description": "Scaffold generator for dPLaaX auth.provider deployment instances",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"license": "Apache-2.0",
 	"type": "module",
 	"bin": {
@@ -15,7 +15,6 @@
 	},
 	"files": [
 		"dist",
-		"src/template",
 		"README.md",
 		"LICENSE"
 	],
@@ -26,16 +25,16 @@
 	},
 	"scripts": {
 		"prebuild": "rimraf dist",
-		"build": "tsc && node ./scripts/copy-template.mjs",
+		"build": "tsc",
 		"prepare": "pnpm run build",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"@o3co/auth-provider-scaffold": "0.18.4"
+	},
 	"devDependencies": {
-		"@o3co/auth-provider-core": "^0.15.0",
-		"@provin-line/auth-provider-did": "workspace:*",
 		"@types/node": "^26.6.5",
 		"@vitest/coverage-v8": "^5.0.5",
 		"rimraf": "^6.1.3",

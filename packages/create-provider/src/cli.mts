@@ -24,14 +24,12 @@ import { resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import {
-	isSupportedLicense,
-	isSupportedPackageManager,
-	SUPPORTED_LICENSES,
-	SUPPORTED_PACKAGE_MANAGERS,
-} from "./defaults.mjs";
+import { isSupportedLicense, SUPPORTED_LICENSES } from "./defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "./errors.mjs";
 import { generateAuthProviderScaffold } from "./generator.mjs";
+import { isExactCommitSha } from "./overlay/modules.mjs";
+
+export { isExactCommitSha };
 
 // Read the package version from package.json at startup so `--version`
 // stays in lockstep with the manifest automatically. Works in both src/
@@ -45,14 +43,18 @@ const PACKAGE_VERSION = (
 
 const HELP_TEXT = `Usage: create-auth-provider <name> --dplaax-module-ref <sha> [options]
 
+Generates an auth.provider 0.18 app with upstream's generator
+(@o3co/auth-provider-scaffold) and composes the dPLaaX modules into it:
+@provin-line/auth-did-grant, auth-dplaax-registry and auth-did-grant-store.
+
 Arguments:
   <name>                       Output directory + package.json name (positional, required).
                                May be a scoped package name like @org/foo;
                                the output directory uses the last segment.
 
 Required:
-  --dplaax-module-ref <sha>    Full 40-hex commit SHA pinning
-                               @provin-line/auth-provider-dplaax-module.
+  --dplaax-module-ref <sha>    Full 40-hex commit SHA of provin-line/auth the
+                               dPLaaX modules are fetched at.
                                Branches and tags both move, so neither
                                identifies the bytes an instance was
                                generated from. No default: the flag is
@@ -66,21 +68,14 @@ Options:
                                under a name that did not.
   --description <text>         package.json description and README opener
                                (default: "dPLaaX auth.provider instance").
-  --port <n>                   Default http.port in config/application.conf
-                               (default: 3000).
   --license <SPDX>             LICENSE file content + package.json field
-                               (default: Apache-2.0; v0.1 supports only
+                               (default: Apache-2.0; supports only
                                ${SUPPORTED_LICENSES.join(", ")}).
   --author <name>              package.json author field.
-  --registry-base-url <url>    Default dplaax.registry.baseUrl in
-                               config/application.conf (overridable at runtime
-                               via DPLAAX_REGISTRY_BASE_URL).
+  --registry-base-url <url>    Default DPLAAX_REGISTRY_URL in .env.example
+                               (dplaax-registry.url at runtime).
   --git-init                   Run \`git init -b main\` after scaffolding (default).
   --no-git-init                Skip git init.
-  --package-manager <pm>       Bin name used in Makefile + README install
-                               instructions (default: pnpm). v0.1 supports
-                               only ${SUPPORTED_PACKAGE_MANAGERS.join(", ")} because the dPLaaX-module
-                               dep uses pnpm 10.x git-subdirectory syntax.
   --out <path>                 Output directory override (default:
                                last segment of <name> under cwd).
   -h, --help                   Show this help and exit.
@@ -102,32 +97,6 @@ const DEFAULT_IO: CliIO = {
 function lastNameSegment(name: string): string {
 	const idx = name.lastIndexOf("/");
 	return idx >= 0 ? name.slice(idx + 1) : name;
-}
-
-function parsePort(raw: string): number | null {
-	const n = Number.parseInt(raw, 10);
-	if (!Number.isFinite(n) || n <= 0 || n > 65535) {
-		return null;
-	}
-	return n;
-}
-
-/**
- * A pin is a full 40-hex commit SHA, or it is not a pin.
- *
- * This replaced a denylist of familiar branch names (main, develop, …). A
- * denylist cannot be a pin discipline: it only rejects the moving refs someone
- * thought to enumerate, while `release/2026-07`, `my-feature` and every tag —
- * all equally movable — sailed through. `release.pin.source-exact` says so
- * outright, so the check is now the positive form.
- *
- * Lowercase only: git resolves object ids in lowercase, and accepting the
- * uppercase spelling would make one commit have two pin strings.
- */
-const COMMIT_SHA = /^[0-9a-f]{40}$/;
-
-export function isExactCommitSha(ref: string): boolean {
-	return COMMIT_SHA.test(ref);
 }
 
 /**
@@ -230,13 +199,11 @@ function parseCliArgs(argv: readonly string[]) {
 		args: [...argv],
 		options: {
 			description: { type: "string" as const },
-			port: { type: "string" as const },
 			license: { type: "string" as const },
 			author: { type: "string" as const },
 			"registry-base-url": { type: "string" as const },
 			"git-init": { type: "boolean" as const },
 			"no-git-init": { type: "boolean" as const },
-			"package-manager": { type: "string" as const },
 			out: { type: "string" as const },
 			"dplaax-module-ref": { type: "string" as const },
 			"allow-unpinned-ref": { type: "boolean" as const },
@@ -298,39 +265,14 @@ export async function main(
 		return 2;
 	}
 
-	let port: number | undefined;
-	if (values.port !== undefined) {
-		const parsedPort = parsePort(values.port);
-		if (parsedPort === null) {
-			io.stderr.write(
-				`Error: --port must be a positive integer ≤ 65535 (got "${values.port}").\n`,
-			);
-			return 2;
-		}
-		port = parsedPort;
-	}
-
 	if (
 		values.license !== undefined &&
 		!isSupportedLicense(values.license)
 	) {
 		io.stderr.write(
-			`Error: --license "${values.license}" is not supported in v0.1. ` +
+			`Error: --license "${values.license}" is not supported. ` +
 				`Allowed: ${SUPPORTED_LICENSES.join(", ")}. ` +
 				`Broaden the allow-list via a follow-up issue before passing other values.\n`,
-		);
-		return 2;
-	}
-
-	if (
-		values["package-manager"] !== undefined &&
-		!isSupportedPackageManager(values["package-manager"])
-	) {
-		io.stderr.write(
-			`Error: --package-manager "${values["package-manager"]}" is not supported in v0.1. ` +
-				`Allowed: ${SUPPORTED_PACKAGE_MANAGERS.join(", ")}. ` +
-				`The scaffold's dPLaaX-module dep uses pnpm 10.x git-subdirectory syntax which ` +
-				`other PMs do not understand; broaden this allow-list when they gain support.\n`,
 		);
 		return 2;
 	}
@@ -380,11 +322,9 @@ export async function main(
 			name,
 			outDir,
 			description: values.description,
-			port,
 			license: values.license,
 			author: values.author,
 			gitInit,
-			packageManager: values["package-manager"],
 			dplaaxModuleRef,
 			registryBaseUrl: values["registry-base-url"],
 		});
@@ -394,8 +334,9 @@ export async function main(
 				`\n` +
 				`Next steps:\n` +
 				`  cd ${result.outDir}\n` +
-				`  ${values["package-manager"] ?? "pnpm"} install\n` +
-				`  ${values["package-manager"] ?? "pnpm"} run test\n`,
+				`  pnpm install\n` +
+				`  cp .env.example .env   # uncomment and fill in the keys; see README.md\n` +
+				`  pnpm start\n`,
 		);
 		return 0;
 	} catch (e) {

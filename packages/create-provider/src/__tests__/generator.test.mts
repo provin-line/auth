@@ -8,367 +8,199 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-// Direct-API tests for generateAuthProviderScaffold. Round-trip semantics
-// of the artifact live in the repo-level scaffold smoke
-// (create-app.md § 6.3); here we pin
-// the smaller per-file invariants and the collision policy.
+// Runs the real upstream generator (@o3co/auth-provider-scaffold) into a
+// temporary directory and checks what the overlay made of it. Booting the
+// result is the repo-level scaffold smoke's job (create-app.md § 6.3).
 
-import {
-	mkdir,
-	mkdtemp,
-	readFile,
-	rm,
-	writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LISTED_MODULES } from "../defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "../errors.mjs";
-import { generateAuthProviderScaffold, substitute } from "../generator.mjs";
+import { generateAuthProviderScaffold } from "../generator.mjs";
+
+const REF = "0123456789abcdef0123456789abcdef01234567";
 
 let tmpRoot: string;
+let outDir: string;
+let filesWritten: readonly string[];
 
-beforeEach(async () => {
+const read = (rel: string) => readFile(join(outDir, rel), "utf8");
+
+beforeAll(async () => {
 	tmpRoot = await mkdtemp(join(tmpdir(), "create-auth-provider-gen-"));
+	outDir = join(tmpRoot, "app");
+	const result = await generateAuthProviderScaffold({
+		name: "@acme/login",
+		outDir,
+		description: "Acme login",
+		author: "Acme",
+		dplaaxModuleRef: REF,
+		registryBaseUrl: "http://registry.internal:8443",
+		gitInit: false,
+	});
+	expect(result.outDir).toBe(outDir);
+	filesWritten = result.filesWritten;
 });
 
-afterEach(async () => {
+afterAll(async () => {
 	await rm(tmpRoot, { recursive: true, force: true });
 });
 
-describe("generateAuthProviderScaffold — file emission", () => {
-	it("creates the output dir when missing and writes the template tree", async () => {
-		const outDir = join(tmpRoot, "fresh");
-		const result = await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			gitInit: false,
-		});
-		expect(result.outDir).toBe(outDir);
-		expect(result.filesWritten.length).toBeGreaterThan(10);
-		expect(result.filesWritten).toContain("package.json");
-		expect(result.filesWritten).toContain("src/main.mts");
-		expect(result.filesWritten).toContain("config/application.conf");
-		expect(result.filesWritten).toContain("config/clients.yaml");
-		expect(result.filesWritten).toContain("keys/.gitkeep");
+describe("generateAuthProviderScaffold", () => {
+	it("lists the files it wrote, sorted, with the overlay's and the license", () => {
+		expect([...filesWritten]).toEqual([...filesWritten].sort());
+		for (const f of [
+			"package.json",
+			"pnpm-workspace.yaml",
+			"src/main.ts",
+			"config/application.conf",
+			"config/local.conf.example",
+			".env.example",
+			"Dockerfile",
+			"README.md",
+			"AGENTS.md",
+			"LICENSE",
+		]) {
+			expect(filesWritten).toContain(f);
+		}
 	});
 
+	it("asks upstream for the listed app, whose modules run in the app", async () => {
+		const main = await read("src/main.ts");
+		expect(main).toContain("token-endpoint/module");
+		expect(main).toContain("client-allowance/module");
+		expect(main).toContain("outbound/module");
+		expect(main).toContain("discovery/module");
+		expect(LISTED_MODULES).toHaveLength(4);
+	});
+
+	it("composes the provin modules into the assemble list", async () => {
+		const main = await read("src/main.ts");
+		expect(main).toContain('import didGrant from "@provin-line/auth-did-grant/module"');
+		expect(main).toMatch(/modules: \[[^\]]*didGrant, dplaaxRegistry, didGrantStore\]/);
+	});
+
+	it("names the project in package.json beside upstream's pinned dependencies", async () => {
+		const pkg = JSON.parse(await read("package.json"));
+		expect(pkg.name).toBe("@acme/login");
+		expect(pkg.author).toBe("Acme");
+		expect(pkg.license).toBe("Apache-2.0");
+		expect(pkg.packageManager).toMatch(/^pnpm@11\./);
+		expect(pkg.scripts.start).toContain("src/main.ts");
+		expect(pkg.dependencies["@o3co/auth-provider-foundation"]).toBe("0.18.4");
+		expect(pkg.dependencies["@provin-line/auth-did-grant"]).toBe(
+			`github:provin-line/auth#${REF}&path:/packages/did-grant`,
+		);
+		expect(pkg.dependencies["@noble/ed25519"]).toMatch(/^\d+\.\d+\.\d+$/);
+	});
+
+	it("carries no workspace-only specifier", async () => {
+		expect(await read("package.json")).not.toMatch(/"(workspace|file|link):/);
+	});
+
+	it("pins the transitive packages in the pnpm workspace file", async () => {
+		const yaml = await read("pnpm-workspace.yaml");
+		expect(yaml).toContain(`#${REF}&path:/packages/did-dplaax`);
+		expect(yaml).toContain("allowBuilds:");
+	});
+
+	it("reads the registry's URL and the shared secret from the environment", async () => {
+		expect(await read("config/application.conf")).toContain(
+			"url = ${?DPLAAX_REGISTRY_URL}",
+		);
+		expect(await read(".env.example")).toContain(
+			"# DPLAAX_REGISTRY_URL=http://registry.internal:8443",
+		);
+		expect(await read("config/application.conf")).toContain(
+			"secret-encoding = ${?KEYS_SIGNING_SECRET_ENCODING}",
+		);
+	});
+
+	it("writes the Apache-2.0 text verbatim from the package's own LICENSE", async () => {
+		const own = await readFile(new URL("../../LICENSE", import.meta.url), "utf8");
+		expect(await read("LICENSE")).toBe(own);
+	});
+
+	it("writes no build output or compiler configuration: the app runs its sources", () => {
+		expect(filesWritten).not.toContain("tsconfig.json");
+		expect(filesWritten.some((f) => f.startsWith("dist/"))).toBe(false);
+	});
+
+	it("initialises git only when asked", async () => {
+		await expect(stat(join(outDir, ".git"))).rejects.toThrow();
+		const withGit = join(tmpRoot, "with-git");
+		await generateAuthProviderScaffold({
+			name: "with-git",
+			outDir: withGit,
+			dplaaxModuleRef: REF,
+			gitInit: true,
+		});
+		expect((await stat(join(withGit, ".git"))).isDirectory()).toBe(true);
+	});
+
+	it("escapes free-form values in package.json", async () => {
+		const dir = join(tmpRoot, "tricky");
+		await generateAuthProviderScaffold({
+			name: "tricky",
+			outDir: dir,
+			description: 'say "hi"\nthere',
+			dplaaxModuleRef: REF,
+			gitInit: false,
+		});
+		const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
+		expect(pkg.description).toBe('say "hi"\nthere');
+	});
+});
+
+describe("generateAuthProviderScaffold — target and input policy", () => {
 	it("accepts an existing empty target directory", async () => {
-		const outDir = join(tmpRoot, "empty");
-		await mkdir(outDir);
+		const dir = join(tmpRoot, "empty");
+		await mkdir(dir);
 		const result = await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
+			name: "empty",
+			outDir: dir,
+			dplaaxModuleRef: REF,
 			gitInit: false,
 		});
-		expect(result.filesWritten.length).toBeGreaterThan(0);
+		expect(result.filesWritten).toContain("package.json");
 	});
 
-	it("refuses a non-empty target directory with ExistingDirectoryNonEmptyError", async () => {
-		const outDir = join(tmpRoot, "occupied");
-		await mkdir(outDir);
-		await writeFile(join(outDir, "preexisting.txt"), "hi");
+	it("refuses a non-empty target with ExistingDirectoryNonEmptyError, leaving it as it was", async () => {
+		const dir = join(tmpRoot, "occupied");
+		await mkdir(dir);
+		await writeFile(join(dir, "keep.txt"), "mine");
 		await expect(
 			generateAuthProviderScaffold({
-				name: "test-scaffold",
-				outDir,
+				name: "occupied",
+				outDir: dir,
+				dplaaxModuleRef: REF,
 				gitInit: false,
 			}),
 		).rejects.toBeInstanceOf(ExistingDirectoryNonEmptyError);
-	});
-});
-
-describe("generateAuthProviderScaffold — template substitution", () => {
-	it("substitutes __NAME__ into package.json#name", async () => {
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({
-			name: "@example/my-auth-provider",
-			outDir,
-			gitInit: false,
-		});
-		const pkg = JSON.parse(
-			await readFile(join(outDir, "package.json"), "utf8"),
-		) as { name: string };
-		expect(pkg.name).toBe("@example/my-auth-provider");
+		expect(await readFile(join(dir, "keep.txt"), "utf8")).toBe("mine");
+		await expect(stat(join(dir, "package.json"))).rejects.toThrow();
 	});
 
-	it("substitutes __PORT__ into application.conf", async () => {
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			port: 4242,
-			gitInit: false,
-		});
-		const conf = await readFile(
-			join(outDir, "config/application.conf"),
-			"utf8",
-		);
-		expect(conf).toMatch(/^\s*port = 4242$/m);
+	it("refuses a target that is a file", async () => {
+		const file = join(tmpRoot, "a-file");
+		await writeFile(file, "x");
+		await expect(
+			generateAuthProviderScaffold({ name: "a-file", outDir: file, gitInit: false }),
+		).rejects.toThrow(/not a directory/);
 	});
 
-	it("substitutes --registry-base-url into application.conf", async () => {
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			registryBaseUrl: "https://registry.example.test",
-			gitInit: false,
-		});
-		const conf = await readFile(
-			join(outDir, "config/application.conf"),
-			"utf8",
-		);
-		expect(conf).toMatch(/baseUrl = "https:\/\/registry\.example\.test"/);
-	});
-
-	it("does not emit @o3co/auth.utils — its helpers ship inside the scaffold", async () => {
-		// auth.proxy (#81) and auth.policy-verifier (#210) moved logger and
-		// shutdown in-tree; a generated instance follows the same shape so its
-		// SIGTERM behaviour is readable from the code it deploys.
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({ name: "test-scaffold", outDir, gitInit: false });
-		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
-			dependencies: Record<string, string>;
-			devDependencies: Record<string, string>;
-		};
-		expect(pkg.dependencies).not.toHaveProperty("@o3co/auth.utils");
-		expect(pkg.devDependencies).not.toHaveProperty("@o3co/auth.utils");
-	});
-
-	it("emits pino as a runtime dependency, so the instance logs NDJSON rather than console", async () => {
-		// @o3co/auth.utils took pino as an *optional* peer and fell back to
-		// console; the generator never emitted pino, so every generated instance
-		// logged bare `[name] …` lines. The in-tree logger depends on pino directly.
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({ name: "test-scaffold", outDir, gitInit: false });
-		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
-			dependencies: Record<string, string>;
-		};
-		// A literal, not DEFAULT_DEP_VERSIONS.pino: sharing the oracle with the
-		// implementation would let a missing key pass as undefined === undefined.
-		expect(pkg.dependencies.pino).toBe("10.3.1");
-	});
-
-	it("emits express-session as an exact-pinned runtime dep", async () => {
-		// @o3co/auth-provider-oauth 0.15 declares express-session as a peer. An
-		// instance would otherwise get whatever version the package manager's
-		// peer auto-install picks, outside the exact-pin baseline.
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({ name: "test-scaffold", outDir, gitInit: false });
-		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
-			dependencies: Record<string, string>;
-		};
-		expect(pkg.dependencies["express-session"]).toBe("1.19.0");
-	});
-
-	it("emits exact-pin dep versions (no caret)", async () => {
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			gitInit: false,
-		});
-		const pkg = JSON.parse(
-			await readFile(join(outDir, "package.json"), "utf8"),
-		) as {
-			dependencies: Record<string, string>;
-			devDependencies: Record<string, string>;
-		};
-		for (const [name, version] of Object.entries(pkg.dependencies)) {
-			expect(
-				version.startsWith("^") || version.startsWith("~"),
-				`runtime dep ${name} should be exact-pinned, got "${version}"`,
-			).toBe(false);
-		}
-		for (const [name, version] of Object.entries(pkg.devDependencies)) {
-			expect(
-				version.startsWith("^") || version.startsWith("~"),
-				`dev dep ${name} should be exact-pinned, got "${version}"`,
-			).toBe(false);
-		}
-	});
-
-	it("emits the vitest pin as an exact devDependency", async () => {
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			gitInit: false,
-		});
-		const pkg = JSON.parse(
-			await readFile(join(outDir, "package.json"), "utf8"),
-		) as { devDependencies: Record<string, string> };
-		expect(pkg.devDependencies.vitest).toBe("4.1.12");
-	});
-
-	it("declares @noble/ed25519 as a runtime dep so the DID grant's import.meta.resolve finds it", async () => {
-		// The instance sets `pathResolver: import.meta.resolve` (main.mts), so the
-		// ed25519_raw DID-grant verifier resolves @noble/ed25519 from the INSTANCE
-		// root — it must be a direct dependency here, not merely a transitive one
-		// (auth-provider-did declares it only as an optional peer). Without it the
-		// provider boots but every DID grant fails with a runtime import error.
-		const outDir = join(tmpRoot, "out-noble");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			gitInit: false,
-		});
-		const pkg = JSON.parse(
-			await readFile(join(outDir, "package.json"), "utf8"),
-		) as { dependencies: Record<string, string> };
-		expect(
-			pkg.dependencies["@noble/ed25519"],
-			"@noble/ed25519 must be a direct runtime dependency of the generated instance",
-		).toBeTruthy();
-	});
-
-	it("emits git-subdir form for @provin-line/auth-provider-dplaax-module", async () => {
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			dplaaxModuleRef: "v1.2.3",
-			gitInit: false,
-		});
-		const pkg = JSON.parse(
-			await readFile(join(outDir, "package.json"), "utf8"),
-		) as { dependencies: Record<string, string> };
-		expect(pkg.dependencies["@provin-line/auth-provider-dplaax-module"]).toBe(
-			"github:provin-line/auth#v1.2.3&path:/packages/provider-dplaax-module",
-		);
-	});
-
-	it("emits pnpm.overrides pinning transitive @provin-line deps to the same ref (create-app.md § 3.4)", async () => {
-		const outDir = join(tmpRoot, "out-pnpm-overrides");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			dplaaxModuleRef: "v1.2.3",
-			gitInit: false,
-		});
-		const pkg = JSON.parse(
-			await readFile(join(outDir, "package.json"), "utf8"),
-		) as { pnpm: { overrides: Record<string, string> } };
-		expect(pkg.pnpm.overrides).toEqual({
-			zod: "4.5.4",
-			"@provin-line/auth-provider-did":
-				"github:provin-line/auth#v1.2.3&path:/packages/provider-did",
-			"@provin-line/did-dplaax":
-				"github:provin-line/auth#v1.2.3&path:/packages/did-dplaax",
-		});
-	});
-
-	it("emits pnpm.onlyBuiltDependencies for every git-fetched @provin-line package", async () => {
-		const outDir = join(tmpRoot, "out-pnpm-built");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			dplaaxModuleRef: "v1.2.3",
-			gitInit: false,
-		});
-		const pkg = JSON.parse(
-			await readFile(join(outDir, "package.json"), "utf8"),
-		) as { pnpm: { onlyBuiltDependencies: string[] } };
-		expect(pkg.pnpm.onlyBuiltDependencies).toEqual([
-			"@provin-line/auth-provider-did",
-			"@provin-line/auth-provider-dplaax-module",
-			"@provin-line/did-dplaax",
-		]);
-	});
-
-	it("renames _gitignore to .gitignore", async () => {
-		const outDir = join(tmpRoot, "out");
-		const result = await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			gitInit: false,
-		});
-		expect(result.filesWritten).toContain(".gitignore");
-		expect(result.filesWritten).not.toContain("_gitignore");
-		const content = await readFile(join(outDir, ".gitignore"), "utf8");
-		expect(content).toMatch(/node_modules/);
-		expect(content).toMatch(/keys\/\*\.pem/);
-	});
-
-	it("emits keys/.gitkeep placeholder for signing-key material", async () => {
-		const outDir = join(tmpRoot, "out");
-		const result = await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			gitInit: false,
-		});
-		expect(result.filesWritten).toContain("keys/.gitkeep");
-	});
-
-	it("builds the Dockerfile on a Node 24 minor tag no older than 24.22, never the floating major tag", async () => {
-		const outDir = join(tmpRoot, "out");
-		await generateAuthProviderScaffold({
-			name: "test-scaffold",
-			outDir,
-			gitInit: false,
-		});
-		const dockerfile = await readFile(join(outDir, "Dockerfile"), "utf8");
-		const nodeImages = [...dockerfile.matchAll(/^FROM (node:\S+)/gm)].map(
-			(m) => m[1],
-		);
-		expect(nodeImages).toHaveLength(1);
-		const minor = /^node:24\.(\d+)-alpine$/.exec(nodeImages[0] ?? "");
-		expect(minor, nodeImages[0]).not.toBeNull();
-		expect(Number(minor?.[1])).toBeGreaterThanOrEqual(22);
-	});
-
-	it("emits valid JSON even with JSON-special chars in free-form values", async () => {
-		const outDir = join(tmpRoot, "out");
-		const trickyDescription = 'A "tricky" \\ description\nwith newline';
-		const trickyAuthor = 'Name "Quoted" <a@b>';
-		await generateAuthProviderScaffold({
-			name: "tricky",
-			outDir,
-			description: trickyDescription,
-			author: trickyAuthor,
-			gitInit: false,
-		});
-		const text = await readFile(join(outDir, "package.json"), "utf8");
-		const obj = JSON.parse(text) as { description: string; author: string };
-		expect(obj.description).toBe(trickyDescription);
-		expect(obj.author).toBe(trickyAuthor);
-	});
-});
-
-describe("generateAuthProviderScaffold — input validation", () => {
-	it("rejects an unsupported --license value", async () => {
-		const outDir = join(tmpRoot, "out");
+	it("rejects an unsupported license before writing anything", async () => {
+		const dir = join(tmpRoot, "licensed");
 		await expect(
 			generateAuthProviderScaffold({
-				name: "test-scaffold",
-				outDir,
+				name: "licensed",
+				outDir: dir,
 				license: "MIT",
 				gitInit: false,
 			}),
 		).rejects.toThrow(/Unsupported license/);
-	});
-});
-
-describe("substitute() — token totality", () => {
-	it("replaces known tokens with their mapped values", () => {
-		const result = substitute("Hello __NAME__, port __PORT__", {
-			__NAME__: "world",
-			__PORT__: "3000",
-		});
-		expect(result).toBe("Hello world, port 3000");
-	});
-
-	it("throws on any unknown token so unmapped templates can't ship silently", () => {
-		expect(() =>
-			substitute("__UNKNOWN_TOKEN__ in middle", { __NAME__: "x" }),
-		).toThrowError(/Unknown template token: __UNKNOWN_TOKEN__/);
-	});
-
-	it("leaves single underscores and lowercase markers alone", () => {
-		const result = substitute("_x_ and __lowercase__ and __VAL__", {
-			__VAL__: "v",
-		});
-		expect(result).toBe("_x_ and __lowercase__ and v");
+		await expect(stat(dir)).rejects.toThrow();
 	});
 });
