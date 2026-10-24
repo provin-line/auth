@@ -172,7 +172,7 @@ workspace mode (§ 6.3.1) is unaffected.
 `generateAuthProviderScaffold` calls `generate` of
 `@o3co/auth-provider-scaffold/create-app` with a *listed app*
 (`@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound`,
-`@mod/discovery`); upstream adds what these need to run (tokens, keys,
+`@mod/discovery`, `@mod/token-control`); upstream adds what these need to run (tokens, keys,
 issuer, clients, store, audit, http, rate-limit, metrics, ...) and writes
 `package.json`, `src/main.ts`, `config/application.conf`, the `.example`
 settings files, `Dockerfile`, `README.md` and `AGENTS.md`. The generated app

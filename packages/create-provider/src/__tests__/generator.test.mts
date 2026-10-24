@@ -73,7 +73,8 @@ describe("generateAuthProviderScaffold", () => {
 		expect(main).toContain("client-allowance/module");
 		expect(main).toContain("outbound/module");
 		expect(main).toContain("discovery/module");
-		expect(LISTED_MODULES).toHaveLength(4);
+		expect(main).toContain("token-control/module");
+		expect(LISTED_MODULES).toHaveLength(5);
 	});
 
 	it("composes the provin modules into the assemble list", async () => {

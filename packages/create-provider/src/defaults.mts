@@ -38,6 +38,7 @@ export const LISTED_MODULES = [
 	"@mod/client-allowance",
 	"@mod/outbound",
 	"@mod/discovery",
+	"@mod/token-control",
 ] as const;
 
 /**

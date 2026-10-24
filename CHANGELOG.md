@@ -77,8 +77,8 @@ releases.
 - **BREAKING (`create-auth-provider` 0.4.0): the generated provider is an
   auth.provider 0.18.4 app.** The generator calls auth.provider's own
   (`@o3co/auth-provider-scaffold`, pinned at exactly 0.18.4) for a listed app
-  of `@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound` and
-  `@mod/discovery`, then composes `@provin-line/auth-did-grant`,
+  of `@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound`,
+  `@mod/discovery` and `@mod/token-control`, then composes `@provin-line/auth-did-grant`,
   `auth-dplaax-registry` and `auth-did-grant-store` into it
   (`packages/create-provider/src/overlay/`, one function per patched file).
   - The 0.15 template is gone. The app runs its sources
@@ -87,6 +87,11 @@ releases.
     layer (`APP_CONFIG`) for lists, and a refused boot exits 78. Existing
     0.15 instances do not carry over: auth.provider 0.18 reads different
     keys and records.
+  - Revocation (`POST /oauth/revoke`) and introspection
+    (`POST /oauth/introspect`) are `@mod/token-control`'s, as the 0.15
+    provider answered them. Introspection refuses public clients. With
+    `tokens.revocation = denylist` it answers a revoked token inactive; a
+    verifier that reads the JWT alone accepts it until it expires.
   - Added to upstream's app: the did-grant, dplaax-registry and
     `keys.signing.secret` / `secret-encoding` keys and variables (a
     deployment sharing an HS256 secret with a policy-verifier sets

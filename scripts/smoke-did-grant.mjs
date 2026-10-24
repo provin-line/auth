@@ -24,6 +24,8 @@
  * = utf8) and carrying the six claims of dplaax.spec's auth.token.signed-claims.
  * One negative follows: a tampered signature must NOT mint a token — proves the
  * verification actually runs rather than the endpoint 200-ing everything.
+ * Last, token-control: the metadata names the revocation and introspection
+ * endpoints, and the client revokes its token.
  *
  * Self-contained: Ed25519 via node:crypto (no deps), a throwaway in-process
  * DID registry serving the owner DID document on loopback, and the instance's
@@ -370,7 +372,33 @@ if (badRes.status < 400 || badRes.status > 499) {
 	process.exit(1);
 }
 
+// token-control: the metadata names both endpoints, and the client the token
+// was issued to revokes it (RFC 7009 answers 200).
+const metaRes = await fetch(`${base}/.well-known/oauth-authorization-server`, {
+	signal: AbortSignal.timeout(10_000),
+});
+const meta = metaRes.status === 200 ? await metaRes.json() : {};
+for (const [name, route] of [
+	["revocation_endpoint", "/oauth/revoke"],
+	["introspection_endpoint", "/oauth/introspect"],
+]) {
+	if (meta[name] !== `${origin}${route}`) {
+		fail(`metadata ${name} = ${JSON.stringify(meta[name])}, want ${origin}${route} (HTTP ${metaRes.status})`);
+		process.exit(1);
+	}
+}
+const revokeRes = await fetch(`${base}/oauth/revoke`, {
+	method: "POST",
+	headers: { "content-type": "application/x-www-form-urlencoded" },
+	body: new URLSearchParams({ token: body.access_token, client_id: CLIENT_ID }),
+	signal: AbortSignal.timeout(10_000),
+});
+if (revokeRes.status !== 200) {
+	fail(`revocation returned HTTP ${revokeRes.status}, want 200 — body: ${await revokeRes.text()}`);
+	process.exit(1);
+}
+
 console.log(
-	`smoke-did-grant: OK — DID grant minted a Bearer token with the six signed claims on :${port} (tampered signature rejected with HTTP ${badRes.status})`,
+	`smoke-did-grant: OK — DID grant minted a Bearer token with the six signed claims on :${port} (tampered signature rejected with HTTP ${badRes.status}; the token revoked)`,
 );
 process.exit(0);
