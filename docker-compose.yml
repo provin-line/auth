@@ -7,17 +7,35 @@ services:
       dockerfile: Dockerfile.instance
       args:
         INSTANCE: provider
+        ENTRY: src/main.ts
     ports:
       # Loopback only. This file ships a known development secret (below), so a
       # default that publishes the issuer on every host interface offers the LAN
       # a token-minting endpoint whose signing key is in the repository. Reach it
       # from another machine by overriding this deliberately, never by default.
       - "127.0.0.1:3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./deploy/dev/provider.local.conf:/home/node/app/instances/provider/config/local.conf:ro
     environment:
-      OAUTH_JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
-      OAUTH_JWT_SECRET: "${JWT_SECRET:-dplaax-dev-secret-change-in-production}"
-      OAUTH_JWT_ISSUER: "dplaax-auth"
-      DPLAAX_REGISTRY_BASE_URL: "${DPLAAX_REGISTRY_BASE_URL:-http://localhost:3002}"
+      APP_CONFIG: "config/local.conf,config/application.conf"
+      KERNEL_DEPLOYMENT: "single"
+      STORE_ACCEPT_VOLATILE: "true"
+      TOKENS_REVOCATION: "denylist"
+      TOKENS_SUBJECT_CHECK: "none"
+      HTTP_HOST: "0.0.0.0"
+      HTTP_PORT: "3000"
+      HTTP_PUBLIC_ORIGIN: "http://localhost:3000"
+      HTTP_INSECURE_ORIGIN: "true"
+      ISSUER_URL: "http://localhost:3000"
+      KEYS_SIGNING_KID: "dev-1"
+      KEYS_SIGNING_ALG: "HS256"
+      KEYS_SIGNING_SECRET: "${JWT_SECRET:-dplaax-dev-secret-change-in-production}"
+      KEYS_SIGNING_SECRET_ENCODING: "utf8"
+      DID_GRANT_REVOCATION_LATENCY_BOUND: "15m"
+      DID_GRANT_ACCESS_TOKEN_LIFETIME: "10m"
+      DPLAAX_REGISTRY_URL: "${DPLAAX_REGISTRY_URL:-http://host.docker.internal:3002}"
 
   policy-verifier:
     build:

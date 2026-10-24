@@ -17,8 +17,17 @@
 #
 # Scaffold-time parameters that are deployment-specific (e.g. the
 # auth-provider's --registry-base-url) get placeholder values here and are
-# overridden at runtime via env (DPLAAX_REGISTRY_BASE_URL) — the image stays
+# overridden at runtime via env (DPLAAX_REGISTRY_URL) — the image stays
 # deployment-generic.
+#
+# The two generated apps start differently, and ENTRY says how. The
+# policy-verifier compiles to dist/main.mjs. The auth-provider is what
+# @o3co/auth-provider-scaffold writes: no build, it runs its sources
+# (src/main.ts) and reads its settings from env and APP_CONFIG. Upstream's own
+# Dockerfile for that app is not used: it expects a pnpm-lock.yaml in its build
+# context, which the generator does not write, and adopting it is the
+# lockfile-first restructure the KNOWN GAP below defers. This file keeps one
+# build path for both images.
 
 # GENERATOR: "policy-verifier" | "provider" — the COMPONENT name. Each
 # namespace adds the prefix its own context does not supply: the directory is
@@ -34,6 +43,8 @@ ARG GENERATOR=policy-verifier
 # that requirement exists to keep out of a published artifact.
 ARG AUTH_REF
 ARG PORT=3001
+# The file the instance starts from, relative to its root.
+ARG ENTRY=dist/main.mjs
 # Extra scaffold args (word-split deliberately; placeholder-only values).
 ARG SCAFFOLD_ARGS=""
 
@@ -46,7 +57,6 @@ RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack
 WORKDIR /src
 ARG GENERATOR
 ARG AUTH_REF
-ARG PORT
 ARG SCAFFOLD_ARGS
 RUN --mount=type=secret,id=github_token \
     case "${AUTH_REF}" in \
@@ -64,7 +74,7 @@ RUN --mount=type=secret,id=github_token \
  && pnpm install --frozen-lockfile \
  && pnpm --filter "@provin-line/create-auth-${GENERATOR}" build \
  && node "packages/create-${GENERATOR}/dist/cli.mjs" "${GENERATOR}" \
-      --dplaax-module-ref "${AUTH_REF}" --port "${PORT}" \
+      --dplaax-module-ref "${AUTH_REF}" \
       ${SCAFFOLD_ARGS} \
       --out /instance --no-git-init
 
@@ -90,6 +100,7 @@ RUN --mount=type=secret,id=github_token \
 # happened to provin.oss's quickstart §2f — documented, unexecuted, wrong.
 FROM node:24.22-alpine AS builder
 RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
+ARG ENTRY
 WORKDIR /app
 COPY --from=gen /instance/ ./
 RUN --mount=type=secret,id=github_token \
@@ -100,7 +111,8 @@ RUN --mount=type=secret,id=github_token \
         GIT_CONFIG_VALUE_0="https://github.com/"; \
     fi; \
     pnpm install \
- && pnpm run build
+ && pnpm run --if-present build \
+ && test -f "${ENTRY}"
 
 # --- runtime: the built app copied wholesale from the builder ---
 # A `pnpm install --prod` here would refetch the git-subdir deps and run their
@@ -112,8 +124,15 @@ FROM node:24.22-alpine AS runtime
 RUN apk add --no-cache tini
 ENV NODE_ENV=production
 ARG PORT
+ARG ENTRY
+# The container listens on every interface, on the port it exposes. The
+# auth-provider reads HTTP_HOST and the policy-verifier HTTP_HOSTNAME (its
+# default is already every interface), so the first is set here.
+ENV HTTP_HOST=0.0.0.0 \
+    HTTP_PORT=${PORT} \
+    ENTRY=${ENTRY}
 WORKDIR /app
 COPY --from=builder /app/ ./
 EXPOSE ${PORT}
 ENTRYPOINT ["tini", "--"]
-CMD ["node", "dist/main.mjs"]
+CMD ["sh", "-c", "exec node \"$ENTRY\""]
