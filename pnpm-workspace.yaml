@@ -22,9 +22,3 @@ overrides:
 # released by the same maintainers, so a fresh release installs at once.
 minimumReleaseAgeExclude:
   - "@o3co/*"
-
-# No dependency runs an install script. bcrypt (through the 0.15
-# auth-provider-core) ships prebuilt binaries that node-gyp-build loads at run
-# time, so its build step is not needed.
-allowBuilds:
-  bcrypt: false

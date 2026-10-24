@@ -14,47 +14,38 @@
  * limitations under the License.
  */
 
-import { ResolutionRejectedError, ResolutionUnavailableError } from "@provin-line/auth-provider-did";
-import { DplaaxDidResolver } from "@provin-line/auth-provider-dplaax-module";
+import { assemble, defineModule, isUnavailable, kernelConfig } from "@o3co/auth-provider-foundation/kernel";
+import { quietRuntime } from "@o3co/auth-provider-foundation/kernel/testing";
+import { type OutboundResponse, outbound } from "@o3co/auth-provider-foundation/outbound";
+import { outboundRefusals } from "@o3co/auth-provider-foundation/outbound-policy";
+import { didDocuments } from "@provin-line/auth-did-grant";
+import registry from "@provin-line/auth-dplaax-registry/module";
 import type { Vector, VectorOutcome } from "../runner.mjs";
 
 /**
- * `auth.resolve.*` vector family (did-resolution-auth.yaml).
- *
- * As of this writing, this family has no rows in dplaax.spec's
- * vectors/README.md (did-resolution-auth.yaml is a newer rule file), so
- * there was no established README convention to match when this executor
- * was written — this was the FIRST definition of it. (P2 vendors this
- * family's real vectors — `did-resolution-*.json` — from dplaax.spec
- * into `../vectors/`, tracked by `../vectors/SYNC_MANIFEST.json`, and runs
- * them unmodified through this same convention; folding the convention into
- * the spec repo's own README table remains follow-up work there.)
- * Convention chosen to mirror the mock-registry-response
- * shape `DplaaxDidResolver` actually consumes (a status + body pair), the
- * same shape `packages/provider-dplaax-module/src/__tests__/resolver/
- * resolver.test.mts` builds by hand for every test case:
- *
+ * `auth.resolve.*` vector family (did-resolution-auth.yaml). `input`:
  *   "input": {
  *     "did": "<the DID being resolved>",
  *     "registry_response": { "status": <http status>, "body": <JSON value> }
  *   }
- *
- * `expect` mirrors the two-class error taxonomy `auth.resolve.failure-
- * mapping` names (INDETERMINATE / FAILED) plus the un-named success case,
- * carrying the resolver's own machine-readable `reason` code (the same
- * string `ResolutionRejectedError`/`ResolutionUnavailableError` already
- * carry — no new vocabulary invented):
- *
+ * `expect` is the two-class taxonomy `auth.resolve.failure-mapping` names
+ * (INDETERMINATE / FAILED) plus the un-named success case, with the spec's
+ * machine-readable `reason`:
  *   "expect": { "result": "OK" }
  *   "expect": { "result": "FAILED", "reason": "id-mismatch" }
  *   "expect": { "result": "INDETERMINATE", "reason": "registry-5xx" }
+ *
+ * The dplaax-registry module resolves against an outbound that answers the
+ * vector's status and body. The module answers a rejection with a sentence for
+ * the client and an unavailable registry with `Unavailable`, neither with the
+ * spec's reason code, so `reasonOf` names the code from the module's answer for
+ * the answers the vectors pin and refuses any other: a new answer fails the
+ * run until it is mapped.
  */
 interface ResolveVectorInput {
 	did: string;
 	registry_response: { status: number; body: unknown };
-	// Index signature so `Record<string, unknown> -> ResolveVectorInput` is a
-	// valid type-predicate narrowing (TS2677) — vector `input` objects may
-	// carry other JSON fields this executor ignores.
+	// Vector `input` objects may carry other JSON fields this executor ignores.
 	[key: string]: unknown;
 }
 
@@ -67,6 +58,16 @@ function isResolveVectorInput(input: Record<string, unknown>): input is ResolveV
 	);
 }
 
+/**
+ * The spec's reason code for an answer of the module, or a refusal to guess
+ * one. An unavailable registry is told by what the module says it was.
+ */
+function reasonOf(v: Vector, answer: { class: "FAILED"; reason: string } | { class: "INDETERMINATE"; what: string }): string {
+	if (answer.class === "INDETERMINATE" && /HTTP 5\d\d$/.test(answer.what)) return "registry-5xx";
+	if (answer.class === "FAILED" && /names another DID/.test(answer.reason)) return "id-mismatch";
+	throw new Error(`vector "${v.id}": no reason code for ${JSON.stringify(answer)}; map it in reasonOf`);
+}
+
 export async function runResolveVector(v: Vector): Promise<VectorOutcome> {
 	if (!isResolveVectorInput(v.input)) {
 		throw new Error(
@@ -75,40 +76,46 @@ export async function runResolveVector(v: Vector): Promise<VectorOutcome> {
 	}
 	const { did, registry_response } = v.input;
 
-	// The DID's registry segment (did:dplaax:<registry>:...) must be in the
-	// resolver's allow-list. DplaaxDidResolver's constructor always
-	// includes registryBaseUrl's own hostname in that allow-list, so
-	// pointing baseUrl's host at the DID's own registry segment satisfies
-	// it without a separate allowedRegistries entry — this executor never
-	// makes a real network call (fetchImpl is replaced below), so the
-	// base URL's scheme/host is otherwise inert.
+	// The DID's registry segment (did:dplaax:<registry>:...) must be the
+	// registry URL's host, so the URL is built from it. Nothing is sent over a
+	// network: the outbound below answers the vector's response.
 	const registrySegment = did.split(":")[2];
 	if (!registrySegment) {
 		throw new Error(`vector "${v.id}": could not extract a registry segment from did "${did}"`);
 	}
-	const registryBaseUrl = `http://${registrySegment}`;
 
-	const mockFetch: typeof fetch = async () =>
-		new Response(JSON.stringify(registry_response.body), {
-			status: registry_response.status,
-		});
-
-	const resolver = new DplaaxDidResolver(registryBaseUrl, { fetchImpl: mockFetch });
+	const answering = defineModule({ name: "outbound" }, (m) => [
+		m.provide(outbound).by(() => ({
+			fetch: async (): Promise<OutboundResponse> => ({
+				status: registry_response.status,
+				headers: new Map([["content-type", "application/json"]]),
+				body: new TextEncoder().encode(JSON.stringify(registry_response.body)),
+			}),
+		})),
+		m.provide(outboundRefusals).by(() => ({ explained: () => undefined })),
+	]);
+	const app = await assemble({
+		modules: [answering, registry],
+		config: { ...kernelConfig(), "dplaax-registry": { url: `http://${registrySegment}` } },
+		runtime: quietRuntime(),
+	});
 
 	try {
-		await resolver.resolve(did);
-		return { result: "OK" };
+		const answer = await app.get(didDocuments).resolve(did);
+		if (answer.kind === "resolved") return { result: "OK" };
+		return { result: "FAILED", reason: reasonOf(v, { class: "FAILED", reason: answer.reason }) };
 	} catch (err) {
-		if (err instanceof ResolutionUnavailableError) {
-			return { result: "INDETERMINATE", reason: err.reason };
+		if (isUnavailable(err)) {
+			return {
+				result: "INDETERMINATE",
+				reason: reasonOf(v, { class: "INDETERMINATE", what: err.what }),
+			};
 		}
-		if (err instanceof ResolutionRejectedError) {
-			return { result: "FAILED", reason: err.reason };
-		}
-		// An error outside the two-class taxonomy is a bug (in the resolver
-		// or in this executor's fixture), not a conformance verdict —
-		// propagate it so the test fails loudly instead of silently mapping
-		// it to some guessed outcome.
+		// An error outside the two-class taxonomy is a bug (in the module or in
+		// this executor's fixture), not a conformance verdict: it propagates so
+		// the test fails loudly instead of mapping to some guessed outcome.
 		throw err;
+	} finally {
+		await app.stop();
 	}
 }

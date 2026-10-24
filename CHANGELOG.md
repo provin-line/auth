@@ -4,7 +4,7 @@ All notable changes to this repository are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-While the version is `0.x`, the public API (the `@provin-line/auth-provider-did`
+While the version is `0.x`, the public API (the `@provin-line/auth-did-grant`
 module surface and the DID grant contract) may still change between minor
 releases.
 
@@ -35,14 +35,13 @@ releases.
     0.15 rejected it (400).
   - Decoding meets rule `canon.strict-decode`: invalid UTF-8 and unpaired
     surrogate escapes are refused, and integers beyond 2^53 are kept
-    exactly. A copy of `strictJsonParse` lives here; the one
-    `auth-provider-did` exports goes with that package.
+    exactly. `strictJsonParse` is internal to this package.
 - **`@provin-line/auth-did-grant-store`**: keeps the DID grant's spent nonces
   on `records` over the kernel's `store` (`packages/did-grant-store`), with
   the guarantees `spentNoncesNeeds` asks, as upstream's `jwt-bearer-store`
   does.
 - **`@provin-line/auth-did-grant`**: the DID grant as an auth.provider 0.18
-  module (`packages/did-grant`), beside the 0.15 `auth-provider-did`.
+  module (`packages/did-grant`), replacing the 0.15 `auth-provider-did`.
   - Its tokens carry the six claims of rule `auth.token.signed-claims`
     (`auth_contract_id`, `verification_method`, `did_document_snapshot`,
     `lifecycle_state_ref`, `lifecycle_freshness_ref`,
@@ -74,7 +73,7 @@ releases.
 
 ### Changed
 
-- **BREAKING (`create-auth-provider` 0.4.0): the generated provider is an
+- **BREAKING (`@provin-line/create-auth-provider` 0.4.0): the generated provider is an
   auth.provider 0.18.4 app.** The generator calls auth.provider's own
   (`@o3co/auth-provider-scaffold`, pinned at exactly 0.18.4) for a listed app
   of `@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound`,
@@ -182,9 +181,27 @@ releases.
   - `overrides` keeps the same entries, with vite raised to `^8.3.3`.
   - `minimumReleaseAgeExclude` lets a fresh `@o3co/*` release install
     despite pnpm 11's one-day hold.
-  - `allowBuilds` denies bcrypt's install script. pnpm 11 refuses an install
-    whose dependency build scripts are neither allowed nor denied. bcrypt
-    ships prebuilt binaries, and pnpm 10 had skipped the script too.
+
+### Removed
+
+- **BREAKING: `@provin-line/auth-provider-did` and
+  `@provin-line/auth-provider-dplaax-module`**, the auth.provider 0.15
+  composition (`packages/provider-did`, `packages/provider-dplaax-module`).
+  No generator has emitted them since create-provider 0.4.0, and the
+  integration and conformance suites now run on the 0.18 modules.
+  - The DID grant is `@provin-line/auth-did-grant`, with its section
+    `did-grant` replacing `oauth.grants.did`.
+  - The registry resolver (`DplaaxDidResolver`) is
+    `@provin-line/auth-dplaax-registry`, with its section `dplaax-registry`
+    replacing `dplaax.registry.*` and `oauth.grants.did.resolver.*`.
+  - The nonce store is `@provin-line/auth-did-grant-store`.
+  - `buildModules`, `DplaaxAppConfig` and `DplaaxConfigSchema` have no
+    successor: a provider is a kernel `assemble` of modules, which the
+    generator writes.
+  - [docs/upstream-compatibility.md](docs/upstream-compatibility.md#moving-an-existing-provider-instance-to-018)
+    lists what an existing 0.15 deployment changes.
+- The `release` workflow, whose only job published `auth-provider-did` (and
+  was disabled).
 
 ### Security
 
@@ -197,12 +214,11 @@ releases.
   refused even when it denotes the same key. A `kid` or `verification_method`
   that is not a string, and a message that is not a JSON object, are
   `400 invalid_request`. A message that names no method is still taken. The
-  0.15 `auth-provider-did` checks these under an OWNER contract only, and
-  accepts other spellings under LEGACY.
+  0.15 `auth-provider-did` checked these under an OWNER contract only, and
+  accepted other spellings under LEGACY.
 - body-parser 2.4.0 in the lockfile ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828):
   denial of service via trailing bytes after a compressed request body). It
-  is reached through express under the 0.15 provider, the verifier server
-  and the integration suite.
+  is reached through express under the verifier server.
 
 ## [0.4.0] - 2026-10-22
 

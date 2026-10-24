@@ -15,9 +15,7 @@
  */
 
 // Parser regression suite. Owned by this package so the guards travel
-// with the parser when did-dplaax is consumed out-of-tree. Previously
-// these cases lived in auth-provider-dplaax-module/resolver.test.mts;
-// moved here as part of auth#19 (extract did:dplaax grammar package).
+// with the parser when did-dplaax is consumed out-of-tree.
 
 import { describe, expect, it } from "vitest";
 import { parseDplaaxDid } from "../parse.mjs";

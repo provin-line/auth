@@ -26,18 +26,17 @@ This package owns:
   sites that must reject anything outside a known hierarchy.
 
 It does NOT own DID **document** resolution (verification methods, public
-keys) — that lives in `@provin-line/auth-provider-did`, which is a
-JWT/DID-document layer that depends on the OAuth grant flow.
+keys) — that lives in `@provin-line/auth-dplaax-registry` (fetching) and
+`@provin-line/auth-did-grant` (using the document).
 
 ## Why a separate package
 
-Both `@provin-line/auth-provider-dplaax-module` and
+Both `@provin-line/auth-dplaax-registry` and
 `@provin-line/auth-policy-verifier-dplaax-module` need the same parser. Without
 this package, either:
 
 - the policy-verifier composition layer would have to depend on the
-  auth-provider framework (`@o3co/auth-provider-core` +
-  `@o3co/auth-provider-oauth`) for a pure grammar concern — wrong layer
+  auth.provider framework for a pure grammar concern — wrong layer
   direction; or
 - the parser stays duplicated and silently drifts on the next spec
   revision.
