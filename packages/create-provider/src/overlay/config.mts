@@ -9,7 +9,7 @@
  */
 
 import type { OverlayOptions } from "./index.mjs";
-import { DID_GRANT_TYPE } from "./modules.mjs";
+import { DID_GRANT_TYPE } from "../provin-modules.mjs";
 
 // application.conf holds no value: each key reads its environment variable,
 // as upstream's does. Lists and values that span sections go in the local
@@ -77,7 +77,7 @@ export function patchEnvExample(text: string, opts: OverlayOptions): string {
 	return `${text.endsWith("\n") ? text : `${text}\n`}${lines.join("\n")}\n`;
 }
 
-const DEFAULT_PORTS: Record<string, string> = { "http:": "80", "https:": "443" };
+const HTTP_DEFAULT_PORT = "80";
 
 const ALLOW_PLACEHOLDER = '# \t"destination.example.invalid"';
 const METHOD_LINE = /^# \t\t"method": "none"$/m;
@@ -102,7 +102,7 @@ export function patchLocalConfExample(
 		);
 	}
 	const url = new URL(opts.registryBaseUrl);
-	const port = url.port === "" ? (DEFAULT_PORTS[url.protocol] ?? "") : url.port;
+	const port = url.port === "" ? HTTP_DEFAULT_PORT : url.port;
 	const allowed = text.replace(ALLOW_PLACEHOLDER, `# \t${JSON.stringify(url.hostname)}`);
 	const withGrant = allowed.replace(
 		METHOD_LINE,
@@ -115,11 +115,19 @@ export function patchLocalConfExample(
 			"# \t\t}",
 		].join("\n"),
 	);
-	const plainInternal = [
-		"## The registry over plain http, on a network trusted against reading and changing it (an https registry at a private address goes in outbound.internal-hosts instead):",
-		"# outbound.plain-internal = [",
-		`# \t${JSON.stringify(`${url.hostname}:${port}`)}`,
-		"# ]",
-	];
-	return `${withGrant.endsWith("\n") ? withGrant : `${withGrant}\n`}${plainInternal.join("\n")}\n`;
+	const reach =
+		url.protocol === "http:"
+			? [
+					"## The registry over plain http, on a network trusted against reading and changing it:",
+					"# outbound.plain-internal = [",
+					`# \t${JSON.stringify(`${url.hostname}:${port}`)}`,
+					"# ]",
+				]
+			: [
+					"## The registry over https at a private address; its CA must be trusted by Node (NODE_EXTRA_CA_CERTS):",
+					"# outbound.internal-hosts = [",
+					`# \t${JSON.stringify(url.hostname)}`,
+					"# ]",
+				];
+	return `${withGrant.endsWith("\n") ? withGrant : `${withGrant}\n`}${reach.join("\n")}\n`;
 }

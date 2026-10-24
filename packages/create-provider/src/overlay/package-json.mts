@@ -10,7 +10,7 @@
 
 import { DEFAULT_DEP_VERSIONS } from "../defaults.mjs";
 import type { OverlayOptions } from "./index.mjs";
-import { gitSubdirectoryRef, PROVIN_MODULES } from "./modules.mjs";
+import { gitSubdirectoryRef, PROVIN_MODULES } from "../provin-modules.mjs";
 
 /**
  * The manifest upstream wrote, named for this project and depending on the
@@ -25,13 +25,19 @@ export function patchPackageJson(text: string, opts: OverlayOptions): string {
 	if (dependencies === undefined) {
 		throw new Error("package.json: upstream wrote no dependencies");
 	}
-	const { name: _name, ...rest } = upstream;
+	const {
+		name: _name,
+		description: _description,
+		license: _license,
+		author: _author,
+		...rest
+	} = upstream;
 	const manifest = {
+		...rest,
 		name: opts.name,
 		description: opts.description,
 		license: opts.license,
 		...(opts.author === "" ? {} : { author: opts.author }),
-		...rest,
 		dependencies: {
 			...dependencies,
 			...Object.fromEntries(

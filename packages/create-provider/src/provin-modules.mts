@@ -8,7 +8,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-// The provin modules the overlay composes into a generated app: the package
+// The provin modules a generated app composes: the package
 // each is published as, the directory it lives in under packages/ of
 // provin-line/auth, and the identifier its default export is imported as.
 //
@@ -67,11 +67,10 @@ export const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
 /**
  * A pin is a full 40-hex commit SHA, or it is not a pin.
  *
- * This replaced a denylist of familiar branch names (main, develop, …). A
- * denylist cannot be a pin discipline: it only rejects the moving refs someone
- * thought to enumerate, while `release/2026-07`, `my-feature` and every tag —
- * all equally movable — sailed through. `release.pin.source-exact` says so
- * outright, so the check is now the positive form.
+ * The check is positive, not a denylist of familiar branch names: a denylist
+ * rejects only the moving refs someone thought to enumerate, while
+ * `release/2026-07`, `my-feature` and every tag are equally movable
+ * (`release.pin.source-exact`).
  *
  * Lowercase only: git resolves object ids in lowercase, and accepting the
  * uppercase spelling would make one commit have two pin strings.

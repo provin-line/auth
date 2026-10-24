@@ -8,7 +8,7 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-import { PROVIN_MODULES } from "./modules.mjs";
+import { PROVIN_MODULES } from "../provin-modules.mjs";
 
 const TABLE_ROW = /^\| `[^`]+` \|.*\|$/gm;
 

@@ -27,6 +27,7 @@ export {
 	DEFAULT_LICENSE,
 	DEFAULT_REGISTRY_BASE_URL,
 	isSupportedLicense,
+	LISTED_MODULES,
 	SUPPORTED_LICENSES,
 } from "./defaults.mjs";
 

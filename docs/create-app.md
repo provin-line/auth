@@ -31,22 +31,23 @@ each `create-*` template stays diff-equivalent to its reference under a list
 of normalization rules (workspace-vs-standalone dep forms, caret stripping,
 `private` flag, Dockerfile divergence, excluded paths).
 
-This inverts here: **`packages/create-*/src/template/` is canonical**, and the
-repository keeps no standing instance. Rationale:
+This inverts here: **what a generator emits is canonical** (for the
+policy-verifier its `src/template/`; for the provider, upstream's generated
+app plus the overlay, below), and the repository keeps no standing instance. Rationale:
 
 - The repo's public contract is "you can generate a working instance" — so the
   artifact under test must be the generated output, not a sibling that
   approximates it modulo eight normalization rules.
 - Dual maintenance (service + template) plus normalization is a standing drift
   hazard; every intentional divergence weakened the round-trip assertion.
+- The integration test never depended on `services/` source — it composes
+  in-process from the library packages directly.
 
 For the policy-verifier, `packages/create-policy-verifier/src/template/` is
 the canonical definition. For the provider there is no template: the app is
 what auth.provider's own generator (`@o3co/auth-provider-scaffold`) writes
 for a listed set of modules, plus the overlay of provin modules in
 `packages/create-provider/src/overlay/` (§ 3.5).
-- The integration test never depended on `services/` source — it composes
-  in-process from the library packages directly.
 
 ## 2. Package roles
 
@@ -135,12 +136,17 @@ generated app carries a `pnpm-workspace.yaml`:
 - **`allowBuilds`** allows each git-fetched `@provin-line/*` package its
   `prepare` (a build), which pnpm blocks otherwise
   (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). pnpm matches a git-hosted
-  package by name and the source it resolved the reference to, so the key is
-  `<name>@https://codeload.github.com/provin-line/auth/tar.gz/<sha>#path:/packages/<dir>`;
-  a bare package name does not match. That key is known only for a commit
-  SHA. For a branch or tag (`--allow-unpinned-ref`) the generator writes no
-  `allowBuilds`, and the first install stops with pnpm's message naming the
-  key to add.
+  package by name and the source it resolved the reference to; a bare package
+  name does not match. For a commit SHA the generator writes two keys per
+  package, one for each resolution, both scoped to the commit:
+  `<name>@https://codeload.github.com/provin-line/auth/tar.gz/<sha>#path:/packages/<dir>`
+  (anonymous fetch) and
+  `<name>@git+https://github.com/provin-line/auth.git#<sha>&path:/packages/<dir>`
+  (fetch through git, as the image build's token path does). For a branch or
+  tag (`--allow-unpinned-ref`) the commit is not known at generation, so the
+  key is scoped to the repository, `<name>@git+https://github.com/provin-line/auth.git`,
+  which pnpm 11.28.7 matches at any ref. Keys begin with `@` and are quoted in
+  the YAML.
 
 **Policy-verifier (pnpm 10).** Its `package.json` carries the equivalents,
 `pnpm.overrides` (`did-dplaax`) and `pnpm.onlyBuiltDependencies`
@@ -239,7 +245,8 @@ docker compose up     # workspace-context image builds of instances/*
 - `instances/` is **git-ignored**; nothing under it is ever committed. It is
   listed in `pnpm-workspace.yaml`, so generated instances join the workspace
   (§ 6.3.1) and reflect local package state.
-- The template's standalone Dockerfile installs `@provin-line/*` from git
+- A generated app's standalone Dockerfile (the policy-verifier template's;
+  upstream's for the provider) installs `@provin-line/*` from git
   refs, which cannot contain local edits. Therefore `docker-compose.yml`
   builds dev images from a repo-root-context `Dockerfile.instance`
   (`ARG INSTANCE=provider|policy-verifier`, `ARG ENTRY` the file the instance
@@ -276,13 +283,14 @@ dependency on any instance directory.
 
 Two modes, verifying two different properties.
 
-**Workspace mode (every PR)** — verifies the template against the PR's
+**Workspace mode (every PR)** — verifies the generated apps against the PR's
 package state:
 
 1. `make instances` (generators → `instances/*`, workspace members per
    § 6.3.1).
 2. `pnpm install`. The policy-verifier is built, typechecked and booted, and
-   its health endpoint asserted. The provider runs its sources
+   its health endpoint asserted and `/verify` without a token refused with
+   401. The provider runs its sources
    (`scripts/smoke-did-grant.mjs`): it is booted with HS256 and the secret as
    UTF-8, against a throwaway DID registry on loopback (`outbound.allow` and
    `outbound.plain-loopback` name it), and takes one DID-grant round trip: a
@@ -296,7 +304,10 @@ experience, no workspace assistance:
 1. Run the generator CLIs into a directory **outside** the repo.
 2. `pnpm install` / build / boot as-is — `@provin-line/*` resolve from their
    pinned git refs (the provider is installed only: it has no build).
-3. Additionally `docker build` the template's standalone Dockerfile.
+3. Additionally `docker build` each app's standalone Dockerfile (the policy-verifier template's; upstream's for the provider) and run the images: each
+   answers its health endpoint, the verifier refuses `/verify` without a
+   token (401), and the provider image takes the DID-grant round trip
+   (`scripts/smoke-image.sh`, `scripts/smoke-did-grant.mjs --image`).
 
 Workspace mode is the load-bearing replacement for the round-trip test:
 instead of asserting "template ≈ reference modulo normalizations", it asserts

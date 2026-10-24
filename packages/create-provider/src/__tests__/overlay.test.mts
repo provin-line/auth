@@ -137,6 +137,22 @@ describe("patchPackageJson", () => {
 		expect(out.dependencies["@noble/ed25519"]).toMatch(/^\d+\.\d+\.\d+$/);
 	});
 
+	it("lets the options win over fields upstream wrote", () => {
+		const upstream = JSON.stringify({
+			name: "x",
+			license: "MIT",
+			author: "someone",
+			description: "d",
+			dependencies: {},
+		});
+		const out = JSON.parse(patchPackageJson(upstream, options));
+		expect(out.license).toBe("Apache-2.0");
+		expect(out.author).toBe("Acme");
+		expect(out.description).toBe("Acme login");
+		const bare = JSON.parse(patchPackageJson(upstream, { ...options, author: "" }));
+		expect(bare).not.toHaveProperty("author");
+	});
+
 	it("escapes free-form values", () => {
 		const tricky = JSON.parse(
 			patchPackageJson(UPSTREAM_PACKAGE_JSON, {
@@ -164,15 +180,25 @@ describe("buildWorkspaceYaml", () => {
 		);
 	});
 
-	it("allows the build scripts of the git-fetched packages, keyed by the source pnpm resolves them to", () => {
-		for (const [name, dir] of [
-			["@provin-line/auth-did-grant", "did-grant"],
-			["@provin-line/auth-dplaax-registry", "dplaax-registry"],
-			["@provin-line/auth-did-grant-store", "did-grant-store"],
-			["@provin-line/did-dplaax", "did-dplaax"],
-		]) {
+	const PACKAGES = [
+		["@provin-line/auth-did-grant", "did-grant"],
+		["@provin-line/auth-dplaax-registry", "dplaax-registry"],
+		["@provin-line/auth-did-grant-store", "did-grant-store"],
+		["@provin-line/did-dplaax", "did-dplaax"],
+	] as const;
+
+	it("allows the build scripts of the git-fetched packages, keyed by the tarball pnpm resolves them to", () => {
+		for (const [name, dir] of PACKAGES) {
 			expect(text).toContain(
 				`"${name}@https://codeload.github.com/provin-line/auth/tar.gz/${REF}#path:/packages/${dir}": true`,
+			);
+		}
+	});
+
+	it("also keys them by the git source pnpm resolves to when the repo is fetched through git", () => {
+		for (const [name, dir] of PACKAGES) {
+			expect(text).toContain(
+				`"${name}@git+https://github.com/provin-line/auth.git#${REF}&path:/packages/${dir}": true`,
 			);
 		}
 	});
@@ -181,11 +207,25 @@ describe("buildWorkspaceYaml", () => {
 		expect(text).toMatch(/^blockExoticSubdeps: false$/m);
 	});
 
-	it("allows no build for a ref that is not a commit SHA: pnpm keys it by the commit the ref resolves to", () => {
+	it("scopes the allowance to the repository for a ref that is not a commit SHA", () => {
 		const branch = buildWorkspaceYaml("develop");
-		expect(branch).not.toMatch(/^allowBuilds:/m);
+		for (const [name] of PACKAGES) {
+			expect(branch).toContain(
+				`"${name}@git+https://github.com/provin-line/auth.git": true`,
+			);
+		}
+		expect(branch).not.toContain("codeload");
 		expect(branch).toContain("develop&path:/packages/did-dplaax");
-		expect(branch).toMatch(/^# .*allowBuilds/m);
+	});
+
+	it("quotes every key, which begins with @", () => {
+		for (const line of text.split("\n").filter((l) => l.startsWith("  "))) {
+			expect(line).toMatch(/^  "[^"]+": /);
+		}
+	});
+
+	it("says why exotic sub-dependencies are allowed", () => {
+		expect(text).toMatch(/^# .*blockExoticSubdeps|^# .*exotic/im);
 	});
 
 	it("quotes a ref that carries YAML-significant characters", () => {
@@ -323,12 +363,22 @@ describe("patchLocalConfExample", () => {
 		expect(out).toContain("# keys.signing.private-key");
 	});
 
-	it("uses the scheme's default port when the URL names none", () => {
+	it("names no plain-internal pair for an https registry, which needs no plain http", () => {
 		const https = patchLocalConfExample(UPSTREAM_LOCAL, {
 			...options,
 			registryBaseUrl: "https://registry.example.org",
 		});
-		expect(https).toContain('"registry.example.org:443"');
+		expect(https).toContain('# \t"registry.example.org"');
+		expect(https).not.toContain("plain-internal =");
+		expect(https).toContain("outbound.internal-hosts");
+	});
+
+	it("uses port 80 for an http registry URL that names none", () => {
+		const http = patchLocalConfExample(UPSTREAM_LOCAL, {
+			...options,
+			registryBaseUrl: "http://registry.example.org",
+		});
+		expect(http).toContain('"registry.example.org:80"');
 	});
 
 	it("refuses an example without outbound.allow", () => {
@@ -359,6 +409,33 @@ describe("patchReadme", () => {
 		expect(out).toContain("keys.signing.secret-encoding");
 		expect(out).toContain("clients.registered");
 		expect(out).toContain("outbound.plain-internal");
+	});
+
+	it("states that boot requires tokens.subject-check", () => {
+		expect(out).toContain("tokens.subject-check");
+		expect(out).toContain("TOKENS_SUBJECT_CHECK");
+	});
+
+	it("warns that a volatile nonce store reopens a replay window after a restart", () => {
+		expect(out).toMatch(/restart/);
+		expect(out).toContain("message-max-age");
+	});
+
+	it("explains blockExoticSubdeps and regenerating instead of editing the ref", () => {
+		expect(out).toContain("blockExoticSubdeps");
+		expect(out).toMatch(/regenerat/i);
+		expect(out).toContain("minimumReleaseAgeExclude");
+	});
+
+	it("replaces upstream's Changing-the-modules section, whose commands are not this generator's", () => {
+		const withSection =
+			"# Auth provider\n\n## Changing the modules\n\nGenerate again. `create-auth-provider <target> --pattern <pattern>` and `--add`.\n\n## Last\n\nkept\n";
+		const patched = patchReadme(withSection, options);
+		expect(patched).not.toContain("<target>");
+		expect(patched).toContain("would drop them");
+		expect(patched).toContain("## Changing the modules");
+		expect(patched).toMatch(/provin|@provin-line\/create-auth-provider/);
+		expect(patched).toContain("## Last\n\nkept");
 	});
 
 	it("refuses a README without a title", () => {

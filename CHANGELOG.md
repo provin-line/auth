@@ -108,6 +108,21 @@ releases.
     holds only what the overlay adds (`@noble/ed25519`), and
     `LISTED_MODULES` is new. `--registry-base-url` is the default
     `DPLAAX_REGISTRY_URL` of `.env.example`.
+  - **Runtime contract of the published `auth-provider` image.** It runs
+    the generated app, so the 0.15 variables (`OAUTH_JWT_*`,
+    `DPLAAX_REGISTRY_BASE_URL`, `CLIENT_REPOSITORY_PATH`, `HTTP_PORT` aside)
+    no longer mean anything. A container sets the 0.18 variables
+    `config/application.conf` reads (`KERNEL_DEPLOYMENT`,
+    `STORE_ACCEPT_VOLATILE`, `TOKENS_REVOCATION`, `TOKENS_SUBJECT_CHECK`,
+    `HTTP_PUBLIC_ORIGIN`, `HTTP_INSECURE_ORIGIN`, `ISSUER_URL`,
+    `KEYS_SIGNING_*`, `DID_GRANT_*`, `DPLAAX_REGISTRY_URL`) and mounts a local
+    layer of lists (`outbound.allow`, `audit.receivers`,
+    `clients.registered`) named by `APP_CONFIG`
+    (`config/local.conf,config/application.conf`); the dev composition's
+    `deploy/dev/provider.local.conf` is an example. The image listens on
+    `HTTP_HOST=0.0.0.0` and `HTTP_PORT=3000` (the app's own default is
+    8080). `--registry-base-url` in `publish-images.yml` now only fills the
+    generated examples; the registry at runtime is `DPLAAX_REGISTRY_URL`.
   - The scaffold smoke, CI and image build follow: `make smoke` boots the
     provider's sources against a throwaway DID registry on loopback and
     checks a DID-grant round trip (HS256 over the secret's UTF-8 bytes, the

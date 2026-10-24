@@ -27,7 +27,7 @@ import { parseArgs } from "node:util";
 import { isSupportedLicense, SUPPORTED_LICENSES } from "./defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "./errors.mjs";
 import { generateAuthProviderScaffold } from "./generator.mjs";
-import { isExactCommitSha } from "./overlay/modules.mjs";
+import { isExactCommitSha } from "./provin-modules.mjs";
 
 export { isExactCommitSha };
 
@@ -171,9 +171,9 @@ export function resolveGitInit(
 
 /**
  * Validate `--registry-base-url` so the substituted value cannot inject
- * HOCON or YAML metacharacters into the emitted config / docker-compose
- * files (Claude review Important #2). Returns an error message string when
- * invalid, or null on success.
+ * HOCON metacharacters into the emitted `.env.example` and
+ * `local.conf.example`. Returns an error message string when invalid, or null
+ * on success.
  */
 function validateRegistryBaseUrl(value: string): string | null {
 	let parsed: URL;

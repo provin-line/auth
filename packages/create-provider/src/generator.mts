@@ -13,8 +13,17 @@
 // is a thin wrapper; tests and tooling call this function directly.
 
 import { execFile } from "node:child_process";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rename,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { generate } from "@o3co/auth-provider-scaffold/create-app";
 import {
@@ -139,30 +148,41 @@ export async function generateAuthProviderScaffold(
 		);
 	}
 
-	await ensureCleanOutDir(opts.outDir);
-	await generate({ target: opts.outDir, modules: LISTED_MODULES });
+	const outDir = resolve(opts.outDir);
+	await ensureCleanOutDir(outDir);
 
-	const generated = await readTree(opts.outDir);
-	const composed = applyProvinModules(generated, {
-		name: opts.name,
-		description: opts.description ?? "dPLaaX auth.provider instance",
-		license,
-		author: opts.author ?? "",
-		moduleRef: opts.dplaaxModuleRef ?? DEFAULT_DPLAAX_MODULE_REF,
-		registryBaseUrl: opts.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL,
-	});
-	composed.set("LICENSE", await readFile(LICENSE_URL, "utf8"));
-
-	for (const [path, text] of composed) {
-		if (generated.get(path) === text) continue;
-		const full = join(opts.outDir, path);
-		await mkdir(dirname(full), { recursive: true });
-		await writeFile(full, text);
+	// The app is built beside the target and moved into place once whole, so a
+	// failure leaves nothing: an app without the dPLaaX modules is not a result.
+	await mkdir(dirname(outDir), { recursive: true });
+	const staging = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}-`));
+	let composed: Map<string, string>;
+	try {
+		await generate({ target: staging, modules: LISTED_MODULES });
+		const generated = await readTree(staging);
+		composed = applyProvinModules(generated, {
+			name: opts.name,
+			description: opts.description ?? "dPLaaX auth.provider instance",
+			license,
+			author: opts.author ?? "",
+			moduleRef: opts.dplaaxModuleRef ?? DEFAULT_DPLAAX_MODULE_REF,
+			registryBaseUrl: opts.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL,
+		});
+		composed.set("LICENSE", await readFile(LICENSE_URL, "utf8"));
+		for (const [path, text] of composed) {
+			if (generated.get(path) === text) continue;
+			const full = join(staging, path);
+			await mkdir(dirname(full), { recursive: true });
+			await writeFile(full, text);
+		}
+		await rename(staging, outDir);
+	} catch (e) {
+		await rm(staging, { recursive: true, force: true });
+		throw e;
 	}
 
 	if (opts.gitInit ?? true) {
-		await runGitInit(opts.outDir);
+		await runGitInit(outDir);
 	}
 
-	return { outDir: opts.outDir, filesWritten: [...composed.keys()].sort() };
+	return { outDir, filesWritten: [...composed.keys()].sort() };
 }
