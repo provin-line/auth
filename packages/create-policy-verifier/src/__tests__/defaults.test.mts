@@ -34,8 +34,8 @@ describe("DEFAULT_DEP_VERSIONS — verifier baseline", () => {
 		expect(new Set(VERIFIER.map((p) => DEFAULT_DEP_VERSIONS[p])).size).toBe(1);
 	});
 
-	it("pins the verifier baseline 0.16.1", () => {
-		expect(DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.server"]).toBe("0.16.1");
+	it("pins the verifier baseline 0.17.0", () => {
+		expect(DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.server"]).toBe("0.17.0");
 	});
 
 	it.each(["packages/policy-verifier-dplaax-module/package.json", "integration/package.json"])(
