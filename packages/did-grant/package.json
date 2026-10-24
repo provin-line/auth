@@ -46,10 +46,14 @@
 		"@o3co/auth-provider-foundation": "0.18.4",
 		"@o3co/auth-provider-identity": "0.18.4",
 		"@o3co/auth-provider-oauth": "0.18.4",
+		"vitest": "^5.0.5",
 		"zod": "^4.6.7"
 	},
 	"peerDependenciesMeta": {
 		"@noble/ed25519": {
+			"optional": true
+		},
+		"vitest": {
 			"optional": true
 		}
 	},

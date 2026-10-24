@@ -22,6 +22,7 @@ import http from "@o3co/auth-provider-foundation/http/module";
 import { httpConfig } from "@o3co/auth-provider-foundation/http/testing";
 import {
 	assemble,
+	contract,
 	defineModule,
 	kernelConfig,
 	type Module,
@@ -29,6 +30,7 @@ import {
 } from "@o3co/auth-provider-foundation/kernel";
 import { quietRuntime } from "@o3co/auth-provider-foundation/kernel/testing";
 import secretHashModule from "@o3co/auth-provider-foundation/secret-hash/module";
+import { clients } from "@o3co/auth-provider-identity/clients";
 import clientsModule from "@o3co/auth-provider-identity/clients/module";
 import { clientsConfig, publicClient } from "@o3co/auth-provider-identity/clients/testing";
 import clientAllowanceModule from "@o3co/auth-provider-oauth/client-allowance/module";
@@ -36,7 +38,8 @@ import { allowancesFor } from "@o3co/auth-provider-oauth/client-allowance/testin
 import issuerModule from "@o3co/auth-provider-oauth/issuer/module";
 import { issuerConfig } from "@o3co/auth-provider-oauth/issuer/testing";
 import { tokenEndpointLocation } from "@o3co/auth-provider-oauth/token-endpoint";
-import { grantCaller, grantCalls } from "@o3co/auth-provider-oauth/token-endpoint/testing";
+import { type Grant, grants } from "@o3co/auth-provider-oauth/grants";
+import { grantCaller, grantCalls, grantInput } from "@o3co/auth-provider-oauth/token-endpoint/testing";
 import { tokens } from "@o3co/auth-provider-oauth/tokens";
 import { tokensStandIn } from "@o3co/auth-provider-oauth/tokens/testing";
 import { type DidDocuments, didDocuments, type Resolution, spentNonces } from "../contract.mjs";
@@ -103,6 +106,12 @@ export interface ComposeOptions {
 	stands?: Stands;
 }
 
+/** The DID grant as composed, so a test can hand it a request the caller does not build. */
+const composedDidGrant = contract<Grant | undefined>("test.did-grant");
+const didGrantProbe = defineModule({ name: "did-grant-probe" }, (m) => [
+	m.provide(composedDidGrant).by(async (c) => (await c.collect(grants)).find((g) => g.grantType === DID_GRANT_TYPE)),
+]);
+
 export const minimalSection = {
 	"revocation-latency-bound": "15m",
 	"access-token-lifetime": "10m",
@@ -126,6 +135,7 @@ export async function compose(options: ComposeOptions = {}) {
 			clientAllowanceModule,
 			...standInModules(s),
 			didGrant,
+			didGrantProbe,
 			...(options.extra ?? []),
 		],
 		config: {
@@ -158,6 +168,14 @@ export async function compose(options: ComposeOptions = {}) {
 		/** Calls the DID grant as the token endpoint would for the client "app". */
 		call: (params: Record<string, unknown>) =>
 			app.get(grantCalls).call(DID_GRANT_TYPE, "app", { grant_type: DID_GRANT_TYPE, ...params }),
+		/** Calls the DID grant with the parameters in a JSON body, which the caller never sends. */
+		callJson: async (params: Record<string, unknown>) => {
+			const grant = app.get(composedDidGrant);
+			const client = await app.get(clients).find("app");
+			if (!grant || !client) throw new Error("no DID grant or client app");
+			const asJson: Grant = { ...grant, bodies: ["json"] };
+			return grant.handle(grantInput(app.get(tokens), asJson, client, { grant_type: DID_GRANT_TYPE, ...params }));
+		},
 		verify: (token: string) => app.get(tokens).verifyAccess(token),
 	};
 }
