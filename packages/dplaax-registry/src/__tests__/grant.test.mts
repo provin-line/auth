@@ -15,7 +15,7 @@
  */
 
 // The DID grant composed with this registry and did-grant-store, on
-// upstream's test parts: the composition M4t's generated provider runs.
+// upstream's test parts: the composition a generated provider runs.
 
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import http from "@o3co/auth-provider-foundation/http/module";

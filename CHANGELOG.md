@@ -19,12 +19,24 @@ releases.
     `outbound`, as the operator's own URL. The operator's destination policy
     decides between https (`outbound.internal-hosts`) and plain http to a
     private address (`outbound.plain-internal`).
-  - Its section `dplaax-registry` (`url`, `allowed-registries`, `timeout`,
-    `max-document-size`) replaces `oauth.grants.did.resolver.*`.
-    Concurrency is now outbound's own `max-concurrent`.
-  - The rejected and unavailable outcomes are those of 0.15's resolver: a
-    redirect is unavailable, and an oversized document is rejected.
-  - `strictJsonParse` moves here from `auth-provider-did`.
+  - Its section `dplaax-registry` replaces 0.15's `dplaax.registry.baseUrl`
+    / `allowedRegistries` and `oauth.grants.did.resolver.*`: `url` (now
+    required; 0.15 defaulted to `https://registry.dplaax.dev`),
+    `allowed-registries`, `timeout` (5s) and `max-document-size` (64KiB,
+    within `outbound.max-response-size`; 0.15 took 1 MiB).
+  - Concurrency is outbound's `max-concurrent` (16, shared with every
+    outbound caller): a request past it is refused at once (503), where 0.15
+    queued it behind its own limit of 8.
+  - Outcomes: rejected for a DID the registry does not hold (404 or another
+    4xx) or bytes that are no document for it; unavailable for 5xx, no
+    answer in time, a refused destination (a redirect included) and an
+    answer over the size limit. outbound stops a large answer before its
+    status is read, so an oversized document is now unavailable (503), where
+    0.15 rejected it (400).
+  - Decoding meets rule `canon.strict-decode`: invalid UTF-8 and unpaired
+    surrogate escapes are refused, and integers beyond 2^53 are kept
+    exactly. A copy of `strictJsonParse` lives here; the one
+    `auth-provider-did` exports goes with that package.
 - **`@provin-line/auth-did-grant-store`**: keeps the DID grant's spent nonces
   on `records` over the kernel's `store` (`packages/did-grant-store`), with
   the guarantees `spentNoncesNeeds` asks, as upstream's `jwt-bearer-store`

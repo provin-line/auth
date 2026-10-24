@@ -24,10 +24,11 @@ import { registryResolver } from "./resolver.mjs";
 
 const section = z.strictObject({
 	url: urlSetting({ schemes: ["https", "http"], query: false }).describe(
-		"Required. The DID registry's base URL. outbound's destination policy decides how it is reached: https at a host outbound.internal-hosts lists, or plain http to a pair outbound.plain-internal names.",
+		"Required. The DID registry's base URL. outbound's destination policy decides how it is reached: https to a host outbound.allow names (at a private address, one outbound.internal-hosts lists), or plain http to a pair outbound.plain-internal names.",
 	),
 	"allowed-registries": z
-		.array(z.string().min(1))
+		// The grammar of a did:dplaax registry segment: a name no DID can carry is refused.
+		.array(z.string().regex(/^[A-Za-z0-9._-]+$/).refine((name) => !/^\.+$/.test(name), "a dot-only name"))
 		.prefault([])
 		.describe("Registry names a DID may carry beyond url's host, for DIDs kept under an earlier registry's name."),
 	timeout: setting

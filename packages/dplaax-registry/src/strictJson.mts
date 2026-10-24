@@ -22,11 +22,13 @@
  * two conflicting `id` fields past a naive reviewer of the raw bytes) and
  * ignores trailing data after the root value. `strictJsonParse` is a
  * recursive-descent parser over the standard JSON grammar (RFC 8259) that
- * rejects both.
+ * rejects both, and meets rule canon.strict-decode: an integer beyond 2^53
+ * is kept exactly (as a bigint), and invalid UTF-8 (`strictJsonDecode`) and
+ * unpaired surrogate escapes are refused rather than replaced with U+FFFD.
  */
 export class StrictJsonError extends Error {
 	constructor(
-		readonly reason: "duplicate-key" | "trailing-data" | "syntax",
+		readonly reason: "duplicate-key" | "trailing-data" | "syntax" | "unpaired-surrogate" | "invalid-utf8",
 		message?: string,
 	) {
 		super(message ?? `strict JSON parse failed: ${reason}`);
@@ -41,6 +43,20 @@ export class StrictJsonError extends Error {
  * preserved as-is (not stripped) — this is a strictness upgrade over
  * `JSON.parse`, not a schema validator.
  */
+/**
+ * Decodes `bytes` as UTF-8, refusing an invalid sequence, and parses the
+ * text with `strictJsonParse`. A leading byte order mark is dropped.
+ */
+export function strictJsonDecode(bytes: Uint8Array): unknown {
+	let text: string;
+	try {
+		text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+	} catch {
+		throw new StrictJsonError("invalid-utf8", "strict JSON decode failed: invalid UTF-8");
+	}
+	return strictJsonParse(text);
+}
+
 export function strictJsonParse(text: string): unknown {
 	try {
 		return parseDocument(text);
@@ -206,10 +222,19 @@ function parseDocument(text: string): unknown {
 						result += "\t";
 						break;
 					case "u": {
-						const hex = text.slice(i + 1, i + 5);
-						if (!/^[0-9a-fA-F]{4}$/.test(hex)) fail("invalid unicode escape");
-						result += String.fromCharCode(Number.parseInt(hex, 16));
+						const unit = readEscapedUnit(i + 1);
 						i += 4;
+						if (unit >= 0xdc00 && unit <= 0xdfff) unpaired(i);
+						if (unit >= 0xd800 && unit <= 0xdbff) {
+							// A high surrogate stands only before an escaped low one.
+							if (text[i + 1] !== "\\" || text[i + 2] !== "u") unpaired(i);
+							const low = readEscapedUnit(i + 3);
+							if (low < 0xdc00 || low > 0xdfff) unpaired(i);
+							result += String.fromCharCode(unit, low);
+							i += 6;
+							break;
+						}
+						result += String.fromCharCode(unit);
 						break;
 					}
 					default:
@@ -226,7 +251,18 @@ function parseDocument(text: string): unknown {
 		return result;
 	}
 
-	function parseNumber(): number {
+	/** The code unit of the four hex digits at `at`. */
+	function readEscapedUnit(at: number): number {
+		const hex = text.slice(at, at + 4);
+		if (!/^[0-9a-fA-F]{4}$/.test(hex)) fail("invalid unicode escape");
+		return Number.parseInt(hex, 16);
+	}
+
+	function unpaired(at: number): never {
+		throw new StrictJsonError("unpaired-surrogate", `unpaired surrogate escape at position ${at}`);
+	}
+
+	function parseNumber(): number | bigint {
 		const start = i;
 		if (text[i] === "-") i++;
 		if (text[i] === "0") {
@@ -236,18 +272,24 @@ function parseDocument(text: string): unknown {
 		} else {
 			fail("invalid number");
 		}
+		let integer = true;
 		if (text[i] === ".") {
+			integer = false;
 			i++;
 			if (!isDigit(text[i])) fail("invalid number");
 			while (isDigit(text[i])) i++;
 		}
 		if (text[i] === "e" || text[i] === "E") {
+			integer = false;
 			i++;
 			if (text[i] === "+" || text[i] === "-") i++;
 			if (!isDigit(text[i])) fail("invalid number");
 			while (isDigit(text[i])) i++;
 		}
-		return Number(text.slice(start, i));
+		const literal = text.slice(start, i);
+		const value = Number(literal);
+		// An integer a double cannot hold exactly is kept as a bigint.
+		return integer && !Number.isSafeInteger(value) ? BigInt(literal) : value;
 	}
 
 	const value = parseValue();

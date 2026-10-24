@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import { describe, expect, it } from "vitest";
-import { StrictJsonError, strictJsonParse } from "../strictJson.mjs";
+import { StrictJsonError, strictJsonDecode, strictJsonParse } from "../strictJson.mjs";
 
 describe("strictJsonParse", () => {
 	it("rejects duplicate object keys at any depth", () => {
@@ -74,5 +74,51 @@ describe("strictJsonParse", () => {
 		expect(names).toContain("id");
 
 		expect(JSON.stringify(parsed)).toEqual(JSON.stringify(JSON.parse(text)));
+	});
+});
+
+// Rule canon.strict-decode: integer precision beyond 2^53 is kept, and invalid
+// UTF-8 and unpaired surrogate escapes are refused.
+describe("strictJsonParse — canon.strict-decode", () => {
+	it("keeps an integer beyond 2^53 exactly, as a bigint", () => {
+		expect(strictJsonParse('{"n":9007199254740993}')).toEqual({ n: 9007199254740993n });
+	});
+
+	it("keeps a safe integer as a number", () => {
+		expect(strictJsonParse('{"n":9007199254740991}')).toEqual({ n: 9007199254740991 });
+	});
+
+	it("takes a surrogate pair written as two escapes", () => {
+		expect(strictJsonParse('"\\uD83D\\uDE00"')).toBe("\u{1F600}");
+	});
+
+	it.each([
+		["a high surrogate with nothing after it", '"\\uD83D"'],
+		["a high surrogate before another character", '"\\uD83Dx"'],
+		["a lone low surrogate", '"\\uDE00"'],
+	])("refuses %s", (_, text) => {
+		expect(() => strictJsonParse(text)).toThrow(StrictJsonError);
+		try {
+			strictJsonParse(text);
+		} catch (err) {
+			expect((err as StrictJsonError).reason).toBe("unpaired-surrogate");
+		}
+	});
+});
+
+describe("strictJsonDecode", () => {
+	it("refuses bytes that are not UTF-8", () => {
+		const bytes = new Uint8Array([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x7d]);
+		expect(() => strictJsonDecode(bytes)).toThrow(StrictJsonError);
+		try {
+			strictJsonDecode(bytes);
+		} catch (err) {
+			expect((err as StrictJsonError).reason).toBe("invalid-utf8");
+		}
+	});
+
+	it("takes a document that begins with a byte order mark", () => {
+		const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"id":"x"}')]);
+		expect(strictJsonDecode(bytes)).toEqual({ id: "x" });
 	});
 });

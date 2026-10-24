@@ -31,16 +31,19 @@ import { beforeEach, describe, expect, it } from "vitest";
 import registry from "../module.mjs";
 
 const now = 1_800_000_000_000;
-const runtime = quietRuntime({ clock: { now: () => now }, random: { bytes: (n) => new Uint8Array(n).fill(1) } });
+const runtime = quietRuntime({ clock: { now: () => now } });
 const url = "https://registry.example";
 const owner = "did:dplaax:registry.example:org:acme";
 /** How the outbound below explains a host its policy refuses. */
 const notAllowed = "not-allowed: name the host in outbound.allow, or set outbound.allow-any-public";
 
 const sent: { url: string; request: OutboundRequest | undefined; narrower: Narrower | undefined }[] = [];
+/** The narrowers the destination policy was asked about at boot. */
+const checked: (Narrower | undefined)[] = [];
 let answer: (to: string) => Promise<OutboundResponse> = async () => json({ id: owner });
 beforeEach(() => {
 	sent.length = 0;
+	checked.length = 0;
 	answer = async () => json({ id: owner });
 });
 
@@ -61,7 +64,10 @@ const outboundAnswering = defineModule({ name: "outbound" }, (m) => [
 		},
 	})),
 	m.provide(outboundRefusals).by(() => ({
-		explained: (to: string) => (new URL(to).hostname === "refused.example" ? notAllowed : undefined),
+		explained: (to: string, narrower?: Narrower) => {
+			checked.push(narrower);
+			return new URL(to).hostname === "refused.example" ? notAllowed : undefined;
+		},
 	})),
 ]);
 
@@ -136,6 +142,33 @@ describe("dplaax-registry resolution", () => {
 		expect(sent).toEqual([]);
 	});
 
+	it("matches the URL's own host in any case", async () => {
+		const upper = "did:dplaax:Registry.Example:org:acme";
+		answer = async () => json({ id: upper });
+		await expect((await resolver()).resolve(upper)).resolves.toMatchObject({ kind: "resolved" });
+	});
+
+	it("still takes the URL's own host when allowed-registries names others", async () => {
+		const documents = await resolver({ url, "allowed-registries": ["legacy.example"] });
+		await expect(documents.resolve(owner)).resolves.toMatchObject({ kind: "resolved" });
+	});
+
+	it("resolves an account type other than org", async () => {
+		const user = "did:dplaax:registry.example:user:alice";
+		answer = async () => json({ id: user });
+		await expect((await resolver()).resolve(user)).resolves.toMatchObject({ kind: "resolved" });
+		expect(sent[0]?.url).toBe(`${url}/did/user/alice/did.json`);
+	});
+
+	it.each([
+		["a segment with a separator", "did:dplaax:registry.example:org:a%2Fb"],
+		["a dot-only segment", "did:dplaax:registry.example:org:.."],
+		["a segment with a query", "did:dplaax:registry.example:org:a?x=1"],
+	])("refuses %s before building any URL", async (_, did) => {
+		await expect((await resolver()).resolve(did)).resolves.toMatchObject({ kind: "rejected" });
+		expect(sent).toEqual([]);
+	});
+
 	it("takes a DID under a registry name allowed-registries lists, in any case", async () => {
 		const legacy = "did:dplaax:Legacy.Example:org:acme";
 		answer = async () => json({ id: legacy });
@@ -171,12 +204,30 @@ describe("dplaax-registry resolution", () => {
 		await expect(documents.resolve(owner)).rejects.toSatisfy(isUnavailable);
 	});
 
-	it("rejects a document larger than the section allows", async () => {
+	it("throws Unavailable for an answer outbound stops as too large, whose status it never read", async () => {
+		// outbound reads the body before it answers, so a 503 with a large body
+		// arrives as too-large too: not a fact about the DID.
 		answer = async () => {
 			throw new OutboundUnavailable("too-large");
 		};
 		const documents = await resolver();
-		await expect(documents.resolve(owner)).resolves.toMatchObject({ kind: "rejected" });
+		await expect(documents.resolve(owner)).rejects.toSatisfy(isUnavailable);
+	});
+
+	it("keeps a byte order mark in the bytes and the digest, and parses the document after it", async () => {
+		const served = new Uint8Array([0xef, 0xbb, 0xbf, ...bytesOf(JSON.stringify({ id: owner }))]);
+		answer = async () => ({ status: 200, headers: new Map(), body: served });
+		const resolved = await (await resolver()).resolve(owner);
+		if (resolved.kind !== "resolved") throw new Error(JSON.stringify(resolved));
+		expect(resolved.resolution.canonicalBytes).toEqual(served);
+		expect(resolved.resolution.digest).toBe(`sha256:${createHash("sha256").update(served).digest("hex")}`);
+		expect(resolved.resolution.document).toEqual({ id: owner });
+	});
+
+	it("rejects a document whose bytes are not UTF-8", async () => {
+		const served = new Uint8Array([...bytesOf(`{"id":"${owner}","x":"`), 0xff, ...bytesOf('"}')]);
+		answer = async () => ({ status: 200, headers: new Map(), body: served });
+		await expect((await resolver()).resolve(owner)).resolves.toMatchObject({ kind: "rejected" });
 	});
 
 	it.each([
@@ -194,6 +245,17 @@ describe("dplaax-registry resolution", () => {
 describe("dplaax-registry boot", () => {
 	it("refuses a URL outbound's destination policy refuses, at the url key", async () => {
 		expect(await refusedAt(resolver({ url: "https://refused.example" }))).toEqual(["dplaax-registry.url"]);
+	});
+
+	it("asks the destination policy about the URL as the operator's own", async () => {
+		await resolver();
+		expect(checked).toEqual([{ internal: url }]);
+	});
+
+	it("refuses an allowed-registries name no DID can carry", async () => {
+		expect(await refusedAt(resolver({ url, "allowed-registries": ["bad/name"] }))).toEqual([
+			expect.stringContaining("allowed-registries"),
+		]);
 	});
 
 	it("refuses a section without url", async () => {

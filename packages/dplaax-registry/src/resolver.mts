@@ -18,13 +18,12 @@ import { createHash } from "node:crypto";
 import { Unavailable } from "@o3co/auth-provider-foundation/kernel";
 import {
 	DestinationRefused,
-	isOutboundUnavailable,
 	type Narrower,
 	type Outbound,
 } from "@o3co/auth-provider-foundation/outbound";
 import type { DidDocument, DidDocuments } from "@provin-line/auth-did-grant";
 import { parseDplaaxDid, requireOwner } from "@provin-line/did-dplaax";
-import { StrictJsonError, strictJsonParse } from "./strictJson.mjs";
+import { StrictJsonError, strictJsonDecode } from "./strictJson.mjs";
 
 export interface RegistryResolverOptions {
 	/** The registry's base URL, as the operator configured it. */
@@ -49,8 +48,13 @@ const rejected = (reason: string): Resolved => ({ kind: "rejected", reason });
  * host or one `allowedRegistries` names, in any case.
  *
  * Failures follow rule auth.resolve.failure-mapping: a registry that cannot
- * be reached or answers 5xx is INDETERMINATE (`Unavailable`); a DID it does
- * not hold, or bytes that are no document for it, are FAILED (rejected).
+ * be reached or answers 5xx, or an answer outbound stops as too large before
+ * its status is read, is INDETERMINATE (`Unavailable`); a DID it does not
+ * hold, or bytes that are no document for it, are FAILED (rejected).
+ *
+ * The URL is built from the DID's segments, which `parseDplaaxDid`'s
+ * grammar limits to `[A-Za-z0-9._-]` and never a dot-only segment: no
+ * separator, query or traversal can reach it.
  */
 export function registryResolver(options: RegistryResolverOptions): DidDocuments {
 	const base = options.url.replace(/\/+$/, "");
@@ -67,7 +71,8 @@ export function registryResolver(options: RegistryResolverOptions): DidDocuments
 				parsed = parseDplaaxDid(did);
 				requireOwner(parsed);
 			} catch {
-				return rejected(`not a did:dplaax owner DID: ${did}`);
+				// The input is not echoed: it is whatever the client sent.
+				return rejected("not a did:dplaax owner DID");
 			}
 			if (!allowed.has(parsed.registry.toLowerCase())) {
 				return rejected(`registry ${parsed.registry} is not one this provider resolves`);
@@ -82,11 +87,9 @@ export function registryResolver(options: RegistryResolverOptions): DidDocuments
 					options.narrower,
 				);
 			} catch (err) {
-				if (isOutboundUnavailable(err) && err.failure === "too-large") {
-					return rejected(`the registry's document for ${did} is larger than this provider takes`);
-				}
 				// A refused destination (a redirect, an address the policy leaves out)
-				// says nothing of the DID: indeterminate.
+				// says nothing of the DID: indeterminate. outbound's own failures,
+				// too-large included, are Unavailable already.
 				if (DestinationRefused.is(err)) throw new Unavailable(`dplaax registry: ${err.reason}`);
 				throw err;
 			}
@@ -102,8 +105,9 @@ export function registryResolver(options: RegistryResolverOptions): DidDocuments
 			const digest = `sha256:${createHash("sha256").update(canonicalBytes).digest("hex")}`;
 			let body: unknown;
 			try {
-				// Strict: a duplicate key or trailing data could smuggle an ambiguous document.
-				body = strictJsonParse(new TextDecoder().decode(canonicalBytes));
+				// Strict (rule canon.strict-decode): a duplicate key, trailing data or
+				// replaced bytes would let the document differ from what was digested.
+				body = strictJsonDecode(canonicalBytes);
 			} catch (err) {
 				if (err instanceof StrictJsonError) return rejected(`malformed document for ${did} (${err.reason})`);
 				throw err;
