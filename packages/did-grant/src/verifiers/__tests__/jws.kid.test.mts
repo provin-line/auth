@@ -108,4 +108,32 @@ describe("JwsVerifier — kid surfacing", () => {
 			error: "invalid_request",
 		});
 	});
+
+	it("refuses a protected kid that is not a string", async () => {
+		const verifier = new JwsVerifier("EdDSA");
+		const { privateKey, publicKey } = await generateKeyPair("EdDSA");
+		const payload = JSON.stringify({ did, timestamp: new Date().toISOString(), nonce: "n" });
+		const jws = await new CompactSign(new TextEncoder().encode(payload))
+			.setProtectedHeader({ alg: "EdDSA", kid: 5 } as unknown as { alg: "EdDSA" })
+			.sign(privateKey);
+		const resolvedKey: ExtractedKey = { format: "jwk", key: await exportJWK(publicKey), id: methodId };
+
+		await expect(verifier.verify({ body: { jws }, did, resolvedKey })).resolves.toMatchObject({
+			valid: false,
+			error: "invalid_request",
+		});
+	});
+
+	it("refuses a signed payload that is JSON but no object", async () => {
+		const verifier = new JwsVerifier("EdDSA");
+		const { privateKey, publicKey } = await generateKeyPair("EdDSA");
+		const resolvedKey: ExtractedKey = { format: "jwk", key: await exportJWK(publicKey), id: methodId };
+		for (const payload of ["null", "[]"]) {
+			const jws = await new CompactSign(new TextEncoder().encode(payload)).setProtectedHeader({ alg: "EdDSA" }).sign(privateKey);
+			await expect(verifier.verify({ body: { jws }, did, resolvedKey })).resolves.toMatchObject({
+				valid: false,
+				error: "invalid_request",
+			});
+		}
+	});
 });

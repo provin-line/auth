@@ -67,11 +67,11 @@ Form or JSON, every parameter a string: `grant_type`, `did`, optionally `scope`,
 - JWS algorithms: `jws`, a compact JWS whose protected header's `alg` selects the algorithm.
 - `algorithm` names one explicitly, which is how a contributed algorithm is chosen.
 
-The message holds `did`, `timestamp` (RFC 3339), `nonce` and optionally `audience`. Under an OWNER contract it is a `login-transcript-v1`: its issuer, token endpoint, audience, contract and DIDs must be this deployment's, and its `verification_method` must name the JWS header's `kid` and a key listed under the contract's relationship (`authentication` or `assertionMethod`).
+The message is a JSON object holding `did`, `timestamp` (RFC 3339), `nonce`, and optionally `audience` and `verification_method`. Under an OWNER contract it is a `login-transcript-v1`: its issuer, token endpoint, audience, contract and DIDs must be this deployment's, and its `verification_method` must name the JWS header's `kid` and a key listed under the contract's relationship (`authentication` or `assertionMethod`).
 
-Under every contract, each method the request names, the JWS header's `kid` and the message's `verification_method`, must be the method that verified the signature (rule `auth.grant.kid-match`). A message that names neither, such as an `ed25519_raw` message without `verification_method`, has nothing to match.
+Under every contract, each method the request names, the JWS header's `kid` and the message's `verification_method`, must be the method that verified the signature (rule `auth.grant.kid-match`): compared as exact strings with its absolute id, so a relative `#key-1` is refused. A message that names neither, such as an `ed25519_raw` message without `verification_method`, has nothing to match.
 
-A message is used once: its nonce is spent before the client's allowance is asked, and kept until the message's window closes. A refused OWNER transcript leaves it unspent: the transcript, its audience included, is checked before.
+A message is used once: its nonce is spent before the client's allowance is asked, and kept until the message's window closes. A refused OWNER transcript, and a method reference that does not match, leave it unspent: both are checked before, the transcript's audience included.
 
 ## The token
 

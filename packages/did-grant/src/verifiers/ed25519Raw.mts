@@ -50,9 +50,9 @@ export class Ed25519RawVerifier implements SignatureVerifier {
 		// `JwsVerifier` (rule `auth.grant.kid-match`) — an attacker-controlled
 		// top-level `headerKid` member in the signed payload must not be able
 		// to forge a match for the three-way kid check.
-		let rawParsed: Record<string, unknown>;
+		let parsed: unknown;
 		try {
-			rawParsed = JSON.parse(body.message) as Record<string, unknown>;
+			parsed = JSON.parse(body.message);
 		} catch {
 			return {
 				valid: false,
@@ -60,6 +60,10 @@ export class Ed25519RawVerifier implements SignatureVerifier {
 				errorDescription: "message must be valid JSON",
 			};
 		}
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+			return { valid: false, error: "invalid_request", errorDescription: "message must be a JSON object" };
+		}
+		const rawParsed = parsed as Record<string, unknown>;
 		delete rawParsed.headerKid;
 		// The payload's verification_method, which the grant matches against the
 		// resolved key (rule auth.grant.kid-match). A non-string can never match.

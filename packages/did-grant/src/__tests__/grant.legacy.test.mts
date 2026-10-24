@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { defineModule, isUnavailable } from "@o3co/auth-provider-foundation/kernel";
 import { describe, expect, it } from "vitest";
 import { type SignatureVerifier, signatureAlgorithms, type VerificationResult } from "../contract.mjs";
@@ -235,6 +235,8 @@ describe("did-grant with a contributed signature algorithm", () => {
 
 describe("did-grant LEGACY_DID_LOGIN@1 — rule auth.grant.kid-match", () => {
 	const jwsSection = { ...minimalSection, "supported-algorithms": ["ed25519_raw", "ed25519_jws"] };
+	const prehashSection = { ...minimalSection, "supported-algorithms": ["ed25519_prehash"] };
+	const other = (key: { did: string }) => `${key.did}#key-9`;
 
 	it("issues for a JWS whose header kid names the resolved method", async () => {
 		const { key, call } = await registered({ section: jwsSection });
@@ -253,16 +255,63 @@ describe("did-grant LEGACY_DID_LOGIN@1 — rule auth.grant.kid-match", () => {
 		expect(s.spent.size).toBe(0);
 	});
 
-	it("refuses a JWS whose payload names another method than its header", async () => {
-		const { key, call } = await registered({ section: jwsSection });
-		const payload = legacyMessage(key, { verification_method: `${key.did}#key-9` });
-		await expect(call(await jwsParams(key, payload))).resolves.toMatchObject({ kind: "error", error: "invalid_grant" });
+	it("refuses a JWS whose payload names another method than its header, leaving the nonce unspent", async () => {
+		const { key, call, stands: s } = await registered({ section: jwsSection });
+		const outcome = await call(await jwsParams(key, legacyMessage(key, { verification_method: other(key) })));
+		expect(outcome).toMatchObject({ kind: "error", error: "invalid_grant" });
+		expect(s.spent.size).toBe(0);
 	});
 
-	it("refuses a raw message whose payload names another method", async () => {
-		const { key, call } = await registered();
-		const outcome = await call(rawParams(key, legacyMessage(key, { verification_method: `${key.did}#key-9` })));
+	it("matches a kid-less JWS by its payload's verification_method alone", async () => {
+		const { key, call } = await registered({ section: jwsSection });
+		const named = (method: string) => jwsParams(key, legacyMessage(key, { verification_method: method }), {});
+		await expect(call(await named(key.methodId))).resolves.toMatchObject({ kind: "issued" });
+		await expect(call(await named(other(key)))).resolves.toMatchObject({ kind: "error", error: "invalid_grant" });
+	});
+
+	it("compares method ids as exact strings: a relative kid for the resolved method is refused", async () => {
+		const { key, call } = await registered({ section: jwsSection });
+		const relative = key.methodId.slice(key.did.length);
+		expect(relative.startsWith("#")).toBe(true);
+		const outcome = await call(await jwsParams(key, legacyMessage(key), { kid: relative }));
 		expect(outcome).toMatchObject({ kind: "error", error: "invalid_grant" });
+	});
+
+	it("refuses a raw message whose payload names another method, leaving the nonce unspent", async () => {
+		const { key, call, stands: s } = await registered();
+		const outcome = await call(rawParams(key, legacyMessage(key, { verification_method: other(key) })));
+		expect(outcome).toMatchObject({ kind: "error", error: "invalid_grant" });
+		expect(s.spent.size).toBe(0);
+	});
+
+	it("reads verification_method, never a payload member named like the parsed field", async () => {
+		const { key, call } = await registered();
+		const message = legacyMessage(key, { verificationMethod: key.methodId, verification_method: other(key) });
+		await expect(call(rawParams(key, message))).resolves.toMatchObject({ kind: "error", error: "invalid_grant" });
+	});
+
+	it("refuses a prehashed message whose payload names another method", async () => {
+		const { key, call } = await registered({ section: prehashSection });
+		const prehashParams = (message: Record<string, unknown>) => {
+			const text = JSON.stringify(message);
+			const digest = createHash("sha256").update(text).digest();
+			return { did: key.did, message: text, prehash: "sha256", signature: sign(null, digest, key.privateKey).toString("base64") };
+		};
+		await expect(call(prehashParams(legacyMessage(key, { verification_method: key.methodId })))).resolves.toMatchObject({
+			kind: "issued",
+		});
+		await expect(call(prehashParams(legacyMessage(key, { verification_method: other(key) })))).resolves.toMatchObject({
+			kind: "error",
+			error: "invalid_grant",
+		});
+	});
+
+	it("refuses a message that is JSON but no object as a malformed request", async () => {
+		const { key, call } = await registered();
+		await expect(call({ did: key.did, message: "null", signature: "AAAA" })).resolves.toMatchObject({
+			kind: "error",
+			error: "invalid_request",
+		});
 	});
 
 	it("refuses a message whose verification_method is not a string, which can name no method", async () => {
@@ -277,4 +326,3 @@ describe("did-grant LEGACY_DID_LOGIN@1 — rule auth.grant.kid-match", () => {
 		expect(outcome).toMatchObject({ kind: "issued" });
 	});
 });
-
