@@ -10,6 +10,23 @@ releases.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-26
+
+A minor number, not a patch: the provider moves to auth.provider 0.18.4.
+Its generator now calls upstream's, and the DID grant, the registry
+resolver and the nonce store are 0.18 modules. Every provider deployment
+changes its settings, its image's variables and its records, and the 0.15
+packages are removed. The policy-verifier baseline moves to 0.17.0, which
+changes the `AppConfig` type. Consumers that track the moving `v0.4` image
+tag are unaffected; provin.oss's quickstart pins `v0.3` and moves to `v0.5`
+on its own schedule.
+
+Tokens from the DID grant carry the six signed claims of
+`auth.token.signed-claims`, the generated provider answers revocation and
+introspection, and rule `auth.grant.kid-match` holds under every contract.
+[docs/upstream-compatibility.md](docs/upstream-compatibility.md) lists what
+an existing provider or verifier instance changes.
+
 ### Added
 
 - **`@provin-line/auth-dplaax-registry`**: provides the DID grant's
@@ -160,8 +177,8 @@ releases.
     key bytes. The default, `"utf8"`, is the reading earlier verifiers
     applied, so nothing changes for a deployment that does not set it. The
     generated verifier now writes `secretEncoding = "utf8"`, overridable
-    with `OAUTH_JWT_SECRET_ENCODING`. That is the reading the auth.provider
-    0.18 this repository is moving to will be configured with.
+    with `OAUTH_JWT_SECRET_ENCODING`, the reading the generated provider is
+    configured with (`keys.signing.secret-encoding = utf8`).
   - 0.16.3 reads the client from `client_id` as well as `azp`, which
     auth.provider 0.18's tokens need.
   - The generated verifier also emits `@o3co/ts.hocon` 1.14.3 (was 0.1.5),
@@ -680,7 +697,8 @@ SECURITY.md).
   `ghcr.io/provin-line/auth-auth-provider`) by `publish-images.yml` on `v*`
   tags, consumed by the provin.oss quickstart via `AUTH_REF`.
 
-[Unreleased]: https://github.com/provin-line/auth/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/provin-line/auth/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/provin-line/auth/releases/tag/v0.5.0
 [0.4.0]: https://github.com/provin-line/auth/releases/tag/v0.4.0
 [0.3.1]: https://github.com/provin-line/auth/releases/tag/v0.3.1
 [0.3.0]: https://github.com/provin-line/auth/releases/tag/v0.3.0
