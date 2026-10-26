@@ -10,7 +10,7 @@ releases.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-26
+## [0.5.0] - 2026-10-27
 
 A minor number, not a patch: the provider moves to auth.provider 0.18.4.
 Its generator now calls upstream's, and the DID grant, the registry
