@@ -1,0 +1,47 @@
+{
+	"name": "@provin-line/auth-did-grant-store",
+	"description": "Keeps the DID grant's spent nonces on auth.provider's store",
+	"version": "0.1.0",
+	"license": "Apache-2.0",
+	"type": "module",
+	"exports": {
+		"./module": {
+			"types": "./dist/module.d.mts",
+			"default": "./dist/module.mjs"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/provin-line/auth.git",
+		"directory": "packages/did-grant-store"
+	},
+	"scripts": {
+		"prebuild": "rimraf dist",
+		"build": "tsc",
+		"prepare": "pnpm run build",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage"
+	},
+	"peerDependencies": {
+		"@o3co/auth-provider-foundation": "0.18.4",
+		"@provin-line/auth-did-grant": "^0.1.0"
+	},
+	"devDependencies": {
+		"@o3co/auth-provider-foundation": "0.18.4",
+		"@o3co/auth-provider-identity": "0.18.4",
+		"@o3co/auth-provider-oauth": "0.18.4",
+		"@provin-line/auth-did-grant": "workspace:*",
+		"@types/node": "^26.6.5",
+		"@vitest/coverage-v8": "^5.0.5",
+		"rimraf": "^6.1.3",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.5",
+		"zod": "^4.6.7"
+	}
+}

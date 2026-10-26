@@ -1,0 +1,145 @@
+/*
+ * Copyright 2026 1o1 Co. Ltd.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import { compactVerify, decodeProtectedHeader, importJWK } from "jose";
+
+import type {
+	ParsedMessage,
+	SignatureVerifier,
+	VerificationContext,
+	VerificationResult,
+} from "./types.mjs";
+
+type JwsAlgorithm = "EdDSA" | "ES256";
+
+export class JwsVerifier implements SignatureVerifier {
+	constructor(private readonly expectedAlg: JwsAlgorithm) {}
+
+	async verify(ctx: VerificationContext): Promise<VerificationResult> {
+		const { body, did, resolvedKey } = ctx;
+
+		// 1. Validate jws is present
+		if (typeof body.jws !== "string" || !body.jws) {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "jws is required",
+			};
+		}
+
+		// 2. Decode protected header and check algorithm
+		let header: { alg?: string; kid?: unknown };
+		try {
+			header = decodeProtectedHeader(body.jws);
+		} catch {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "invalid JWS protected header",
+			};
+		}
+
+		// A kid that is not a string can never name a method (rule auth.grant.kid-match).
+		if (header.kid !== undefined && typeof header.kid !== "string") {
+			return { valid: false, error: "invalid_request", errorDescription: "kid must be a string" };
+		}
+
+		if (header.alg !== this.expectedAlg) {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: `algorithm mismatch: expected ${this.expectedAlg}, got ${header.alg}`,
+			};
+		}
+
+		// 3. Import public key from resolvedKey (JWK format only for JWS)
+		if (resolvedKey.format !== "jwk") {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "JwsVerifier requires a JWK key; multibase is not supported",
+			};
+		}
+		let publicKey: CryptoKey | Uint8Array;
+		try {
+			publicKey = await importJWK(resolvedKey.key, this.expectedAlg);
+		} catch {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "invalid JWK public key",
+			};
+		}
+
+		// 5. Verify JWS signature
+		let payload: Uint8Array;
+		try {
+			const result = await compactVerify(body.jws, publicKey);
+			payload = result.payload;
+		} catch {
+			return {
+				valid: false,
+				error: "invalid_grant",
+				errorDescription: "JWS signature verification failed",
+			};
+		}
+
+		// 6. Parse payload as JSON -> ParsedMessage
+		let parsedPayload: unknown;
+		try {
+			parsedPayload = JSON.parse(new TextDecoder().decode(payload));
+		} catch {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "payload must be valid JSON",
+			};
+		}
+		if (typeof parsedPayload !== "object" || parsedPayload === null || Array.isArray(parsedPayload)) {
+			return { valid: false, error: "invalid_request", errorDescription: "payload must be a JSON object" };
+		}
+		const rawPayload = parsedPayload as Record<string, unknown>;
+
+		// Surface the JWS header's kid and the payload's verification_method;
+		// the grant matches them against the resolved key (rule
+		// auth.grant.kid-match). A method id that is not a string can never match.
+		const method = rawPayload.verification_method;
+		if (method !== undefined && typeof method !== "string") {
+			return { valid: false, error: "invalid_request", errorDescription: "verification_method must be a string" };
+		}
+		const parsedMessage: ParsedMessage = {
+			...(rawPayload as unknown as ParsedMessage),
+			headerKid: header.kid,
+			verificationMethod: method,
+		};
+
+		// 7. Validate payload.did matches ctx.did
+		if (parsedMessage.did !== did) {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "payload.did must match did",
+			};
+		}
+
+		// 8. Return success
+		return {
+			valid: true,
+			subject: did,
+			audience: parsedMessage.audience,
+			parsedMessage,
+		};
+	}
+}

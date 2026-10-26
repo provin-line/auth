@@ -14,72 +14,68 @@
  * limitations under the License.
  */
 
+import crypto from "node:crypto";
+import keysModule from "@o3co/auth-provider-foundation/keys/module";
+import { keysConfig } from "@o3co/auth-provider-foundation/keys/testing";
 import {
-	createSymmetricKeyStore,
-	type GrantContext,
-	type GrantDependencies,
-} from "@o3co/auth-provider-core";
-import {
-	createDidGrant,
-	type DidDocument,
-	type DidDocumentResolver,
-	ResolutionRejectedError,
-	type ResolutionResult,
-} from "@provin-line/auth-provider-did";
+	assemble,
+	defineModule,
+	isUnavailable,
+	kernelConfig,
+} from "@o3co/auth-provider-foundation/kernel";
+import { quietRuntime } from "@o3co/auth-provider-foundation/kernel/testing";
+import secretHashModule from "@o3co/auth-provider-foundation/secret-hash/module";
+import { simulatedStore } from "@o3co/auth-provider-foundation/store/testing";
+import clientsModule from "@o3co/auth-provider-identity/clients/module";
+import { clientsConfig, publicClient } from "@o3co/auth-provider-identity/clients/testing";
+import clientAllowanceModule from "@o3co/auth-provider-oauth/client-allowance/module";
+import { allowancesFor } from "@o3co/auth-provider-oauth/client-allowance/testing";
+import issuerModule from "@o3co/auth-provider-oauth/issuer/module";
+import { issuerConfig } from "@o3co/auth-provider-oauth/issuer/testing";
+import senderBindingModule from "@o3co/auth-provider-oauth/sender-binding/module";
+import { grantCaller, grantCalls } from "@o3co/auth-provider-oauth/token-endpoint/testing";
+import { tokenEndpointLocation } from "@o3co/auth-provider-oauth/token-endpoint";
+import tokensModule from "@o3co/auth-provider-oauth/tokens/module";
+import { tokensConfig } from "@o3co/auth-provider-oauth/tokens/testing";
+import httpModule from "@o3co/auth-provider-foundation/http/module";
+import { httpConfig } from "@o3co/auth-provider-foundation/http/testing";
+import { type DidDocument, didDocuments, didGrantType } from "@provin-line/auth-did-grant";
+import didGrant from "@provin-line/auth-did-grant/module";
+import didGrantStore from "@provin-line/auth-did-grant-store/module";
 import { decodeJwt } from "jose";
 import type { Vector, VectorOutcome } from "../runner.mjs";
 
 /**
  * `auth.grant.*` / `auth.method.*` / `auth.transcript.*` vector family
- * (auth-grant.yaml). As of this writing, dplaax.spec's
- * vectors/README.md has no row for this family (auth-grant.yaml is a newer
- * rule file) — this was the FIRST definition of its `input`/`expect`
- * convention. (P2 vendors this family's real vectors —
- * `auth-*.json` — from dplaax.spec into `../vectors/`, tracked by
- * `../vectors/SYNC_MANIFEST.json`, and runs them unmodified through this
- * same convention.)
- *
+ * (auth-grant.yaml). `input`:
  *   "input": {
  *     "did": "<the DID the grant authenticates as>",
- *     "did_document": <DidDocument the mock resolver returns for `did`>,
- *     "request": <the exact GrantContext.body the grant handler receives —
- *                 e.g. {"did", "jws"} or {"did", "message", "signature"}>,
- *     "config"?: <shallow overrides merged onto this executor's default
- *                 oauth.grants.did config slice — e.g. "authContract",
- *                 "supportedAlgorithms">
+ *     "did_document": <DidDocument the registry stand-in serves for `did`>,
+ *     "request": <the token request's parameters, all strings — e.g.
+ *                 {"did", "jws"} or {"did", "message", "signature"}>,
+ *     "config"?: <overrides merged onto this executor's default `did-grant`
+ *                 section, in the module's own keys — e.g. "auth-contract",
+ *                 "supported-algorithms">
  *   }
- *
- * `expect` mirrors `GrantHandlerResult.result` directly (no new vocabulary):
- *
+ * The outcome is the grant's answer as the token endpoint writes it; a
+ * vector's `expect` names the part of it the vector fixes (`VectorOutcome`):
  *   "expect": { "status": 400, "error": "invalid_grant" }
- *   "expect": { "status": 200, "token_claims": { <decoded JWT claims> } }
+ *   "expect": { "status": 200 }
+ *   "expect": { "status": 200, "token_claims": { <the claims it fixes> } }
  *
- * This executor drives `createDidGrant` (packages/provider-did/src/
- * did.mts) DIRECTLY, the same way the package's own
- * `did.tokenClaims.test.mts` / `did.test.mts` do, rather than assembling
- * the full `buildModules` -> `createApp` -> HTTP router chain
- * (`integration/tests/integration.test.mts`'s pattern). `buildModules`
- * (`@provin-line/auth-provider-dplaax-module`) contributes the
- * `DplaaxAppConfig` shape this executor's config mirrors and the
- * `didResolver` override convention this executor's mock resolver follows,
- * but its own grant-type constant (`DID_GRANT_TYPE`) is a private,
- * unexported detail of `oauthDidModule` — reaching through `buildModules`'s
- * `Module[]` output to extract and hand-invoke that factory would mean
- * depending on an implementation detail no public contract pins, for no
- * behavioral difference (the factory itself does nothing but call
- * `createDidGrant` with the same `{config, keyStore, pathResolver}` shape
- * this executor already builds). Driving `createDidGrant` directly is
- * therefore the stable, precedented choice — noted here as a judgment call
- * in case a literal "via buildModules" reading was intended instead.
+ * The did-grant module runs composed with the dplaax-registry's contract
+ * (served here by a stand-in that holds the vector's document), did-grant-store
+ * on a simulated store, and upstream's real `tokens` and `keys`, called through
+ * upstream's `grantCaller` as the token endpoint calls a grant. The kernel's
+ * clock is set to the signed message's own timestamp, so a vector's fixed
+ * timestamp is always within the message window whenever the test runs.
  */
 interface GrantVectorInput {
 	did: string;
 	did_document: DidDocument;
-	request: Record<string, unknown>;
+	request: Record<string, string>;
 	config?: Record<string, unknown>;
-	// Index signature so `Record<string, unknown> -> GrantVectorInput` is a
-	// valid type-predicate narrowing (TS2677) — vector `input` objects may
-	// carry other JSON fields this executor ignores.
+	// Vector `input` objects may carry other JSON fields this executor ignores.
 	[key: string]: unknown;
 }
 
@@ -89,29 +85,26 @@ function isGrantVectorInput(input: Record<string, unknown>): input is GrantVecto
 		typeof input.did_document === "object" &&
 		input.did_document !== null &&
 		typeof input.request === "object" &&
-		input.request !== null
+		input.request !== null &&
+		Object.values(input.request).every((value) => typeof value === "string")
 	);
 }
 
-/**
- * Wrap a `DidDocument` fixture into the `ResolutionResult` shape
- * `resolve()` returns. `retrievedAt` is a FIXED timestamp (not
- * `new Date().toISOString()`, unlike `integration/tests/utils.mts`'s
- * identically-shaped helper) because conformance vectors are static JSON
- * committed to the repo — their outcome must not depend on when the test
- * happens to run.
- */
-function makeMockResolution(document: DidDocument, requestedDid: string): ResolutionResult {
-	const digest = `sha256:${"0".repeat(64)}`;
-	return {
-		document,
-		canonicalBytes: new TextEncoder().encode(JSON.stringify(document)),
-		digest,
-		requestedDid,
-		finalOrigin: "mock://conformance-registry",
-		snapshotRef: `registry:mock://conformance-registry#${digest}`,
-		retrievedAt: "2026-01-01T00:00:00.000Z",
-	};
+const AUDIENCE = "https://conformance.test";
+const CLIENT = "conformance-client";
+/** What a vector's clock falls back to when its request names no timestamp. */
+const FALLBACK_NOW = Date.parse("2026-01-01T00:00:00.000Z");
+
+/** The timestamp of the signed message: the `message` JSON, or the payload of the compact `jws`. */
+function messageTimestamp(request: Record<string, string>): number {
+	try {
+		const text =
+			request.message ?? Buffer.from(String(request.jws).split(".")[1] ?? "", "base64url").toString("utf8");
+		const parsed = Date.parse(String((JSON.parse(text) as { timestamp?: unknown }).timestamp));
+		return Number.isNaN(parsed) ? FALLBACK_NOW : parsed;
+	} catch {
+		return FALLBACK_NOW;
+	}
 }
 
 export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
@@ -121,63 +114,92 @@ export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
 				`{ did: string, did_document: object, request: object, config?: object }`,
 		);
 	}
-	const { did, did_document, request, config: configOverrides } = v.input;
+	const { did, did_document, request, config: overrides } = v.input;
+	const now = messageTimestamp(request);
 
-	const resolver: DidDocumentResolver = {
-		async resolve(requestedDid: string): Promise<ResolutionResult> {
-			if (requestedDid !== did) {
-				throw new ResolutionRejectedError(
-					"did-not-found",
-					`conformance fixture only resolves "${did}", got "${requestedDid}"`,
-				);
-			}
-			return makeMockResolution(did_document, did);
+	const bytes = new TextEncoder().encode(JSON.stringify(did_document));
+	const digest = `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
+	const registry = defineModule({ name: "conformance-registry" }, (m) => [
+		m.provide(didDocuments).by(() => ({
+			async resolve(requested) {
+				if (requested !== did) {
+					return { kind: "rejected", reason: `conformance fixture only resolves "${did}"` };
+				}
+				return {
+					kind: "resolved",
+					resolution: {
+						document: did_document,
+						canonicalBytes: bytes,
+						digest,
+						requestedDid: did,
+						finalOrigin: "mock://conformance-registry",
+						snapshotRef: `registry:mock://conformance-registry#${digest}`,
+						retrievedAt: new Date(now).toISOString(),
+					},
+				};
+			},
+		})),
+	]);
+	const location = defineModule({ name: "token-endpoint-location" }, (m) => [
+		m.provide(tokenEndpointLocation).by(() => ({ url: `${AUDIENCE}/oauth/token` })),
+	]);
+
+	const app = await assemble({
+		modules: [
+			location,
+			httpModule,
+			keysModule,
+			tokensModule,
+			senderBindingModule,
+			issuerModule,
+			clientsModule,
+			secretHashModule,
+			grantCaller,
+			clientAllowanceModule,
+			registry,
+			simulatedStore().module,
+			didGrantStore,
+			didGrant,
+		],
+		config: {
+			...kernelConfig(),
+			...httpConfig(),
+			...keysConfig(),
+			...tokensConfig(),
+			...issuerConfig({ url: AUDIENCE }),
+			...clientsConfig([
+				publicClient({
+					id: CLIENT,
+					sections: allowancesFor({
+						grants: [didGrantType],
+						scopes: [],
+						"default-scopes": [],
+						audiences: [AUDIENCE],
+					}),
+				}),
+			]),
+			"did-grant": {
+				"supported-algorithms": ["ed25519_raw", "ed25519_jws"],
+				"revocation-latency-bound": "15m",
+				"legacy-max-ttl": "15m",
+				"access-token-lifetime": "10m",
+				...overrides,
+			},
 		},
-	};
-
-	const didGrantConfig = {
-		supportedAlgorithms: ["ed25519_raw", "ed25519_jws"],
-		// A fixed, generous freshness window: a vector's signed payload
-		// carries a fixed `timestamp`, so the window must never lapse
-		// relative to wall-clock "now" — otherwise a vector that passed
-		// today would start failing on its own after messageMaxAgeSec from
-		// the wire timestamp (nothing to do with the rule under test).
-		messageMaxAgeSec: 315_360_000, // 10 years
-		allowedAudiences: ["https://conformance.test"],
-		revocationLatencyBoundSec: 900,
-		legacyMaxTtlSec: 900,
-		...configOverrides,
-	};
-
-	// Minimal CoreConfig stub — createDidGrant only reads oauth.grants.did.*
-	// and oauth.accessToken.expiresIn (see did.mts). Cast pattern mirrors
-	// packages/provider-did/src/__tests__/did.tokenClaims.test.mts's
-	// `mockConfig`.
-	const config = {
-		oauth: {
-			accessToken: { expiresIn: 900 },
-			grants: { did: didGrantConfig },
-		},
-	} as unknown as GrantDependencies["config"];
-
-	const keyStore = createSymmetricKeyStore("conformance-runner-secret");
-	const handler = createDidGrant({ config, keyStore }, { resolver });
+		runtime: quietRuntime({ clock: { now: () => now } }),
+	});
 
 	try {
-		const ctx: GrantContext = {
-			body: request,
-			session: {},
-			issuer: "conformance-runner",
-			metadata: {},
-			authenticatedClient: null,
-		};
-
-		const { result } = await handler.handle(ctx);
-		if ("tokens" in result) {
-			return { status: result.status, token_claims: decodeJwt(result.tokens.access_token) };
+		const outcome = await app.get(grantCalls).call(didGrantType, CLIENT, { grant_type: didGrantType, ...request });
+		if (outcome.kind === "issued") {
+			return { status: 200, token_claims: decodeJwt(String(outcome.body.access_token)) };
 		}
-		return { status: result.status, error: result.error };
+		return { status: outcome.status ?? 400, error: outcome.error };
+	} catch (err) {
+		// An unavailable registry or nonce store is the token endpoint's 503.
+		if (isUnavailable(err)) return { status: 503, error: "temporarily_unavailable" };
+		throw err;
 	} finally {
-		handler.cleanup?.();
+		await app.stop();
 	}
 }

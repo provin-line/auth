@@ -32,6 +32,9 @@ WORKDIR /home/node/app
 FROM node-base AS builder
 
 ARG INSTANCE
+# The file the instance starts from, relative to its root: the policy-verifier
+# compiles to dist/main.mjs; the auth-provider runs its sources.
+ARG ENTRY=dist/main.mjs
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/ ./packages/
@@ -42,16 +45,18 @@ COPY instances/${INSTANCE}/ ./instances/${INSTANCE}/
 # importers (see Makefile clean-instances).
 RUN pnpm install --no-frozen-lockfile
 
-RUN pnpm --filter "./instances/${INSTANCE}" run build
+RUN pnpm --filter "./instances/${INSTANCE}" run --if-present build
 
 FROM builder AS runtime
 
 ARG INSTANCE
-ENV NODE_ENV=production
+ARG ENTRY
+ENV NODE_ENV=production \
+    ENTRY=${ENTRY}
 
 WORKDIR /home/node/app/instances/${INSTANCE}
 
 USER node
 
 ENTRYPOINT ["tini", "--"]
-CMD ["node", "dist/main.mjs"]
+CMD ["sh", "-c", "exec node \"$ENTRY\""]

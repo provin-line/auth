@@ -15,10 +15,10 @@
  */
 
 /**
- * Conformance test suite (Task 11, rule `auth.contract.normative-sot`).
+ * Conformance test suite (rule `auth.contract.normative-sot`).
  *
  * Loads every `*.json` vector in `./vectors/`, runs it through `runVector`,
- * and asserts the outcome equals the vector's `expect`. As of P2, these
+ * and asserts the outcome equals the vector's `expect`. The
  * vectors are vendored from dplaax.spec's real `auth-*.json` /
  * `did-resolution-*.json` vectors (via `scripts/sync-spec-vectors.sh`,
  * tracked by `vectors/SYNC_MANIFEST.json`) — the spec repo is the normative
@@ -26,13 +26,13 @@
  * mirrors it.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { runVector, type Vector } from "./runner.mjs";
+import { expectedOutcome, runVector, type Vector } from "./runner.mjs";
 
 const CONFORMANCE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const VECTORS_DIR = path.join(CONFORMANCE_DIR, "vectors");
@@ -51,52 +51,64 @@ async function loadVectors(): Promise<Vector[]> {
 
 const vectors = await loadVectors();
 
-/**
- * Known, tracked gap — NOT a runner/vector bug.
- *
- * `auth-grant-kid-mismatch-001` exercises rule `auth.grant.kid-match`
- * ("The JWS protected kid, the signed-payload method id, and the
- * resolver-selected method id MUST be identical; any divergence among the
- * three MUST fail closed" — dplaax.spec rules/auth-grant.yaml).
- * `createDidGrant` (packages/provider-did/src/did.mts) does not
- * perform this three-way check today: `validateOwnerLogin` — the function
- * that implements it (packages/provider-did/src/transcript.mts) — is
- * exported from the package's public barrel but is never called from
- * `did.mts`'s `handle()`. This is a *deliberate*, reviewed scope boundary:
- * `did.mts` was left untouched with `validateOwnerLogin` extracted as a
- * pure, unit-tested function, and the request-flow `relationship` is
- * hardcoded to `"legacy"` — wiring the OWNER path (three-way kid match,
- * Fork-Y relationship check) into `handle()` is tracked as follow-up work,
- * not an oversight this task should silently patch (out of this file's
- * scope: runner + seed vectors, not `did.mts` itself — see the README's "P0
- * Auth Contract" section for the current OWNER-path fail-closed posture).
- *
- * The vector's `expect` stays normatively correct (`invalid_grant`) so P2
- * can vendor it unmodified. `it.fails` keeps this test green today while
- * making it a tripwire: the moment `did.mts` wires the three-way match in,
- * this test starts *passing for real* — which `it.fails` reports as a
- * failure (an unexpectedly-passing expected-failure), a loud, impossible-
- * to-miss signal to delete this entry from `KNOWN_FAILING_VECTOR_IDS`.
- *
- * A live `createDidGrant` run against this exact vector's request confirms
- * it mints a 200 today (not the 400 `invalid_grant` the vector expects) —
- * proving the three-way check genuinely isn't wired in, not merely a
- * hypothetical gap.
- */
-const KNOWN_FAILING_VECTOR_IDS: ReadonlySet<string> = new Set(["auth-grant-kid-mismatch-001"]);
-
 describe("conformance vectors (dplaax.spec auth.* / did-resolution-auth rules)", () => {
 	it("found at least one vendored vector", () => {
 		expect(vectors.length).toBeGreaterThan(0);
 	});
 
 	for (const vector of vectors) {
-		const runIt = KNOWN_FAILING_VECTOR_IDS.has(vector.id) ? it.fails : it;
-		runIt(`${vector.id} [${vector.rule}]: ${vector.description}`, async () => {
-			const outcome = await runVector(vector);
-			expect(outcome).toEqual(vector.expect);
+		it(`${vector.id} [${vector.rule}]: ${vector.description}`, async () => {
+			expect(await runVector(vector)).toMatchObject(expectedOutcome(vector));
 		});
 	}
+
+	it("refuses a vector whose expect names nothing to compare", () => {
+		const vector = (expect: unknown): Vector => ({ id: "v", rule: "r", description: "d", input: {}, expect });
+		for (const empty of [{}, "reject", null, undefined, []]) {
+			expect(() => expectedOutcome(vector(empty))).toThrow(/expect must be a non-empty object/);
+		}
+		expect(expectedOutcome(vector({ status: 200 }))).toEqual({ status: 200 });
+	});
+
+	it("a LEGACY ed25519_jws request is issued with the six signed claims", async () => {
+		const did = "did:dplaax:registry.test.local:org:self-test-001";
+		const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+		const methodId = `${did}#key-1`;
+		const timestamp = "2026-07-17T00:00:00.000Z";
+		const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+		const signingInput = `${part({ alg: "EdDSA", kid: methodId })}.${part({ did, timestamp, nonce: "self-test-nonce" })}`;
+		const jws = `${signingInput}.${sign(null, Buffer.from(signingInput), privateKey).toString("base64url")}`;
+		const outcome = await runVector({
+			id: "self-test-legacy-jws",
+			rule: "auth.grant.self-test",
+			description: "constructed, not synced from dplaax.spec",
+			input: {
+				did,
+				did_document: {
+					id: did,
+					verificationMethod: [
+						{ id: methodId, type: "JsonWebKey2020", controller: did, publicKeyJwk: publicKey.export({ format: "jwk" }) },
+					],
+				},
+				request: { did, jws },
+			},
+			expect: undefined,
+		});
+
+		expect(outcome).toMatchObject({
+			status: 200,
+			token_claims: {
+				sub: did,
+				auth_contract_id: "LEGACY_DID_LOGIN@1",
+				verification_method: methodId,
+				authorization_scope: "AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1",
+			},
+		});
+		const claims = (outcome as { token_claims: Record<string, unknown> }).token_claims;
+		expect(claims.did_document_snapshot).toMatch(/^sha256:[0-9a-f]{64}$/);
+		expect(claims.lifecycle_state_ref).toEqual(expect.stringContaining(String(claims.did_document_snapshot)));
+		expect(claims.lifecycle_freshness_ref).toBe(timestamp);
+	});
 
 	it("throws — never silently skips — when a vector names a rule with no executor", async () => {
 		// Test-only throwaway fixture, deliberately NOT placed under
@@ -141,11 +153,9 @@ interface DriftCheckInput {
  * manifest-listed file against the manifest's recorded digest.
  *
  * Returns a list of human-readable drift descriptions; empty means fully in
- * sync. The original check (Codex review, C3) only iterated
- * `manifest.files` and hashed the upstream copy — it missed a NEW spec
- * vector not yet in the manifest, and a stale/edited LOCAL vendored copy.
- * This catches both, plus a manifest entry whose vendored copy or upstream
- * source went missing.
+ * sync. It catches a new spec vector not yet in the manifest, a stale or
+ * edited local vendored copy, and a manifest entry whose vendored copy or
+ * upstream source went missing.
  */
 async function computeVectorDrift(input: DriftCheckInput): Promise<string[]> {
 	const { manifest, upstreamVectorsDir, vendoredVectorsDir } = input;

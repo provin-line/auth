@@ -9,19 +9,27 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      # Each version reports, so a failure on one is told apart from one on both.
+      fail-fast: false
+      matrix:
+        # The Node minor the Dockerfiles build on (the floor engines.node
+        # admits), and the newest major, as upstream auth.provider tests.
+        # Dependabot bumps the Dockerfiles but not this, so move the first
+        # entry with them.
+        node: ["24.22", "26"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
-      # The Node minor the Dockerfiles build on. Dependabot bumps the
-      # Dockerfiles but not this, so move it with them. check-latest resolves
-      # the newest patch from the release manifest; without it setup-node takes
-      # any matching version the runner image has cached, which can predate a
-      # security release. engines.node in package.json names the patched floor.
+      # check-latest resolves the newest patch from the release manifest;
+      # without it setup-node takes any matching version the runner image has
+      # cached, which can predate a security release. engines.node in
+      # package.json names the patched floor.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "24.22"
+          node-version: ${{ matrix.node }}
           check-latest: true
           cache: "pnpm"
 
@@ -49,8 +57,9 @@ jobs:
       - run: pnpm -r run test
 
   # Workspace-mode scaffold smoke (create-app.md § 6.3): generate instances
-  # from the generators, then install / build / typecheck / boot each one
-  # against the PR's package state (root pnpm.overrides → workspace:*).
+  # from the generators, then boot them against the PR's package state (root
+  # overrides → workspace:*). The policy-verifier is built and typechecked; the
+  # provider runs its sources and takes a DID-grant round trip.
   smoke-workspace:
     runs-on: ubuntu-latest
     steps:
@@ -117,17 +126,29 @@ jobs:
             --dplaax-module-ref "$GITHUB_SHA" --out "$out/provider" --no-git-init
           node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
             --dplaax-module-ref "$GITHUB_SHA" --port 3001 --out "$out/policy-verifier" --no-git-init
-          for inst in provider policy-verifier; do
-            (cd "$out/$inst" && pnpm install && pnpm run build && pnpm run typecheck)
-          done
-          ./scripts/smoke-instance.sh "$out/provider" 3000 /_healthcheck
-          ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck
+          # The provider runs its sources: install only.
+          (cd "$out/provider" && pnpm install)
+          (cd "$out/policy-verifier" && pnpm install && pnpm run build && pnpm run typecheck)
+          ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck /verify
           # One real DID-grant round trip (assertion → /oauth/token → 200 +
-          # tampered-signature reject): the boot smoke alone let the PDP
-          # surface drift and the missing @noble/ed25519 through.
+          # signed claims, tampered-signature reject), then introspection and
+          # revocation: the boot smoke alone let the PDP surface drift and the
+          # missing @noble/ed25519 through.
           node scripts/smoke-did-grant.mjs "$out/provider" 3100
 
-      - name: docker build the standalone Dockerfile
+      # The standalone Dockerfiles, built and run: each image answers its
+      # health endpoint, the verifier refuses /verify without a token (401),
+      # and the provider image takes the DID-grant round trip (the registry
+      # runs on the runner and is reached as host.docker.internal).
+      - name: docker build and run the standalone Dockerfiles
         run: |
-          docker build -t smoke/provider "$RUNNER_TEMP/consumer/provider"
-          docker build -t smoke/policy-verifier "$RUNNER_TEMP/consumer/policy-verifier"
+          out="$RUNNER_TEMP/consumer"
+          docker build -t smoke/provider "$out/provider"
+          # The verifier's last stage is its test helper; the image to run is `runtime`.
+          docker build --target runtime -t smoke/policy-verifier "$out/policy-verifier"
+          ./scripts/smoke-image.sh smoke/policy-verifier 3001 3001 /healthcheck /verify -- \
+            -e OAUTH_JWT_ALGORITHM=HS256 \
+            -e OAUTH_JWT_SECRET=smoke.only.secret.at.least.32.bytes.long \
+            -e OAUTH_JWT_ISSUER=https://smoke.invalid \
+            -e OAUTH_JWT_AUDIENCE=https://smoke-api.invalid
+          node scripts/smoke-did-grant.mjs --image smoke/provider 3100

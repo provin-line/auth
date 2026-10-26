@@ -1,0 +1,276 @@
+/*
+ * Copyright 2026 1o1 Co. Ltd.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import * as ed from "@noble/ed25519";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import type { ExtractedKey } from "../../resolver/extractKey.mjs";
+import { Ed25519PrehashVerifier } from "../ed25519Prehash.mjs";
+
+/**
+ * Helper: create a pre-hashed signed DID request.
+ * 1. Build the JSON message string
+ * 2. SHA-256 hash the UTF-8 bytes of the message
+ * 3. Sign the 32-byte hash with Ed25519
+ */
+async function createPrehashSignedRequest(
+	did: string,
+	privateKey: Uint8Array,
+	overrides?: { audience?: string },
+): Promise<{ message: string; signature: string; resolvedKey: ExtractedKey }> {
+	const publicKeyBytes = await ed.getPublicKeyAsync(privateKey);
+	const x = Buffer.from(publicKeyBytes).toString("base64url");
+	const resolvedKey: ExtractedKey = {
+		format: "jwk",
+		key: { kty: "OKP", crv: "Ed25519", x },
+		id: `${did}#key-1`,
+	};
+
+	const message = JSON.stringify({
+		did,
+		timestamp: new Date().toISOString(),
+		nonce: crypto.randomUUID(),
+		...(overrides?.audience ? { audience: overrides.audience } : {}),
+	});
+
+	// SHA-256 hash the message bytes
+	const messageBytes = new TextEncoder().encode(message);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", messageBytes);
+	const hash = new Uint8Array(hashBuffer);
+
+	// Sign the hash (not the raw message)
+	const signatureBytes = await ed.signAsync(hash, privateKey);
+
+	return {
+		message,
+		signature: Buffer.from(signatureBytes).toString("base64"),
+		resolvedKey,
+	};
+}
+
+describe("Ed25519PrehashVerifier", () => {
+	const did = "did:key:z6MkPrehash";
+	let privateKey: Uint8Array;
+
+	beforeAll(() => {
+		privateKey = ed.utils.randomSecretKey();
+	});
+
+	it("returns valid result for correct pre-hashed signature (JWK)", async () => {
+		const verifier = await Ed25519PrehashVerifier.load();
+		const { message, signature, resolvedKey } = await createPrehashSignedRequest(did, privateKey);
+
+		const result = await verifier.verify({
+			body: { signature, message, prehash: "sha256" },
+			did,
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(true);
+		if (result.valid) {
+			expect(result.subject).toBe(did);
+			expect(result.parsedMessage.did).toBe(did);
+			expect(result.parsedMessage.nonce).toBeDefined();
+			expect(result.parsedMessage.timestamp).toBeDefined();
+		}
+	});
+
+	it("returns valid result with audience when present", async () => {
+		const verifier = await Ed25519PrehashVerifier.load();
+		const audience = "https://api.example.com";
+		const { message, signature, resolvedKey } = await createPrehashSignedRequest(did, privateKey, {
+			audience,
+		});
+
+		const result = await verifier.verify({
+			body: { signature, message, prehash: "sha256" },
+			did,
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(true);
+		if (result.valid) {
+			expect(result.audience).toBe(audience);
+			expect(result.parsedMessage.audience).toBe(audience);
+		}
+	});
+
+	it("returns invalid when signature is wrong", async () => {
+		const verifier = await Ed25519PrehashVerifier.load();
+		const { message, resolvedKey } = await createPrehashSignedRequest(did, privateKey);
+
+		// Sign with a different key
+		const wrongKey = ed.utils.randomSecretKey();
+		const messageBytes = new TextEncoder().encode(message);
+		const hashBuffer = await crypto.subtle.digest("SHA-256", messageBytes);
+		const hash = new Uint8Array(hashBuffer);
+		const wrongSigBytes = await ed.signAsync(hash, wrongKey);
+		const wrongSignature = Buffer.from(wrongSigBytes).toString("base64");
+
+		const result = await verifier.verify({
+			body: { signature: wrongSignature, message, prehash: "sha256" },
+			did,
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(false);
+		if (!result.valid) {
+			expect(result.error).toBe("invalid_grant");
+		}
+	});
+
+	it("returns error when signature field is missing", async () => {
+		const verifier = await Ed25519PrehashVerifier.load();
+		const { message, resolvedKey } = await createPrehashSignedRequest(did, privateKey);
+
+		const result = await verifier.verify({
+			body: { message, prehash: "sha256" },
+			did,
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(false);
+		if (!result.valid) {
+			expect(result.error).toBe("invalid_request");
+			expect(result.errorDescription).toContain("signature");
+		}
+	});
+
+	it("returns error when message is not valid JSON", async () => {
+		const verifier = await Ed25519PrehashVerifier.load();
+		const publicKeyBytes = await ed.getPublicKeyAsync(privateKey);
+		const x = Buffer.from(publicKeyBytes).toString("base64url");
+		const resolvedKey: ExtractedKey = {
+			format: "jwk",
+			key: { kty: "OKP", crv: "Ed25519", x },
+			id: `${did}#key-1`,
+		};
+
+		const result = await verifier.verify({
+			body: { signature: "dW51c2Vk", message: "not-json", prehash: "sha256" },
+			did,
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(false);
+		if (!result.valid) {
+			expect(result.error).toBe("invalid_request");
+			expect(result.errorDescription).toContain("JSON");
+		}
+	});
+
+	it("returns error when message.did does not match ctx.did", async () => {
+		const verifier = await Ed25519PrehashVerifier.load();
+		const { message, signature, resolvedKey } = await createPrehashSignedRequest(
+			"did:key:z6MkOther",
+			privateKey,
+		);
+
+		const result = await verifier.verify({
+			body: { signature, message, prehash: "sha256" },
+			did, // "did:key:z6MkPrehash" — does not match "did:key:z6MkOther"
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(false);
+		if (!result.valid) {
+			expect(result.error).toBe("invalid_request");
+			expect(result.errorDescription).toContain("did");
+		}
+	});
+
+	// Security: this verifier has no
+	// JWS protected header at all — `headerKid` can only legitimately come
+	// from one (see `jws.mts`). A signed payload that smuggles its own
+	// top-level `headerKid` member must not let that value flow through to
+	// `parsedMessage.headerKid` — otherwise an OWNER contract's three-way
+	// kid match (`auth.grant.kid-match`) could be satisfied from
+	// attacker-controlled payload data instead of a real protected header.
+	it("never surfaces a headerKid forged from the signed payload's own headerKid member", async () => {
+		const verifier = await Ed25519PrehashVerifier.load();
+		const publicKeyBytes = await ed.getPublicKeyAsync(privateKey);
+		const x = Buffer.from(publicKeyBytes).toString("base64url");
+		const resolvedKey: ExtractedKey = {
+			format: "jwk",
+			key: { kty: "OKP", crv: "Ed25519", x },
+			id: `${did}#key-1`,
+		};
+
+		const message = JSON.stringify({
+			did,
+			timestamp: new Date().toISOString(),
+			nonce: crypto.randomUUID(),
+			// Attacker-controlled: tries to forge a kid via payload data since
+			// there is no protected header to carry a real one.
+			headerKid: `${did}#key-1`,
+		});
+		const messageBytes = new TextEncoder().encode(message);
+		const hashBuffer = await crypto.subtle.digest("SHA-256", messageBytes);
+		const hash = new Uint8Array(hashBuffer);
+		const signatureBytes = await ed.signAsync(hash, privateKey);
+
+		const result = await verifier.verify({
+			body: { signature: Buffer.from(signatureBytes).toString("base64"), message, prehash: "sha256" },
+			did,
+			resolvedKey,
+		});
+
+		expect(result.valid).toBe(true);
+		if (result.valid) {
+			expect(result.parsedMessage.headerKid).toBeUndefined();
+		}
+	});
+
+	describe("the payload's verification_method (rule auth.grant.kid-match)", () => {
+		async function verifyWith(method: unknown) {
+			const verifier = await Ed25519PrehashVerifier.load();
+			const x = Buffer.from(await ed.getPublicKeyAsync(privateKey)).toString("base64url");
+			const resolvedKey: ExtractedKey = { format: "jwk", key: { kty: "OKP", crv: "Ed25519", x }, id: `${did}#key-1` };
+			const message = JSON.stringify({
+				did,
+				timestamp: new Date().toISOString(),
+				nonce: crypto.randomUUID(),
+				verification_method: method,
+			});
+			const messageBytes = new TextEncoder().encode(message);
+			const signatureBytes = await ed.signAsync(new Uint8Array(await crypto.subtle.digest("SHA-256", messageBytes)), privateKey);
+			return verifier.verify({
+				body: { signature: Buffer.from(signatureBytes).toString("base64"), message, prehash: "sha256" },
+				did,
+				resolvedKey,
+			});
+		}
+
+		it("surfaces it as verificationMethod, for the grant to match", async () => {
+			const result = await verifyWith(`${did}#key-9`);
+			expect(result.valid && result.parsedMessage.verificationMethod).toBe(`${did}#key-9`);
+		});
+
+		it("refuses a message that is JSON but no object", async () => {
+			const verifier = await Ed25519PrehashVerifier.load();
+			const x = Buffer.from(await ed.getPublicKeyAsync(privateKey)).toString("base64url");
+			const resolvedKey: ExtractedKey = { format: "jwk", key: { kty: "OKP", crv: "Ed25519", x }, id: `${did}#key-1` };
+			for (const message of ["null", "[]", "1"]) {
+				await expect(
+					verifier.verify({ body: { signature: "AAAA", message, prehash: "sha256" }, did, resolvedKey }),
+				).resolves.toMatchObject({ valid: false, error: "invalid_request" });
+			}
+		});
+
+		it("refuses one that is not a string, which can name no method", async () => {
+			await expect(verifyWith(1)).resolves.toMatchObject({ valid: false, error: "invalid_request" });
+		});
+	});
+});

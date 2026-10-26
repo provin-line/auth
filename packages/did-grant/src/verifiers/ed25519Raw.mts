@@ -1,0 +1,121 @@
+/*
+ * Copyright 2026 1o1 Co. Ltd.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import { extractEd25519PublicKeyBytes } from "./ed25519Utils.mjs";
+import type {
+	ParsedMessage,
+	SignatureVerifier,
+	VerificationContext,
+	VerificationResult,
+} from "./types.mjs";
+
+type VerifyAsync = (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>;
+
+export class Ed25519RawVerifier implements SignatureVerifier {
+	/** Verifies with \`@noble/ed25519\`, an optional peer, loaded when the verifier is made. */
+	static async load(): Promise<Ed25519RawVerifier> {
+		const specifier = "@noble/ed25519";
+		const mod = (await import(specifier)) as { verifyAsync: VerifyAsync };
+		return new Ed25519RawVerifier(mod.verifyAsync);
+	}
+
+	constructor(private readonly verifyAsync: VerifyAsync) {}
+
+	async verify(ctx: VerificationContext): Promise<VerificationResult> {
+		const { body, did, resolvedKey } = ctx;
+
+		// 1. Validate signature and message are present
+		if (typeof body.signature !== "string" || !body.signature) {
+			return { valid: false, error: "invalid_request", errorDescription: "signature is required" };
+		}
+		if (typeof body.message !== "string" || !body.message) {
+			return { valid: false, error: "invalid_request", errorDescription: "message is required" };
+		}
+
+		// 2. Parse message as JSON. `headerKid` is explicitly stripped rather
+		// than trusted: this format has no JWS protected header at all, so
+		// `headerKid` can only ever legitimately come from `jws.mts`'s
+		// `JwsVerifier` (rule `auth.grant.kid-match`) — an attacker-controlled
+		// top-level `headerKid` member in the signed payload must not be able
+		// to forge a match for the three-way kid check.
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(body.message);
+		} catch {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "message must be valid JSON",
+			};
+		}
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+			return { valid: false, error: "invalid_request", errorDescription: "message must be a JSON object" };
+		}
+		const rawParsed = parsed as Record<string, unknown>;
+		delete rawParsed.headerKid;
+		// The payload's verification_method, which the grant matches against the
+		// resolved key (rule auth.grant.kid-match). A non-string can never match.
+		const method = rawParsed.verification_method;
+		if (method !== undefined && typeof method !== "string") {
+			return { valid: false, error: "invalid_request", errorDescription: "verification_method must be a string" };
+		}
+		const parsedMessage = { ...rawParsed, verificationMethod: method } as unknown as ParsedMessage;
+
+		// 3. Validate message.did matches ctx.did
+		if (parsedMessage.did !== did) {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: "message.did must match did",
+			};
+		}
+
+		// 4. Extract public key bytes from resolvedKey
+		let publicKeyBytes: Uint8Array;
+		try {
+			publicKeyBytes = extractEd25519PublicKeyBytes(resolvedKey);
+		} catch (err) {
+			return {
+				valid: false,
+				error: "invalid_request",
+				errorDescription: err instanceof Error ? err.message : "invalid public key",
+			};
+		}
+
+		// 5. Verify Ed25519 signature
+		try {
+			const signatureBytes = Buffer.from(body.signature, "base64");
+			const messageBytes = new TextEncoder().encode(body.message);
+
+			const valid = await this.verifyAsync(signatureBytes, messageBytes, publicKeyBytes);
+			if (!valid) {
+				return {
+					valid: false,
+					error: "invalid_grant",
+					errorDescription: "signature verification failed",
+				};
+			}
+		} catch {
+			return {
+				valid: false,
+				error: "invalid_grant",
+				errorDescription: "signature verification error",
+			};
+		}
+
+		// 6. Return success
+		return { valid: true, subject: did, audience: parsedMessage.audience, parsedMessage };
+	}
+}

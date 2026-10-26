@@ -1,6 +1,6 @@
 {
 	"name": "@provin-line/auth-integration",
-	"description": "Cross-package integration tests: DID auth → JWT → policy verification flow (create-app.md § 6.2)",
+	"description": "Cross-package integration tests: DID grant on auth.provider 0.18 → JWT → policy verification",
 	"version": "0.0.1",
 	"private": true,
 	"license": "Apache-2.0",
@@ -10,19 +10,22 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {
-		"@noble/ed25519": "^3.1.0",
-		"@o3co/auth-provider-core": "^0.15.0",
-		"@o3co/auth.policy-verifier.builtins": "^0.16.1",
-		"@o3co/auth.policy-verifier.server": "^0.16.1",
-		"@provin-line/auth-provider-did": "workspace:*",
-		"@provin-line/auth-provider-dplaax-module": "workspace:*",
+		"@noble/ed25519": "^3.2.0",
+		"@o3co/auth-provider-foundation": "0.18.4",
+		"@o3co/auth-provider-identity": "0.18.4",
+		"@o3co/auth-provider-oauth": "0.18.4",
+		"@o3co/auth-provider-templates": "0.18.4",
+		"@o3co/auth.policy-verifier.builtins": "^0.17.0",
+		"@o3co/auth.policy-verifier.core": "^0.17.0",
+		"@o3co/auth.policy-verifier.server": "^0.17.0",
+		"@provin-line/auth-did-grant": "workspace:*",
+		"@provin-line/auth-did-grant-store": "workspace:*",
+		"@provin-line/auth-dplaax-registry": "workspace:*",
 		"@provin-line/auth-policy-verifier-dplaax-module": "workspace:*",
-		"@types/express": "^5.0.6",
-		"@types/node": "^25.6.0",
-		"express": "^5.3.0",
-		"jose": "^6.2.2",
-		"typescript": "^5.9.3",
-		"vitest": "^4.1.12",
-		"@o3co/auth.policy-verifier.core": "^0.16.1"
+		"@types/node": "^26.6.5",
+		"jose": "^6.2.13",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.5",
+		"zod": "^4.6.7"
 	}
 }

@@ -1,82 +1,142 @@
 # Upstream auth compatibility
 
-Workspace packages require provider `^0.15.0` and verifier `^0.16.1`. The
-generators emit the same as exact pins (create-provider 0.3.0,
-create-policy-verifier 0.3.0). Updating this repository's git
-ref alone does **not** deploy newer upstream security fixes to an instance that
-already exists: its own `package.json` pins and its `application.conf` must be
-updated too (see below).
+Workspace packages require auth.provider `0.18.4` (exactly, the `@o3co/auth-provider-*`
+bundles) and policy-verifier `^0.17.0`. The generators emit the same as exact
+pins (`@provin-line/create-auth-provider` 0.4.0, create-policy-verifier 0.4.0). Updating this
+repository's git ref alone does **not** deploy newer upstream security fixes to
+an instance that already exists: its own `package.json` pins and its
+configuration must be updated too (see below).
 
 The [o3co/auth compatibility suite](https://github.com/o3co/auth) tests candidate
-source without publishing packages: it packs provider/core, provider/oauth and
-verifier/core, builtins and server into local tarballs, overrides all matching
-direct and transitive dependencies in a disposable Provin checkout, then runs
-workspace build/typecheck/tests, generated-app build/typecheck/config tests,
-service startup and a generated Provider's valid/tampered DID-signature grant.
+source without publishing packages: it packs the candidate provider and
+verifier packages into local tarballs, overrides all matching direct and
+transitive dependencies in a disposable Provin checkout, then runs workspace
+build/typecheck/tests, generated-app build/typecheck/config tests, service
+startup and a generated Provider's valid/tampered DID-signature grant.
 This does not certify deployed registry ACLs or Web/mobile clients.
 
 ## Adopting current upstream
 
 - Keep Zod at one minor version across each dependency graph: mixing schema
   objects of different minor versions across module boundaries fails
-  TypeScript compilation. The workspace and the generated verifier pin 4.6.7
-  (policy-verifier 0.16.1 requires `^4.6.6`). The generated provider still
-  pins 4.5.4, below provider 0.15's declared `^4.6.2`; it moves with the
-  provider 0.18 migration.
-- Supply an absolute Provider issuer. Set the Verifier's `OAUTH_JWT_ISSUER`
-  and `OAUTH_JWT_AUDIENCE`. DID clients must include that audience in their
+  TypeScript compilation. The workspace, the generated provider and the
+  generated verifier pin 4.6.7 (policy-verifier 0.17.0 requires `^4.6.6`;
+  the auth.provider bundles require `^4.6.0`).
+- Supply an absolute Provider issuer (`issuer.url`, with the same origin in
+  `http.public-origin`). Set the Verifier's `OAUTH_JWT_ISSUER` and
+  `OAUTH_JWT_AUDIENCE`. DID clients must include that audience in their
   **signed** message/transcript. Current Verifier rejects LEGACY tokens with no
-  `aud`, although the grant still accepts audience-absent LEGACY requests.
-- Use `oauth.jwt.mode = "verify"`; remove old `validate` and
+  `aud`, although the grant still accepts audience-absent LEGACY requests (the
+  token then carries the audience the client's `client-allowance` issues by
+  default).
+- Use `oauth.jwt.mode = "verify"` on the Verifier; remove old `validate` and
   `allowInsecureDecode` keys from overlays. Supply strong signing keys/secrets.
-- Generated Provider config supplies required `http.readinessTimeoutMs` and
-  `logging.level`.
-- Upstream refuses to boot when a security capability `oauthModule` reads is
-  neither wired nor declared absent. `buildModules` wires all of them:
-  - **Audit sink.** `audit.sink.type` names the sink; `"console"` (one JSON
-    object per event on stdout) is built in and is the default. Register
-    other sinks with `createAuditSinkModule({ registerSinks })`. `"none"` is
-    refused at boot. That is this composition's policy, not upstream's: core
-    would accept `"none"` as a declared absence, but this composition always
-    fills the slot, so saying nothing about auditing, or guessing a name,
-    cannot mean having no audit trail.
-  - **Access-token denylist.** `oauth.revocation.accessToken = "denylist"`.
-    RFC 7009 revocation writes the token's `jti` to it; the provider's
-    verification and introspection consult it. The DID grant binds each token
-    to the client authenticated at `/token` (`client_id` / `azp`), which is
-    what lets that client revoke it.
-  - **Subject revocation.** The `subjectRevocation` / `subjectSessionIndex`
-    pair is wired. `subjectRevocation.revokeBefore(did, …)` invalidates every
-    token already issued to that DID. Nothing in this repository calls it yet:
-    the trigger (for example, a DID deactivated at the registry) is the
-    deployment's to connect.
+- auth.provider 0.18 refuses to boot when a security capability is neither
+  composed nor declared absent. The generated provider states each:
+  - **Audit.** `audit.receivers` must name at least one receiver; the
+    built-in `log` writes one line per event.
+  - **Access-token denylist.** `tokens.revocation = denylist`, kept by the
+    `tokens-store` module on the kernel's `store`. RFC 7009 revocation writes
+    the token's `jti` to it; the provider's verification and introspection
+    consult it. The DID grant binds each token to the client authenticated at
+    `/oauth/token` (`client_id`), which is what lets that client revoke it.
+  - **Subject revocation.** Not composed: `tokens.subject-check = none`
+    states that no module checks it, which boot requires. 0.15's
+    `subjectRevocation` wiring has no counterpart in the generated app.
+  - **Store.** The generated provider keeps its state in memory:
+    `kernel.deployment = single` and `store.accept-volatile = true`. The DID
+    grant's spent nonces (`did-grant-store`) and the denylist then do not
+    survive a restart or span instances. A deployment with several instances
+    composes a shared `store` first; boot refuses `multi` with the memory store.
 
   Revocation takes effect where the provider verifies a token: its
   introspection endpoint and its own routes. A resource server that verifies
   JWTs locally, as the generated policy-verifier does (with a shared HS256
   secret by default, or against the provider's JWKS when
-  `OAUTH_JWT_JWKS_URI` is set), consults neither store; for it, the
-  access-token lifetime (900s in the scaffold) is still the bound.
+  `OAUTH_JWT_JWKS_URI` is set), consults neither store; for it,
+  `did-grant.access-token-lifetime` is still the bound.
 
-  Migrating an instance generated earlier:
-  - `audit.sink.type = "none"` **must** go, or boot fails. Add the
-    `audit.sink` block from the current template.
-  - `revocation.accessToken = "unsupported"` still boots, but keeps
-    access-token revocation off: `/oauth/revoke` answers
-    `unsupported_token_type`. Change it to `"denylist"`.
-  - `revocation.subject = "unsupported"` still boots and is ignored, since
-    the slot is now filled. Delete it.
-- Every in-process store declares itself replica-unsafe: the code repository,
-  the DID grant's nonce store when no `nonceStore` override is given, the
-  denylist and the subject-revocation pair. `DplaaxConfigSchema` keeps
-  `deployment.mode` (it used to strip it, so the guard never saw it), and the
-  template reads it from `DEPLOYMENT_MODE`. With `"multi"`, core refuses to
-  boot until each store is replaced through `DplaaxBuildModulesOverrides`
-  (`codeRepositoryModule`, `nonceStore`, `accessTokenDenylistModule`,
-  `subjectRevocationModule`).
-- Current Provider separates JWKS publication from OAuth; current Verifier
-  separates key-resolver registration. Composition includes those modules when
-  available; released versions retain their internal wiring.
+## Moving an existing provider instance to 0.18
+
+An instance generated by `@provin-line/create-auth-provider` before 0.4.0 is an
+auth.provider 0.15 app (`@o3co/auth-provider-core`,
+`@provin-line/auth-provider-did`, `auth-provider-dplaax-module`). Those
+packages are removed, and nothing carries an instance over in place:
+auth.provider 0.18 reads different keys and records. Generate a new instance
+with `@provin-line/create-auth-provider` 0.4.0 and move the settings below. The policy-verifier
+instance is independent; move it as the sections below say.
+
+| 0.15 | 0.18 |
+| --- | --- |
+| `oauth.grants.did.supportedAlgorithms` | `did-grant.supported-algorithms` (`es256k_jws` is gone: jose does not verify ES256K on Node) |
+| `oauth.grants.did.messageMaxAgeSec` (seconds) | `did-grant.message-max-age` (a duration, `5m`) |
+| `oauth.grants.did.revocationLatencyBoundSec`, `legacyMaxTtlSec` | `did-grant.revocation-latency-bound`, `did-grant.legacy-max-ttl` (durations) |
+| `oauth.accessToken.expiresIn` | `did-grant.access-token-lifetime` (required; the grant's own, at most `revocation-latency-bound`) |
+| `oauth.grants.did.authContract`, `ownerMigrationRatified` | `did-grant.auth-contract`, `did-grant.owner-migration-ratified` |
+| `oauth.grants.did.tokenEndpoint` | None: the token endpoint's location on `http.public-origin` |
+| `oauth.grants.did.allowedAudiences` | The client's allowance: `clients.registered[].sections.client-allowance.audiences`, and `grants` must list `https://dplaax.dev/oauth/grant-type/did`. Scopes are the allowance's `scopes` and `default-scopes` |
+| `dplaax.registry.baseUrl` | `dplaax-registry.url` (required; there is no default) and the host named in `outbound.allow`. That is all a public https registry needs; add `outbound.internal-hosts` for https at a private address, or `outbound.plain-internal` for plain http |
+| `dplaax.registry.allowedRegistries` | `dplaax-registry.allowed-registries` |
+| `oauth.grants.did.resolver.timeoutMs`, `maxBodyBytes`, `maxConcurrent` | `dplaax-registry.timeout`, `dplaax-registry.max-document-size` (within `outbound.max-response-size`), `outbound.max-concurrent` (shared with every outbound caller) |
+| `oauth.jwt.signingKey.local.algorithm` (default `EdDSA`), `kid` (default `v0`) | `keys.signing.alg` and `keys.signing.kid`, both required with no default |
+| `privateKey`, `privateKeyPath` | `keys.signing.private-key`, a PKCS8 PEM in the value; there is no path form |
+| `publicKey`, `publicKeyPath` | None for the signing key: the public half is derived. `keys.next.public-key` publishes the key that signs next |
+| `previousKeys` | `keys.previous`, a list of `kid`, `alg`, `public-key` and a required `expires-at` (asymmetric keys only) |
+| `previousSecrets` (HS256 rotation) | **None.** `keys.previous` takes public keys only, so an HS256 secret cannot be rotated with an overlap: changing `keys.signing.secret` invalidates every token signed with the old one |
+| `oauth.jwt.legacyTypAccept` | None: the `keys` and `tokens` sections have no such setting |
+| `oauth.refreshToken.*`, `oauth.oidcMode`, `endpoints.login.url`, `repositories.code` | None: the generated provider composes no refresh, OIDC, login or authorization-code module, so it serves the token, introspection and revocation endpoints and the DID grant only |
+| `logging.level` | `kernel.logging.level` (a level or `silent`, default `info`) |
+| `http.trustProxy` | `http.trusted-proxies` (IPs or CIDRs) and `http.proxy-hops`; unset, no forwarded header is believed |
+| `http.readinessTimeoutMs` | None in the generated provider's sections |
+| `oauth.grants.did.enabled`, `oauth.grants.did.algorithm` (deprecated, ignored) | None: composing the module registers the grant |
+| `oauth.jwt.issuer` | `issuer.url`, with `http.public-origin` of the same origin (`http.insecure-origin = true` for plain http) |
+| `oauth.jwt.signingKey.local.secret` | `keys.signing.secret` with `keys.signing.secret-encoding = utf8` (see below) |
+| `oauth.revocation.accessToken = "denylist"` | `tokens.revocation = denylist` |
+| `audit.sink` | `audit.receivers` |
+| `DEPLOYMENT_MODE`, `deployment.mode` | `kernel.deployment` |
+| `CLIENT_REPOSITORY_PATH` (client file) | `clients.registered` in a local layer |
+
+- **HS256 secret.** auth.provider 0.18 reads `keys.signing.secret` as hex, else
+  base64, unless `secret-encoding` says otherwise. The policy-verifier reads
+  the same string as UTF-8 (its `secretEncoding` default). Set
+  `keys.signing.secret-encoding = utf8` on the provider, or every token is
+  answered `401`. The provider refuses a secret under 32 bytes or with fewer
+  than 8 distinct byte values, and one starting `REPLACE-`; the verifier
+  refuses one whose shortest reading (UTF-8, hex or base64) is under 32 bytes,
+  so a 32-character hex-looking string passes the provider and fails the
+  verifier.
+- **Tokens.** `client_id` names the client; `azp` is no longer written. The
+  verifier reads the client from `client_id` as well as `azp` since 0.16.3.
+- **Answers.** A signature that does not verify is `400 invalid_grant` (it
+  was `401`, which asks the client to authenticate). A registry answer over the
+  size limit is `503` (it was `400`), as is a registry or nonce store that
+  cannot tell. A request with a `resource` parameter is refused, as for any
+  grant that does not take a target.
+- **`PathResolver` and `VerifierRegistry` injection are gone.** `@noble/ed25519`
+  is an optional peer of `did-grant`, which the generated app depends on;
+  custom signature algorithms are contributed at `signatureAlgorithms`.
+- **A nonce is kept until its message's window closes** (plus a minute), not
+  `message-max-age` from the request.
+- **Port, environment, configuration files.** The app reads the files named by
+  `APP_CONFIG` (comma-separated, the first wins; arrays in a later file do not
+  append to an earlier file's), then the environment variables
+  `config/application.conf` names. The 0.15 variables (`OAUTH_JWT_*`,
+  `DPLAAX_REGISTRY_BASE_URL`, `CLIENT_REPOSITORY_PATH`) mean nothing. The
+  app's default port is 8080 (`HTTP_PORT`), on `HTTP_HOST` (default
+  127.0.0.1). A refused boot exits 78, one `refused <where>: <reason>` line
+  each on standard error.
+- **The published `auth-provider` image** runs the generated app from its
+  sources (`node src/main.ts`; there is no `dist/`). It sets
+  `HTTP_HOST=0.0.0.0` and `HTTP_PORT=3000`. A container sets the variables
+  `config/application.conf` reads (`KERNEL_DEPLOYMENT`, `STORE_ACCEPT_VOLATILE`,
+  `TOKENS_REVOCATION`, `TOKENS_SUBJECT_CHECK`, `HTTP_PUBLIC_ORIGIN`,
+  `HTTP_INSECURE_ORIGIN`, `ISSUER_URL`, `KEYS_SIGNING_*`, `DID_GRANT_*`,
+  `DPLAAX_REGISTRY_URL`) and mounts a local layer of lists (`outbound.allow`,
+  `outbound.plain-internal`, `audit.receivers`, `clients.registered`) named by
+  `APP_CONFIG`. A proxy variable (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`)
+  with no `outbound.proxy` refuses boot.
+- `/_healthcheck` answers `application/json` and `/readyz` no longer lists
+  `checks`; a probe that reads only the status is unaffected.
 
 ## Moving an existing verifier instance to 0.16
 
@@ -101,9 +161,39 @@ zod at 4.5.4 in its `pnpm.overrides`.
   Review alerts, retries and outlier detection that key on 5xx.
 - Run `pnpm update proxy-addr` (and the same for `brace-expansion` and
   `source-map-js` if present) in the instance: the advisory fix in this
-  repository's lockfile does not reach an instance's own lockfile. Provider
-  instances read `HTTP_TRUST_PROXY` into Express `trust proxy`, which is
-  where `proxy-addr` runs.
+  repository's lockfile does not reach an instance's own lockfile.
+
+## Moving an existing verifier instance to 0.17
+
+An instance generated by create-policy-verifier 0.3.0 pins
+`@o3co/auth.policy-verifier.{server,builtins,core}` exactly at 0.16.1.
+
+- Bump all three to exactly `0.17.0` in the same change that moves the
+  `#<ref>` of `@provin-line/auth-policy-verifier-dplaax-module`, and of the
+  `@provin-line/*` entries in `pnpm.overrides`, to the provin.auth release
+  that carries the 0.17.0 baseline (v0.5.0). The module requires `^0.17.0`.
+- 0.17.0 adds `oauth.jwt.secretEncoding` (`"utf8"`, `"hex"` or `"base64"`),
+  how the HS256 secret becomes key bytes. Its default, `"utf8"`, is the
+  reading every earlier verifier applied, so `application.conf` needs no
+  change to keep working. A generated instance now writes
+  `secretEncoding = "utf8"` with an `OAUTH_JWT_SECRET_ENCODING` override:
+  copy those two lines to say the reading out loud. It must match the
+  issuer's reading of the same string. auth.provider 0.18 reads its
+  `keys.signing.secret` as hex, else base64, unless
+  `keys.signing.secret-encoding` says otherwise: set that to `utf8` on the
+  provider, or set this key to the provider's reading, or every token is
+  answered `401`.
+- 0.16.3 reads the client from `client_id` as well as `azp`. Tokens from
+  auth.provider 0.18 carry only `client_id`, so a rule that reads the client
+  now sees it for them.
+- Code that builds an `AppConfig` as an object literal for `createApp` adds
+  `secretEncoding: "utf8"` under `oauth.jwt` (0.17.0 makes it required in the
+  type). The generated `src/main.mts` parses through `AppConfigSchema`, which
+  fills it in.
+- create-policy-verifier 0.4.0 also emits `@o3co/ts.hocon` 1.14.3 (was
+  0.1.5), pino 10.4.0, `@types/node` 26.6.5 and vitest 5.0.5. They are
+  independent of the verifier bump; take them when the instance's own tests
+  pass on them.
 
 ## DID policy and trust boundaries
 

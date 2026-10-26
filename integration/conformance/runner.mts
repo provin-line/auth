@@ -15,7 +15,7 @@
  */
 
 /**
- * Conformance vector runner (Task 11, rule `auth.contract.normative-sot`).
+ * Conformance vector runner (rule `auth.contract.normative-sot`).
  *
  * dplaax.spec is the normative source of truth for the DID
  * authentication verification contract; provin.auth's implementation is a
@@ -31,19 +31,13 @@
  *   { "id": string, "rule": string, "description": string,
  *     "input": object, "expect": "accept" | "reject" | object }
  *
- * The spec's README documents `input`/`expect` sub-shape conventions per
- * rule family (e.g. `commitment.*`, `resolver.*`, `confidence.*`) but, as of
- * this writing, does not yet have rows for the `auth.*` /
- * `did-resolution-auth.yaml` families (auth-grant.yaml /
- * did-resolution-auth.yaml are newer rule files). This file's executors
- * were therefore the FIRST implementation of that family's `input`/`expect`
- * convention — see the executor modules' doc comments for the exact
- * per-family shape. As of P2, dplaax.spec's real `auth-*.json` /
- * `did-resolution-*.json` vectors are vendored into `./vectors/` (via
- * `scripts/sync-spec-vectors.sh`, tracked by `vectors/SYNC_MANIFEST.json`)
- * and run unmodified through these same executors; folding this
- * `input`/`expect` convention into the spec repo's own README table remains
- * follow-up work there.
+ * The `input`/`expect` sub-shape of each rule family is defined by its
+ * executor module's doc comment (`executors/grant.mts` for `auth.grant.*`,
+ * `auth.method.*` and `auth.transcript.*`; `executors/resolve.mts` for
+ * `auth.resolve.*`). The vectors in `./vectors/` are vendored from
+ * dplaax.spec's `auth-*.json` / `did-resolution-*.json` (via
+ * `scripts/sync-spec-vectors.sh`, tracked by `vectors/SYNC_MANIFEST.json`) and
+ * run unmodified through those executors.
  *
  * Dispatch table (by `rule` id prefix):
  *   - `auth.resolve.*`                                  -> executors/resolve.mts
@@ -67,13 +61,25 @@ export interface Vector {
 }
 
 /**
- * An executor's mapped outcome for a vector. Directly `toEqual`-comparable
- * against the vector's `expect` — executors map an implementation-specific
- * result (a thrown `Resolution*Error`, a `GrantHandlerResult`, ...) onto
- * this shape rather than the test asserting against raw implementation
- * types.
+ * An executor's mapped outcome for a vector: executors map what the module
+ * under test answers (an issued token, a refusal, an unavailable dependency)
+ * onto this shape rather than the test asserting against the module's own
+ * types. The suite compares it with `toMatchObject`: a vector's `expect` fixes
+ * the keys it names, nested objects by the same rule, arrays element-wise at
+ * equal length. An issued token carries claims a vector cannot fix, those the
+ * executor's fixture, settings and randomness give (`iss`, `aud`, `exp`,
+ * `jti`).
  */
 export type VectorOutcome = Record<string, unknown>;
+
+/** A vector's `expect` as the outcome it fixes: a non-empty object, or the vector is malformed. */
+export function expectedOutcome(vector: Vector): VectorOutcome {
+	const { expect } = vector;
+	if (typeof expect !== "object" || expect === null || Array.isArray(expect) || Object.keys(expect).length === 0) {
+		throw new Error(`vector "${vector.id}": expect must be a non-empty object for rule ${vector.rule}`);
+	}
+	return expect as VectorOutcome;
+}
 
 export async function runVector(v: Vector): Promise<VectorOutcome> {
 	if (v.rule.startsWith("auth.resolve.")) {

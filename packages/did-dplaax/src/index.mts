@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-// Public surface for the did:dplaax grammar layer. Re-exported by both
-// @provin-line/auth-provider-dplaax-module and @provin-line/policy-verifier-
-// dplaax-module so the grammar has a single source of truth and downstream
-// consumers can keep their existing import paths.
+// Public surface for the did:dplaax grammar layer. Both
+// @provin-line/auth-dplaax-registry and @provin-line/auth-policy-verifier-
+// dplaax-module import it, so the grammar has a single source of truth.
 
 export { parseDplaaxDid, type ParsedDplaaxDid } from "./parse.mjs";
 

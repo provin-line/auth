@@ -4,3 +4,21 @@ packages:
   # Generated dev/CI instances (git-ignored; see create-app.md § 5, § 6.3.1).
   # Inert while instances/ is empty.
   - "instances/*"
+
+# Generated instances resolve the dPLaaX modules from the workspace, so the
+# smoke runs against the PR's package state (create-app.md § 6.3). zod is held
+# to the version the o3co packages require; vite to a release past vitest's
+# launch-editor advisories.
+overrides:
+  "@provin-line/auth-did-grant": "workspace:*"
+  "@provin-line/auth-dplaax-registry": "workspace:*"
+  "@provin-line/auth-did-grant-store": "workspace:*"
+  "@provin-line/auth-policy-verifier-dplaax-module": "workspace:*"
+  vite: "^8.3.3"
+  zod: "4.6.7"
+
+# pnpm holds back a version until it is a day old, against a hijacked
+# third-party release. The o3co packages are this project's direct upstream,
+# released by the same maintainers, so a fresh release installs at once.
+minimumReleaseAgeExclude:
+  - "@o3co/*"

@@ -4,11 +4,238 @@ All notable changes to this repository are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-While the version is `0.x`, the public API (the `@provin-line/auth-provider-did`
+While the version is `0.x`, the public API (the `@provin-line/auth-did-grant`
 module surface and the DID grant contract) may still change between minor
 releases.
 
 ## [Unreleased]
+
+## [0.5.0] - 2026-10-27
+
+A minor number, not a patch: the provider moves to auth.provider 0.18.4.
+Its generator now calls upstream's, and the DID grant, the registry
+resolver and the nonce store are 0.18 modules. Every provider deployment
+changes its settings, its image's variables and its records, and the 0.15
+packages are removed. The policy-verifier baseline moves to 0.17.0, which
+changes the `AppConfig` type. Consumers that track the moving `v0.4` image
+tag are unaffected; provin.oss's quickstart pins `v0.3` and moves to `v0.5`
+on its own schedule.
+
+Tokens from the DID grant carry the six signed claims of
+`auth.token.signed-claims`, the generated provider answers revocation and
+introspection, and rule `auth.grant.kid-match` holds under every contract.
+[docs/upstream-compatibility.md](docs/upstream-compatibility.md) lists what
+an existing provider or verifier instance changes.
+
+### Added
+
+- **`@provin-line/auth-dplaax-registry`**: provides the DID grant's
+  `didDocuments` (`packages/dplaax-registry`).
+  - It resolves did:dplaax owner DIDs at
+    `<url>/did/<accountType>/<accountId>/did.json` through auth.provider's
+    `outbound`, as the operator's own URL. The operator's destination policy
+    decides between https (`outbound.internal-hosts`) and plain http to a
+    private address (`outbound.plain-internal`).
+  - Its section `dplaax-registry` replaces 0.15's `dplaax.registry.baseUrl`
+    / `allowedRegistries` and `oauth.grants.did.resolver.*`: `url` (now
+    required; 0.15 defaulted to `https://registry.dplaax.dev`),
+    `allowed-registries`, `timeout` (5s) and `max-document-size` (64KiB,
+    within `outbound.max-response-size`; 0.15 took 1 MiB).
+  - Concurrency is outbound's `max-concurrent` (16, shared with every
+    outbound caller): a request past it is refused at once (503), where 0.15
+    queued it behind its own limit of 8.
+  - Outcomes: rejected for a DID the registry does not hold (404 or another
+    4xx) or bytes that are no document for it; unavailable for 5xx, no
+    answer in time, a refused destination (a redirect included) and an
+    answer over the size limit. outbound stops a large answer before its
+    status is read, so an oversized document is now unavailable (503), where
+    0.15 rejected it (400).
+  - Decoding meets rule `canon.strict-decode`: invalid UTF-8 and unpaired
+    surrogate escapes are refused, and integers beyond 2^53 are kept
+    exactly. `strictJsonParse` is internal to this package.
+- **`@provin-line/auth-did-grant-store`**: keeps the DID grant's spent nonces
+  on `records` over the kernel's `store` (`packages/did-grant-store`), with
+  the guarantees `spentNoncesNeeds` asks, as upstream's `jwt-bearer-store`
+  does.
+- **`@provin-line/auth-did-grant`**: the DID grant as an auth.provider 0.18
+  module (`packages/did-grant`), replacing the 0.15 `auth-provider-did`.
+  - Its tokens carry the six claims of rule `auth.token.signed-claims`
+    (`auth_contract_id`, `verification_method`, `did_document_snapshot`,
+    `lifecycle_state_ref`, `lifecycle_freshness_ref`,
+    `authorization_scope`) through auth.provider's added claims, signed
+    into the JWT. `client_id` names the client; `azp` is no longer written.
+  - The package exports the contract at `.`, the module at `./module` and
+    `spentNoncesContract` at `./testing`. auth.provider's packages and zod
+    are peers.
+  - It takes two contracts it owns: `didDocuments` (the resolver) and
+    `spentNonces` (the nonces already used). Custom signature algorithms
+    are contributed at `signatureAlgorithms` instead of an injected
+    `VerifierRegistry`, and say whether they carry a JWS header; the grant
+    issues only when a verifier's subject and message are the requested
+    DID's. Verifiers are made at boot, so a missing `@noble/ed25519`
+    refuses boot instead of failing every request.
+  - `es256k_jws` is no longer offered: jose does not verify ES256K on Node,
+    so it never worked. A deployment that needs it contributes a verifier.
+  - Its section `did-grant` replaces `oauth.grants.did`: lifetimes carry a
+    unit, and `access-token-lifetime` is the grant's own. Audiences and
+    scopes come from the client's `client-allowance` (`allowedAudiences` is
+    gone), and the OWNER token endpoint comes from auth.provider's
+    `tokenEndpointLocation` (`tokenEndpoint` is gone).
+  - A failed signature is `400 invalid_grant`, never `401`. A resolver or
+    nonce store that cannot tell answers `503`.
+  - A message's nonce is kept until the message's own window closes, plus a
+    minute for clock differences. It was kept for `message-max-age` from
+    the request, which left a message stamped ahead of the clock usable
+    once more.
+
+### Changed
+
+- **BREAKING (`@provin-line/create-auth-provider` 0.4.0): the generated provider is an
+  auth.provider 0.18.4 app.** The generator calls auth.provider's own
+  (`@o3co/auth-provider-scaffold`, pinned at exactly 0.18.4) for a listed app
+  of `@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound`,
+  `@mod/discovery` and `@mod/token-control`, then composes `@provin-line/auth-did-grant`,
+  `auth-dplaax-registry` and `auth-did-grant-store` into it
+  (`packages/create-provider/src/overlay/`, one function per patched file).
+  - The 0.15 template is gone. The app runs its sources
+    (`node src/main.ts`), with no build, no `tsconfig.json` and no `dist/`;
+    its settings are env variables read by `config/application.conf`, a local
+    layer (`APP_CONFIG`) for lists, and a refused boot exits 78. Existing
+    0.15 instances do not carry over: auth.provider 0.18 reads different
+    keys and records.
+  - Revocation (`POST /oauth/revoke`) and introspection
+    (`POST /oauth/introspect`) are `@mod/token-control`'s.
+    - Introspection takes client authentication only: a `confidential`
+      client with a `client-secret.hash` whose `client-allowance.audiences`
+      covers the token's audience (the issuer URL for a DID client with no
+      audiences). 0.15's self-introspection, with the caller's own access
+      token as its credential, is gone, and a public client gets `401`.
+    - With `tokens.revocation = denylist`, introspection answers a revoked
+      token inactive. With `unsupported`, `/oauth/revoke` answers
+      `400 unsupported_token_type` for access tokens and the metadata names
+      no `revocation_endpoint`; 0.15 always kept a denylist.
+    - The provin policy-verifier reads the JWT alone and does not see a
+      revocation: a revoked token passes it until it expires, within
+      `did-grant.access-token-lifetime` (provin-line/oss#85).
+  - Added to upstream's app: the did-grant, dplaax-registry and
+    `keys.signing.secret` / `secret-encoding` keys and variables (a
+    deployment sharing an HS256 secret with a policy-verifier sets
+    `utf8`), the DID grant type in the example client's allowance, the
+    registry in `outbound.allow` and `outbound.plain-internal`, and
+    `tokens.subject-check` (boot requires it, or a module that checks
+    subject revocation, which this app does not compose).
+  - `pnpm-workspace.yaml` (pnpm 11 no longer reads `package.json#pnpm`)
+    pins `@provin-line/did-dplaax` and `@provin-line/auth-did-grant` to the
+    same ref, sets `blockExoticSubdeps: false` for those git sources below the
+    app's direct dependencies, and allows the git-fetched packages their
+    `prepare` through `allowBuilds`, keyed by the source pnpm resolves
+    (docs/create-app.md § 3.4). For a branch or tag under
+    `--allow-unpinned-ref` no `allowBuilds` is written and the first install
+    names the key to add.
+  - Removed CLI flags and exports: `--port` (the port is `HTTP_PORT`),
+    `--package-manager` (upstream's app is pnpm), and `DEFAULT_PORT` and
+    `DEFAULT_PACKAGE_MANAGER` from the package. `DEFAULT_DEP_VERSIONS` now
+    holds only what the overlay adds (`@noble/ed25519`), and
+    `LISTED_MODULES` is new. `--registry-base-url` is the default
+    `DPLAAX_REGISTRY_URL` of `.env.example`.
+  - **Runtime contract of the published `auth-provider` image.** It runs
+    the generated app, so the 0.15 variables (`OAUTH_JWT_*`,
+    `DPLAAX_REGISTRY_BASE_URL`, `CLIENT_REPOSITORY_PATH`, `HTTP_PORT` aside)
+    no longer mean anything. A container sets the 0.18 variables
+    `config/application.conf` reads (`KERNEL_DEPLOYMENT`,
+    `STORE_ACCEPT_VOLATILE`, `TOKENS_REVOCATION`, `TOKENS_SUBJECT_CHECK`,
+    `HTTP_PUBLIC_ORIGIN`, `HTTP_INSECURE_ORIGIN`, `ISSUER_URL`,
+    `KEYS_SIGNING_*`, `DID_GRANT_*`, `DPLAAX_REGISTRY_URL`) and mounts a local
+    layer of lists (`outbound.allow`, `audit.receivers`,
+    `clients.registered`) named by `APP_CONFIG`
+    (`config/local.conf,config/application.conf`); the dev composition's
+    `deploy/dev/provider.local.conf` is an example. The image listens on
+    `HTTP_HOST=0.0.0.0` and `HTTP_PORT=3000` (the app's own default is
+    8080). `--registry-base-url` in `publish-images.yml` now only fills the
+    generated examples; the registry at runtime is `DPLAAX_REGISTRY_URL`.
+  - The scaffold smoke, CI and image build follow: `make smoke` boots the
+    provider's sources against a throwaway DID registry on loopback and
+    checks a DID-grant round trip (HS256 over the secret's UTF-8 bytes, the
+    six signed claims, a tampered signature rejected) and the token's
+    introspection, revocation and introspection again; its ports are
+    `PROVIDER_PORT` and `VERIFIER_PORT`. The root workspace overrides map the
+    three new packages to `workspace:*`. `Dockerfile.instance`,
+    `deploy/generated-instance.Dockerfile` and `publish-images.yml` take an
+    `ENTRY` (`src/main.ts` for the provider, `dist/main.mjs` for the
+    policy-verifier) and build only if the instance has a build script. The
+    dev `docker-compose.yml` configures the provider with the 0.18 variables
+    and `deploy/dev/provider.local.conf`.
+- **BREAKING (types, verifier packages): the policy-verifier baseline is
+  0.17.0.** 0.17.0 makes `secretEncoding` required in the `AppConfig`
+  type's `oauth.jwt` and in `Hs256Rotation`, and the dPLaaX verifier module
+  requires `^0.17.0`, so a consumer moves its three verifier packages
+  together. Configuration read through `AppConfigSchema` is unaffected.
+  Workspace packages require
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.17.0`, and
+  `create-policy-verifier` (now 0.4.0) emits the same as exact pins.
+  - 0.17.0 adds `oauth.jwt.secretEncoding`, how the HS256 secret becomes
+    key bytes. The default, `"utf8"`, is the reading earlier verifiers
+    applied, so nothing changes for a deployment that does not set it. The
+    generated verifier now writes `secretEncoding = "utf8"`, overridable
+    with `OAUTH_JWT_SECRET_ENCODING`, the reading the generated provider is
+    configured with (`keys.signing.secret-encoding = utf8`).
+  - 0.16.3 reads the client from `client_id` as well as `azp`, which
+    auth.provider 0.18's tokens need.
+  - The generated verifier also emits `@o3co/ts.hocon` 1.14.3 (was 0.1.5),
+    pino 10.4.0, `@types/node` 26.6.5 and vitest 5.0.5. These are the newest
+    releases inside the ranges upstream's own verifier template declares.
+  - [docs/upstream-compatibility.md](docs/upstream-compatibility.md#moving-an-existing-verifier-instance-to-017)
+    lists what an existing instance changes.
+- **The workspace toolchain follows upstream auth.provider 0.18.4**: pnpm
+  11.28.7, TypeScript 6.0.3, vitest 5.0.5, `@types/node` 26.6.5.
+  - The base tsconfig names `types: ["node"]`, because TypeScript 6 no
+    longer loads every `@types` package by default.
+  - `engines.node` is `>=24.22.1` with no upper bound, and CI builds and
+    tests on Node 24.22 and 26.
+  - Other dependencies move to: jose 6.2.13, `@noble/ed25519` 3.2.0, zod
+    `^4.6.7` (still overridden to 4.6.7).
+- **pnpm settings move from `package.json#pnpm` to `pnpm-workspace.yaml`.**
+  - `overrides` keeps the same entries, with vite raised to `^8.3.3`.
+  - `minimumReleaseAgeExclude` lets a fresh `@o3co/*` release install
+    despite pnpm 11's one-day hold.
+
+### Removed
+
+- **BREAKING: `@provin-line/auth-provider-did` and
+  `@provin-line/auth-provider-dplaax-module`**, the auth.provider 0.15
+  composition (`packages/provider-did`, `packages/provider-dplaax-module`).
+  No generator has emitted them since create-provider 0.4.0, and the
+  integration and conformance suites now run on the 0.18 modules.
+  - The DID grant is `@provin-line/auth-did-grant`, with its section
+    `did-grant` replacing `oauth.grants.did`.
+  - The registry resolver (`DplaaxDidResolver`) is
+    `@provin-line/auth-dplaax-registry`, with its section `dplaax-registry`
+    replacing `dplaax.registry.*` and `oauth.grants.did.resolver.*`.
+  - The nonce store is `@provin-line/auth-did-grant-store`.
+  - `buildModules`, `DplaaxAppConfig` and `DplaaxConfigSchema` have no
+    successor: a provider is a kernel `assemble` of modules, which the
+    generator writes.
+  - [docs/upstream-compatibility.md](docs/upstream-compatibility.md#moving-an-existing-provider-instance-to-018)
+    lists what an existing 0.15 deployment changes.
+- The `release` workflow, whose only job published `auth-provider-did` (and
+  was disabled).
+
+### Security
+
+- **`@provin-line/auth-did-grant`**: rule `auth.grant.kid-match` holds under
+  every contract, `LEGACY_DID_LOGIN@1` included. A JWS protected `kid` and a
+  message's `verification_method` are compared, as exact strings, with the
+  absolute id of the resolved method that verified the signature;
+  any other value is refused with `400 invalid_grant`, its nonce unspent. A
+  relative reference such as `#key-1`, or a kid in any other spelling, is
+  refused even when it denotes the same key. A `kid` or `verification_method`
+  that is not a string, and a message that is not a JSON object, are
+  `400 invalid_request`. A message that names no method is still taken. The
+  0.15 `auth-provider-did` checked these under an OWNER contract only, and
+  accepted other spellings under LEGACY.
+- body-parser 2.4.0 in the lockfile ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828):
+  denial of service via trailing bytes after a compressed request body). It
+  is reached through express under the verifier server.
 
 ## [0.4.0] - 2026-10-22
 
@@ -470,7 +697,8 @@ SECURITY.md).
   `ghcr.io/provin-line/auth-auth-provider`) by `publish-images.yml` on `v*`
   tags, consumed by the provin.oss quickstart via `AUTH_REF`.
 
-[Unreleased]: https://github.com/provin-line/auth/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/provin-line/auth/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/provin-line/auth/releases/tag/v0.5.0
 [0.4.0]: https://github.com/provin-line/auth/releases/tag/v0.4.0
 [0.3.1]: https://github.com/provin-line/auth/releases/tag/v0.3.1
 [0.3.0]: https://github.com/provin-line/auth/releases/tag/v0.3.0
