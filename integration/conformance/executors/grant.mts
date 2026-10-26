@@ -57,9 +57,11 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
  *                 section, in the module's own keys — e.g. "auth-contract",
  *                 "supported-algorithms">
  *   }
- * `expect` mirrors the grant's answer as the token endpoint writes it:
+ * The outcome is the grant's answer as the token endpoint writes it; a
+ * vector's `expect` names the part of it the vector fixes (`VectorOutcome`):
  *   "expect": { "status": 400, "error": "invalid_grant" }
- *   "expect": { "status": 200, "token_claims": { <decoded JWT claims> } }
+ *   "expect": { "status": 200 }
+ *   "expect": { "status": 200, "token_claims": { <the claims it fixes> } }
  *
  * The did-grant module runs composed with the dplaax-registry's contract
  * (served here by a stand-in that holds the vector's document), did-grant-store

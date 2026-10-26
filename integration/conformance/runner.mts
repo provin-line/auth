@@ -61,12 +61,25 @@ export interface Vector {
 }
 
 /**
- * An executor's mapped outcome for a vector. Directly `toEqual`-comparable
- * against the vector's `expect`: executors map what the module under test
- * answers (an issued token, a refusal, an unavailable dependency) onto this
- * shape rather than the test asserting against the module's own types.
+ * An executor's mapped outcome for a vector: executors map what the module
+ * under test answers (an issued token, a refusal, an unavailable dependency)
+ * onto this shape rather than the test asserting against the module's own
+ * types. The suite compares it with `toMatchObject`: a vector's `expect` fixes
+ * the keys it names, nested objects by the same rule, arrays element-wise at
+ * equal length. An issued token carries claims a vector cannot fix, those the
+ * executor's fixture, settings and randomness give (`iss`, `aud`, `exp`,
+ * `jti`).
  */
 export type VectorOutcome = Record<string, unknown>;
+
+/** A vector's `expect` as the outcome it fixes: a non-empty object, or the vector is malformed. */
+export function expectedOutcome(vector: Vector): VectorOutcome {
+	const { expect } = vector;
+	if (typeof expect !== "object" || expect === null || Array.isArray(expect) || Object.keys(expect).length === 0) {
+		throw new Error(`vector "${vector.id}": expect must be a non-empty object for rule ${vector.rule}`);
+	}
+	return expect as VectorOutcome;
+}
 
 export async function runVector(v: Vector): Promise<VectorOutcome> {
 	if (v.rule.startsWith("auth.resolve.")) {
