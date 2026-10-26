@@ -39,5 +39,5 @@ security assessment and fixes.
 
 | Version | Status |
 | --- | --- |
-| `0.2.x` | Supported (current line; GHCR `v0.2` images). |
+| `0.5.x` | Supported (current line; GHCR `v0.5` images). |
 | earlier | Unsupported. |
