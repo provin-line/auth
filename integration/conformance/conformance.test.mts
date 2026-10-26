@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { runVector, type Vector } from "./runner.mjs";
+import { runVector, type Vector, type VectorOutcome } from "./runner.mjs";
 
 const CONFORMANCE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const VECTORS_DIR = path.join(CONFORMANCE_DIR, "vectors");
@@ -58,7 +58,9 @@ describe("conformance vectors (dplaax.spec auth.* / did-resolution-auth rules)",
 
 	for (const vector of vectors) {
 		it(`${vector.id} [${vector.rule}]: ${vector.description}`, async () => {
-			expect(await runVector(vector)).toEqual(vector.expect);
+			// A vector fixes only what it names: an issued token also carries
+			// claims no vector can fix (iat, exp, jti).
+			expect(await runVector(vector)).toMatchObject(vector.expect as VectorOutcome);
 		});
 	}
 
