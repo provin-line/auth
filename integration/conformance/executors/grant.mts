@@ -57,8 +57,8 @@ import type { Vector, VectorOutcome } from "../runner.mjs";
  *                 section, in the module's own keys — e.g. "auth-contract",
  *                 "supported-algorithms">
  *   }
- * The outcome is the grant's answer as the token endpoint writes it, and a
- * vector's `expect` names the part of it the vector fixes:
+ * The outcome is the grant's answer as the token endpoint writes it; a
+ * vector's `expect` names the part of it the vector fixes (`VectorOutcome`):
  *   "expect": { "status": 400, "error": "invalid_grant" }
  *   "expect": { "status": 200 }
  *   "expect": { "status": 200, "token_claims": { <the claims it fixes> } }

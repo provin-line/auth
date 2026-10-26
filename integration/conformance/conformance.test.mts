@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { runVector, type Vector, type VectorOutcome } from "./runner.mjs";
+import { expectedOutcome, runVector, type Vector } from "./runner.mjs";
 
 const CONFORMANCE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const VECTORS_DIR = path.join(CONFORMANCE_DIR, "vectors");
@@ -58,11 +58,17 @@ describe("conformance vectors (dplaax.spec auth.* / did-resolution-auth rules)",
 
 	for (const vector of vectors) {
 		it(`${vector.id} [${vector.rule}]: ${vector.description}`, async () => {
-			// A vector fixes only what it names: an issued token also carries
-			// claims no vector can fix (iat, exp, jti).
-			expect(await runVector(vector)).toMatchObject(vector.expect as VectorOutcome);
+			expect(await runVector(vector)).toMatchObject(expectedOutcome(vector));
 		});
 	}
+
+	it("refuses a vector whose expect names nothing to compare", () => {
+		const vector = (expect: unknown): Vector => ({ id: "v", rule: "r", description: "d", input: {}, expect });
+		for (const empty of [{}, "reject", null, undefined, []]) {
+			expect(() => expectedOutcome(vector(empty))).toThrow(/expect must be a non-empty object/);
+		}
+		expect(expectedOutcome(vector({ status: 200 }))).toEqual({ status: 200 });
+	});
 
 	it("a LEGACY ed25519_jws request is issued with the six signed claims", async () => {
 		const did = "did:dplaax:registry.test.local:org:self-test-001";
