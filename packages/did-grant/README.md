@@ -27,7 +27,7 @@ Published to npm with provenance, from 0.1.0. auth.provider's generator composes
 The module contributes the grant to `grants` and takes:
 
 - `didDocuments`: resolves a DID to its document and the provenance of the bytes served. Provided by the dPLaaX registry module.
-- `spentNonces`: keeps the nonces of messages already used. Wired by the dPLaaX registry module on the kernel's `store`; it needs `spentNoncesNeeds`.
+- `spentNonces`: keeps the nonces of messages already used. Wired by `@provin-line/auth-did-grant-store` on the kernel's `store`; it needs `spentNoncesNeeds`.
 - `tokens`: the lifetime its tokens live, `accessTokenLifetimeSeconds()`, read when the grant is built and held to the section's bounds.
 - `issuer`, `tokenEndpointLocation` and the client allowance, from auth.provider.
 

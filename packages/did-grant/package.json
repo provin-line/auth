@@ -20,6 +20,8 @@
 	},
 	"files": [
 		"dist",
+		"src",
+		"!src/**/__tests__",
 		"README.md",
 		"LICENSE",
 		"config.example",
@@ -77,5 +79,8 @@
 	},
 	"publishConfig": {
 		"access": "public"
+	},
+	"engines": {
+		"node": ">=24"
 	}
 }

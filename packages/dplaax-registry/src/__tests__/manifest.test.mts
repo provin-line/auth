@@ -21,6 +21,8 @@ import { describe, expect, it } from "vitest";
 
 interface Manifest {
 	authProvider?: unknown;
+	engines?: Record<string, string>;
+	files?: string[];
 	dependencies?: Record<string, string>;
 	peerDependencies?: Record<string, string>;
 	peerDependenciesMeta?: Record<string, { optional?: boolean }>;
@@ -58,6 +60,19 @@ describe("package.json, as upstream's generator reads a package outside the rele
 
 	it("depends on did-dplaax at a caret range once packed", () => {
 		expect(manifest.dependencies?.["@provin-line/did-dplaax"]).toBe("workspace:^");
+	});
+
+	it("takes no release package nor zod as a dependency, which would give the app a second copy", () => {
+		const own = Object.keys(manifest.dependencies ?? {});
+		expect(own.filter((name) => name.startsWith("@o3co/") || name === "zod")).toEqual([]);
+	});
+
+	it("runs on the Node.js auth.provider 0.19 requires", () => {
+		expect(manifest.engines).toEqual({ node: ">=24" });
+	});
+
+	it("ships its sources beside dist, which the declaration maps point to, without its tests", () => {
+		expect(manifest.files).toEqual(expect.arrayContaining(["dist", "src", "!src/**/__tests__"]));
 	});
 
 	it("is published to the public registry", () => {

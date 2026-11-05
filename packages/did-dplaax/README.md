@@ -46,8 +46,9 @@ Extracting it puts the grammar where it belongs: below both frameworks.
 ## Distribution
 
 Published to npm with provenance, from 0.1.0, as
-`@provin-line/did-dplaax`. Inside this monorepo it is a workspace dependency
-(`workspace:^`), which packing turns into a caret range of its version.
+`@provin-line/did-dplaax`. Inside this monorepo the packages that use it
+take it through the `workspace:` protocol: `auth-dplaax-registry` at
+`workspace:^`, which packing turns into a caret range of its version.
 
 ## License
 

@@ -33,8 +33,7 @@
 // publishes nothing twice.
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 // In dependency order: dplaax-registry depends on did-dplaax, and the grant's
@@ -46,7 +45,8 @@ const root = join(import.meta.dirname, "..");
 const manifestOf = (name) => JSON.parse(readFileSync(join(root, "packages", name, "package.json"), "utf8"));
 const NAMES = PACKAGES.map((name) => manifestOf(name).name);
 const [step, dir, ...flags] = process.argv.slice(2);
-if ((step !== "pack" && step !== "publish") || dir === undefined) {
+const known = step === "publish" ? ["--dry-run"] : [];
+if ((step !== "pack" && step !== "publish") || dir === undefined || flags.some((f) => !known.includes(f))) {
 	console.error("usage: publish-packages.mjs pack <dir> | publish <dir> [--dry-run]");
 	process.exit(2);
 }
@@ -82,11 +82,17 @@ function pack() {
 			console.log(`${manifest.name}@${manifest.version}: on the registry, left as it is`);
 			continue;
 		}
-		const out = mkdtempSync(join(tmpdir(), "provin-pack-"));
-		execFileSync("pnpm", ["pack", "--pack-destination", out], { cwd, stdio: ["ignore", "ignore", "inherit"] });
-		const [tarball] = readdirSync(out).filter((f) => f.endsWith(".tgz"));
-		if (tarball === undefined) throw new Error(`${manifest.name}: pnpm pack wrote no tarball`);
-		renameSync(join(out, tarball), join(dir, tarball));
+		// A directory of its own inside <dir>, so the tarball is found by name and
+		// moved on the same filesystem.
+		const out = mkdtempSync(join(dir, ".pack-"));
+		try {
+			execFileSync("pnpm", ["pack", "--pack-destination", out], { cwd, stdio: ["ignore", "ignore", "inherit"] });
+			const [tarball] = readdirSync(out).filter((f) => f.endsWith(".tgz"));
+			if (tarball === undefined) throw new Error(`${manifest.name}: pnpm pack wrote no tarball`);
+			renameSync(join(out, tarball), join(dir, tarball));
+		} finally {
+			rmSync(out, { recursive: true, force: true });
+		}
 		console.log(`${manifest.name}@${manifest.version}: packed`);
 		count += 1;
 	}
@@ -115,12 +121,13 @@ function publish() {
 			console.log(`${name}@${version}: on the registry, left as it is`);
 			continue;
 		}
-		// A prerelease goes under `next`, so `latest` stays on a release.
-		const tag = version.includes("-") ? "next" : "latest";
-		const args = ["publish", path, "--access", "public", "--tag", tag];
+		// A prerelease goes under `next`. A release takes npm's default tag, so npm
+		// refuses to move `latest` to a version below the one it names.
+		const args = ["publish", path, "--access", "public"];
+		if (version.includes("-")) args.push("--tag", "next");
 		args.push(dryRun ? "--dry-run" : "--provenance");
 		execFileSync("npm", args, { stdio: "inherit" });
-		console.log(`${name}@${version}: ${dryRun ? "would be published" : "published"} under ${tag}`);
+		console.log(`${name}@${version}: ${dryRun ? "would be published" : "published"}`);
 	}
 }
 

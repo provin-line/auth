@@ -17,17 +17,21 @@ releases.
   `.github/workflows/publish-packages.yml` publishes them on a version tag
   through npm's trusted publishing. A job without the OIDC identity installs,
   builds, tests and packs; a second job, in the `npm` environment, runs
-  `npm publish` on the tarballs alone. A tag on a commit main does not hold
-  is refused, and a version the registry holds is skipped
-  (`scripts/publish-packages.mjs`).
+  `npm publish` on the tarballs alone. The workflow refuses a tag on a
+  commit main does not hold, which holds where the repository's tag ruleset
+  restricts who creates `v*` tags. A version the registry holds is skipped
+  (`scripts/publish-packages.mjs`). The packages require Node.js 24 or
+  later, as auth.provider 0.19 does, and ship their sources beside `dist`
+  for the declaration maps.
 - Each module package declares `authProvider`, so auth.provider 0.19's
   generator composes it as a package outside the release
   (`npm:<name>`): `auth-did-grant` a feature needing `@mod/token-endpoint`,
   `@mod/issuer`, `@mod/client-allowance` and `@mod/tokens`;
   `auth-did-grant-store` a wiring of it needing `@mod/store`;
-  `auth-dplaax-registry` its default adapter needing `@mod/outbound`. Each
-  package's `config.example`, which that generator reads as the module's
-  fragment, holds its own section alone.
+  `auth-dplaax-registry` its default adapter needing `@mod/outbound`. The
+  `config.example` of `auth-did-grant` and of `auth-dplaax-registry`, which
+  that generator reads as the module's fragment, holds its own section
+  alone.
 
 ### Changed
 

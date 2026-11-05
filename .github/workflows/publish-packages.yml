@@ -12,7 +12,14 @@ name: publish-packages
 # and publishes only the versions the registry does not hold, so a re-run of
 # the same tag publishes nothing twice.
 #
-# Trigger: version tags. A tag on a commit main does not hold is refused.
+# Trigger: version tags. A tag on a commit main does not hold is refused
+# here. A tag on an edited copy of this file would run that copy, so the
+# refusal holds only where the repository's tag ruleset restricts who may
+# create `v*` tags. The `npm` environment admits `v*` tags alone.
+#
+# When npm's OIDC exchange fails, npm says so at verbose level only and then
+# reports an authentication error: rerun with `--loglevel verbose` on the
+# publish step to see why.
 
 on:
   push:
@@ -21,8 +28,10 @@ on:
 permissions:
   contents: read
 
+# One run at a time across tags: two tags close together would race to
+# publish the same versions.
 concurrency:
-  group: publish-packages-${{ github.ref }}
+  group: publish-packages
   cancel-in-progress: false
 
 jobs:
@@ -34,19 +43,24 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Refuse a tag on a commit main does not hold
         run: |
           git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME is on $GITHUB_SHA, which main does not hold"
+            exit 1
+          fi
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
+      # No dependency cache: the release's tarballs come from this job, and a
+      # cache restored from another ref's run could feed them.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24.22"
           check-latest: true
-          cache: "pnpm"
 
       - run: pnpm install --frozen-lockfile
 
@@ -77,12 +91,13 @@ jobs:
       # The script alone: this job installs nothing.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           sparse-checkout: |
-            scripts/publish-packages.mjs
-            packages/did-dplaax/package.json
-            packages/did-grant/package.json
-            packages/did-grant-store/package.json
-            packages/dplaax-registry/package.json
+            /scripts/publish-packages.mjs
+            /packages/did-dplaax/package.json
+            /packages/did-grant/package.json
+            /packages/did-grant-store/package.json
+            /packages/dplaax-registry/package.json
           sparse-checkout-cone-mode: false
 
       # Its npm is past the 11.5.1 that trusted publishing needs, which the

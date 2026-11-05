@@ -1,8 +1,8 @@
 # Upstream auth compatibility
 
-Workspace packages require auth.provider `0.19.0` (exactly, the `@o3co/auth-provider-*`
-bundles) and policy-verifier `^0.17.0`. The generators emit the same as exact
-pins (`@provin-line/create-auth-provider` 0.5.0, create-policy-verifier 0.4.0). Updating this
+Workspace packages are built and tested on auth.provider `0.19.0` (the
+`@o3co/auth-provider-*` bundles), which the module packages take as peers at
+`^0.19.0`, and on policy-verifier `^0.17.0`. The generators emit exact pins (`@provin-line/create-auth-provider` 0.5.0, create-policy-verifier 0.4.0). Updating this
 repository's git ref alone does **not** deploy newer upstream security fixes to
 an instance that already exists: its own `package.json` pins and its
 configuration must be updated too (see below).
@@ -162,8 +162,9 @@ instance is independent; move it as the sections below say.
   cannot tell. A request with a `resource` parameter is refused, as for any
   grant that does not take a target.
 - **`PathResolver` and `VerifierRegistry` injection are gone.** `@noble/ed25519`
-  is an optional peer of `did-grant`, which the generated app depends on;
-  custom signature algorithms are contributed at `signatureAlgorithms`.
+  comes with the generated app (a dependency of `did-grant` itself from 0.1.0
+  on npm); custom signature algorithms are contributed at
+  `signatureAlgorithms`.
 - **A nonce is kept until its message's window closes** (plus a minute), not
   `message-max-age` from the request.
 - **Port, environment, configuration files.** The app reads the files named by

@@ -21,6 +21,8 @@ import { describe, expect, it } from "vitest";
 
 interface Manifest {
 	authProvider?: unknown;
+	engines?: Record<string, string>;
+	files?: string[];
 	dependencies?: Record<string, string>;
 	peerDependencies?: Record<string, string>;
 	peerDependenciesMeta?: Record<string, { optional?: boolean }>;
@@ -33,6 +35,14 @@ const manifest = JSON.parse(await readFile(join(import.meta.dirname, "..", "..",
 describe("package.json", () => {
 	it("declares no authProvider: a library, not a module", () => {
 		expect(manifest.authProvider).toBeUndefined();
+	});
+
+	it("runs on the Node.js auth.provider 0.19 requires", () => {
+		expect(manifest.engines).toEqual({ node: ">=24" });
+	});
+
+	it("ships its sources beside dist, which the declaration maps point to, without its tests", () => {
+		expect(manifest.files).toEqual(expect.arrayContaining(["dist", "src", "!src/**/__tests__"]));
 	});
 
 	it("is published to the public registry", () => {
