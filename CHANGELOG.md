@@ -42,6 +42,54 @@ releases.
   it to `10m`. `tokens`' default, `1h`, is over the default
   `legacy-max-ttl`, so a LEGACY deployment that sets nothing does not boot.
   The value takes `2s` to `1d`, the range 0.19's `tokens` issues in.
+- **BREAKING (verifier packages): the policy-verifier baseline is 0.18.0.**
+  The dPLaaX verifier module requires `^0.18.0`, so a consumer moves its
+  three verifier packages together. Workspace packages require
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.18.0`, and
+  `create-policy-verifier` (now 0.5.0) emits the same as exact pins.
+  0.18.0 changes no core or builtins API, so the bump needs no code or
+  configuration change in this repository's packages: it raises the
+  server's zod to `^4.6.7`, which the workspace and the generated verifier
+  already pin, and moves upstream's lockfile to body-parser 2.4.0, which
+  this lockfile already resolves. An existing verifier instance refreshes
+  `body-parser` in its own lockfile, whichever version it runs.
+  - The generated verifier declares zod 4.6.7 as a runtime dependency. Its
+    config loader validates through `@o3co/ts.hocon/zod`, which imports zod
+    at run time and declares it only as an optional peer.
+    `DEFAULT_DEP_VERSIONS` gains a `zod` key, which also sets the generated
+    `pnpm.overrides.zod`. Code that types an object as
+    `Record<keyof typeof DEFAULT_DEP_VERSIONS, string>` adds it.
+  - `DEFAULT_DEP_VERSIONS` is frozen: a write to it throws, where it
+    changed what every later scaffold in the process emitted.
+  - The generated `dependencies` are in alphabetical order, the dPLaaX
+    verifier module after the `@o3co` packages.
+  - It emits vitest 5.1.0 (was 5.0.5) and `@types/node` 26.6.6 (was
+    26.6.5), the newest inside the ranges upstream's 0.18.0 template
+    declares.
+  - Upstream lists as breaking that its template's loader refuses a `+`
+    outside quotes and a key named `__proto__`, `constructor` or
+    `prototype`. Those refusals are `@o3co/ts.hocon` 1.14.3's, which
+    `create-policy-verifier` has emitted since 0.4.0; see
+    [upstream-compatibility.md](docs/upstream-compatibility.md).
+
+### Security
+
+- qs 6.17.1 in the lockfile ([GHSA-6pq8-jhm2-2vcw](https://github.com/advisories/GHSA-6pq8-jhm2-2vcw):
+  denial of service when `qs.stringify` with `arrayFormat: 'comma'` meets an
+  array element whose own `toString` is not callable). It is reached through
+  express under the verifier server, in the integration tests and in the dev
+  composition image (`Dockerfile.instance`), whose install starts from this
+  lockfile. The published images and a generated instance resolve their
+  graph at build time. express and body-parser call `qs.parse` only.
+- glob 14.0.3 and minimatch 11.0.4 in the lockfile, with rimraf raised to
+  `^6.1.4` in every package's devDependencies
+  ([GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4):
+  an AbortSignal does not stop the traversal;
+  [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249):
+  denial of service through amplified glob parts). They are reached through
+  rimraf in each package's `prebuild` (`rimraf dist`), which also runs when a
+  git-fetched package is prepared. rimraf globs only under `--glob`, which no
+  script passes.
 
 ## [0.5.0] - 2026-10-27
 
