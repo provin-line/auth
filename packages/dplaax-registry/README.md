@@ -2,7 +2,7 @@
 
 Provides [`@provin-line/auth-did-grant`](../did-grant/README.md)'s `didDocuments`: it resolves did:dplaax owner DIDs against a DID registry, through auth.provider's `outbound`.
 
-Published to npm with provenance, from 0.1.0. Its `authProvider` declaration makes it the default adapter of `@provin-line/auth-did-grant`, needing `@mod/outbound`: name it beside the grant when generating the app (`npm:@provin-line/auth-dplaax-registry`). auth.provider's foundation, `@provin-line/auth-did-grant` and zod are peers.
+Published to npm with provenance, from 0.6.0. Its `authProvider` declaration makes it the default adapter of `@provin-line/auth-did-grant`, needing `@mod/outbound`: name it beside the grant when generating the app (`npm:@provin-line/auth-dplaax-registry`). auth.provider's foundation, `@provin-line/auth-did-grant` and zod are peers.
 
 It depends on `@provin-line/did-dplaax`, which the generator does not name. A generated app refuses to install a version published within the last day (`minimumReleaseAge`), and the generator's `--allow-fresh` takes only the packages it names, so for a day after a `did-dplaax` release, add that exact version (`"@provin-line/did-dplaax@<version>"`) to the app's `minimumReleaseAgeExclude` or wait.
 

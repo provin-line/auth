@@ -13,7 +13,7 @@ releases.
 ### Added
 
 - **`@provin-line/did-dplaax`, `auth-did-grant`, `auth-did-grant-store` and
-  `auth-dplaax-registry` are published to npm, with provenance, from 0.1.0.**
+  `auth-dplaax-registry` are published to npm, with provenance, from 0.6.0.**
   `.github/workflows/publish-packages.yml` publishes them on a version tag
   through npm's trusted publishing. A job without the OIDC identity installs,
   builds, tests and packs; a second job, in the `npm` environment, runs
@@ -35,14 +35,22 @@ releases.
 
 ### Changed
 
+- **Every package carries the repository's one version, 0.6.0 in this
+  release:** the root `package.json`'s, which is the release tag's without
+  its `v`. The generators (`create-auth-provider`,
+  `create-auth-policy-verifier`) and the verifier module move to it, and the
+  four libraries are first published at it. A provin package takes another
+  as a peer at its caret (`^0.6.0`). `integration/tests/versions.test.mts`
+  holds the versions equal, and `publish-packages` refuses a tag whose
+  version is not every published package's.
 - The module packages take `@o3co/auth-provider-*` as peers at `^0.19.0`,
   and zod at `^4.6.7`, `auth-did-grant-store` included. `@noble/ed25519` is
   a dependency of `auth-did-grant` instead of an optional peer, so an app
   composing it from npm gets the default algorithm's verifier without adding
   it. `auth-dplaax-registry` depends on `@provin-line/did-dplaax` at
-  `^0.1.0` once packed.
+  `^0.6.0` once packed.
 
-- **BREAKING (`@provin-line/create-auth-provider` 0.5.0): the generated provider is an
+- **BREAKING (`@provin-line/create-auth-provider` 0.6.0): the generated provider is an
   auth.provider 0.19.0 app**, and the DID grant, the registry resolver and the
   nonce store require 0.19.0. An instance generated with 0.4.0 is generated
   again: it lacks the `tls-options` module 0.19's `outbound` needs, and does
@@ -76,7 +84,7 @@ releases.
   The dPLaaX verifier module requires `^0.18.0`, so a consumer moves its
   three verifier packages together. Workspace packages require
   `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.18.0`, and
-  `create-policy-verifier` (now 0.5.0) emits the same as exact pins.
+  `create-policy-verifier` (now 0.6.0) emits the same as exact pins.
   0.18.0 changes no core or builtins API, so the bump needs no code or
   configuration change in this repository's packages: it raises the
   server's zod to `^4.6.7`, which the workspace and the generated verifier

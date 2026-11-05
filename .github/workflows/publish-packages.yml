@@ -69,7 +69,7 @@ jobs:
       - run: pnpm --filter "./packages/did-dplaax" --filter "./packages/did-grant" --filter "./packages/did-grant-store" --filter "./packages/dplaax-registry" test
 
       - id: pack
-        run: node scripts/publish-packages.mjs pack "$RUNNER_TEMP/packages"
+        run: node scripts/publish-packages.mjs pack "$RUNNER_TEMP/packages" --tag "$GITHUB_REF_NAME"
 
       - if: steps.pack.outputs.count != '0'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
