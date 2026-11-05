@@ -119,6 +119,6 @@ Upstream packages composed by this repository:
 
 - Provider: `@o3co/auth-provider-foundation`, `@o3co/auth-provider-identity`, `@o3co/auth-provider-oauth`, `@o3co/auth-provider-templates`, `@provin-line/auth-did-grant`, `@provin-line/auth-dplaax-registry`, `@provin-line/auth-did-grant-store`
 - Policy-verifier: `@o3co/auth.policy-verifier.server`, `@o3co/auth.policy-verifier.builtins`, `@o3co/auth.policy-verifier.core`
-- Shared: `@o3co/ts.hocon`; generated instances log through `pino` directly (their logger and shutdown ship inside the scaffold)
+- Shared: `@o3co/ts.hocon`; generated instances log through `pino` directly (their logger and shutdown ship inside the scaffold), and the generated policy-verifier declares `zod`, which its config loader imports through `@o3co/ts.hocon/zod`
 
 Version constraints follow each service's `package.json`.

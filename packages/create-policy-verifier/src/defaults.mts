@@ -19,8 +19,12 @@
 // upgrades, refresh this file in lockstep with a generator MINOR bump (see
 // create-app.md § 3.3).
 
-/** Exact-pin runtime + dev dep versions emitted into generated package.json. */
-export const DEFAULT_DEP_VERSIONS = {
+/**
+ * Exact-pin runtime + dev dep versions emitted into generated package.json.
+ * Frozen: every generation reads it, so a write by any importer would change
+ * what later scaffolds emit.
+ */
+export const DEFAULT_DEP_VERSIONS = Object.freeze({
 	// Framework (o3co) — runtime
 	"@o3co/auth.policy-verifier.server": "0.18.0",
 	"@o3co/auth.policy-verifier.builtins": "0.18.0",
@@ -38,7 +42,7 @@ export const DEFAULT_DEP_VERSIONS = {
 	"@types/node": "26.6.6",
 	typescript: "5.9.3",
 	vitest: "5.1.0",
-} as const;
+} as const);
 
 /**
  * Default git-subdirectory ref for `@provin-line/auth-policy-verifier-dplaax-module`.

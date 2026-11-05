@@ -205,9 +205,6 @@ const TRANSITIVE_PROVIN_PACKAGES = [
  */
 function buildPackageJson(opts: FilledOptions): string {
 	const dependencies: Record<string, string> = {
-		"@provin-line/auth-policy-verifier-dplaax-module": buildDplaaxModuleDep(
-			opts.dplaaxModuleRef,
-		),
 		"@o3co/auth.policy-verifier.builtins":
 			DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.builtins"],
 		"@o3co/auth.policy-verifier.core":
@@ -215,6 +212,9 @@ function buildPackageJson(opts: FilledOptions): string {
 		"@o3co/auth.policy-verifier.server":
 			DEFAULT_DEP_VERSIONS["@o3co/auth.policy-verifier.server"],
 		"@o3co/ts.hocon": DEFAULT_DEP_VERSIONS["@o3co/ts.hocon"],
+		"@provin-line/auth-policy-verifier-dplaax-module": buildDplaaxModuleDep(
+			opts.dplaaxModuleRef,
+		),
 		pino: DEFAULT_DEP_VERSIONS.pino,
 		zod: DEFAULT_DEP_VERSIONS.zod,
 	};

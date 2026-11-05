@@ -16,17 +16,23 @@ releases.
   The dPLaaX verifier module requires `^0.18.0`, so a consumer moves its
   three verifier packages together. Workspace packages require
   `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.18.0`, and
-  `create-policy-verifier` (now 0.5.0) emits the same as exact pins. The
-  bump needs no code or configuration change here: 0.18.0 raises the
+  `create-policy-verifier` (now 0.5.0) emits the same as exact pins.
+  0.18.0 changes no core or builtins API, so the bump needs no code or
+  configuration change in this repository's packages: it raises the
   server's zod to `^4.6.7`, which the workspace and the generated verifier
   already pin, and moves upstream's lockfile to body-parser 2.4.0, which
-  this lockfile already resolves.
+  this lockfile already resolves. An existing verifier instance refreshes
+  `body-parser` in its own lockfile, whichever version it runs.
   - The generated verifier declares zod 4.6.7 as a runtime dependency. Its
     config loader validates through `@o3co/ts.hocon/zod`, which imports zod
     at run time and declares it only as an optional peer.
     `DEFAULT_DEP_VERSIONS` gains a `zod` key, which also sets the generated
     `pnpm.overrides.zod`. Code that types an object as
     `Record<keyof typeof DEFAULT_DEP_VERSIONS, string>` adds it.
+  - `DEFAULT_DEP_VERSIONS` is frozen: a write to it throws, where it
+    changed what every later scaffold in the process emitted.
+  - The generated `dependencies` are in alphabetical order, the dPLaaX
+    verifier module after the `@o3co` packages.
   - It emits vitest 5.1.0 (was 5.0.5) and `@types/node` 26.6.6 (was
     26.6.5), the newest inside the ranges upstream's 0.18.0 template
     declares.
