@@ -23,10 +23,11 @@
 //   pack <dir> [--tag <tag>] packs into <dir> each package whose version the
 //                            registry does not hold yet. pnpm packs, turning
 //                            `workspace:` ranges into versions. With --tag, it
-//                            refuses unless every package's version is the
-//                            tag's, `v` dropped: the repository releases under
-//                            one version. In GitHub Actions it writes `count`
-//                            to the step's outputs.
+//                            refuses unless the root package.json's version,
+//                            and every workspace package's, is the tag's, `v`
+//                            dropped: the repository releases under one
+//                            version. In GitHub Actions it writes `count` to
+//                            the step's outputs.
 //   publish <dir> [--dry-run]
 //                            publishes the tarballs in <dir> with npm, in
 //                            dependency order. npm authenticates by trusted
@@ -83,7 +84,17 @@ function held(name, version) {
 function pack() {
 	if (tag !== undefined) {
 		const want = tag.replace(/^v/, "");
-		const off = PACKAGES.map((name) => manifestOf(name)).filter((m) => m.version !== want);
+		// The root, packages/* and integration: every package the repository
+		// releases its version in.
+		const read = (dir) => JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8"));
+		const workspace = [
+			".",
+			...readdirSync(join(root, "packages"), { withFileTypes: true })
+				.filter((e) => e.isDirectory())
+				.map((e) => join("packages", e.name)),
+			"integration",
+		].map(read);
+		const off = workspace.filter((m) => m.version !== want);
 		if (off.length > 0) {
 			const named = off.map((m) => `${m.name}@${m.version}`).join(", ");
 			console.error(`${tag}: the repository releases under one version, and these are not ${want}: ${named}`);

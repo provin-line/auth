@@ -39,10 +39,12 @@ releases.
   release:** the root `package.json`'s, which is the release tag's without
   its `v`. The generators (`create-auth-provider`,
   `create-auth-policy-verifier`) and the verifier module move to it, and the
-  four libraries are first published at it. A provin package takes another
+  four libraries are first released at it. Before it each generator had its
+  own version: 0.3.0 shipped in v0.4.0 and 0.4.0 in v0.5.0, and 0.5.0 was
+  never released. A provin package takes another
   as a peer at its caret (`^0.6.0`). `integration/tests/versions.test.mts`
   holds the versions equal, and `publish-packages` refuses a tag whose
-  version is not every published package's.
+  version is not the root's and every workspace package's.
 - The module packages take `@o3co/auth-provider-*` as peers at `^0.19.0`,
   and zod at `^4.6.7`, `auth-did-grant-store` included. `@noble/ed25519` is
   a dependency of `auth-did-grant` instead of an optional peer, so an app

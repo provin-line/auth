@@ -114,7 +114,9 @@ Every package carries the repository's one version: the root
 (`integration/tests/versions.test.mts` holds them equal, and
 `publish-packages` refuses a tag whose version is not every published
 package's). A provin package takes another as a peer at the caret of that
-version.
+version. Before 0.6.0 each generator had its own version: 0.2.0 shipped in
+tags v0.3.x, 0.3.0 in v0.4.0 and 0.4.0 in v0.5.0, and 0.5.0 was never
+released.
 
 (Formerly spec § 5.3 / § 5.4 / § 8.1 — see Appendix A.)
 

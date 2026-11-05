@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 
-
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // The repository releases under one version: its tag, the root package.json
-// and every workspace package carry the same one.
+// and every workspace package carry the same one. The workspace's packages
+// are packages/* and integration; instances/* are generated instances, which
+// carry their own version.
 
 interface Manifest {
 	name: string;
 	version?: string;
 	dependencies?: Record<string, string>;
+	devDependencies?: Record<string, string>;
+	optionalDependencies?: Record<string, string>;
 	peerDependencies?: Record<string, string>;
 }
 
@@ -50,6 +53,16 @@ describe("the repository's one version", () => {
 		const versions = Object.fromEntries(workspace.map(({ manifest }) => [manifest.name, manifest.version]));
 		const expected = Object.fromEntries(workspace.map(({ manifest }) => [manifest.name, rootManifest.version]));
 		expect(versions).toEqual(expected);
+	});
+
+	it("is what a package takes a provin package at otherwise, through the workspace protocol", () => {
+		for (const { manifest } of workspace) {
+			const own = { ...manifest.dependencies, ...manifest.devDependencies, ...manifest.optionalDependencies };
+			for (const [name, range] of Object.entries(own)) {
+				if (!name.startsWith("@provin-line/")) continue;
+				expect({ in: manifest.name, name, range }).toEqual({ in: manifest.name, name, range: expect.stringMatching(/^workspace:/) });
+			}
+		}
 	});
 
 	it("is the caret range a package takes a provin package at as a peer", () => {

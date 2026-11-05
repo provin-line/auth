@@ -13,9 +13,9 @@
 // version if they want a newer baseline.
 //
 // These constants are the dependency baseline of the canonical template:
-// auth.policy-verifier 0.18.0. The toolchain pins
-// are the newest releases inside the ranges upstream create-auth-policy-verifier's
-// standalone template declares for the same release. When the baseline
+// auth.policy-verifier 0.18.0. The toolchain pins are the newest releases
+// inside the ranges upstream create-auth-policy-verifier's standalone template
+// declares for the same release. When the baseline
 // upgrades, refresh this file in a minor release of the repository (see
 // create-app.md § 3.3).
 

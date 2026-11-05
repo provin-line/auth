@@ -12,10 +12,12 @@ name: publish-packages
 # and publishes only the versions the registry does not hold, so a re-run of
 # the same tag publishes nothing twice.
 #
-# Trigger: version tags. A tag on a commit main does not hold is refused
-# here. A tag on an edited copy of this file would run that copy, so the
-# refusal holds only where the repository's tag ruleset restricts who may
-# create `v*` tags. The `npm` environment admits `v*` tags alone.
+# Trigger: version tags. A tag whose version (`v` dropped) is not the root
+# package.json's and every workspace package's is refused, as is a tag on a
+# commit main does not hold. A tag on an edited copy of this file would run
+# that copy, so the refusals hold only where the repository's tag ruleset
+# restricts who may create `v*` tags. The `npm` environment admits `v*` tags
+# alone.
 #
 # When npm's OIDC exchange fails, npm says so at verbose level only and then
 # reports an authentication error: rerun with `--loglevel verbose` on the
