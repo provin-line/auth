@@ -2,6 +2,8 @@
 
 Provides [`@provin-line/auth-did-grant`](../did-grant/README.md)'s `didDocuments`: it resolves did:dplaax owner DIDs against a DID registry, through auth.provider's `outbound`.
 
+Published to npm with provenance, from 0.1.0. Its `authProvider` declaration makes it the default adapter of `@provin-line/auth-did-grant`, needing `@mod/outbound`: name it beside the grant when generating the app (`npm:@provin-line/auth-dplaax-registry`). auth.provider's foundation, `@provin-line/auth-did-grant` and zod are peers.
+
 ## What it does
 
 - A DID resolves at `<url>/did/<accountType>/<accountId>/did.json`. Only owner DIDs resolve: the grant authenticates owners, and pipeline and process DIDs belong to the Signer API.

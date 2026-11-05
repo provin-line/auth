@@ -31,8 +31,8 @@ export interface BuiltinAlgorithm {
 }
 
 /**
- * Makes a verifier that needs the optional peer `@noble/ed25519`, and tells
- * the operator how to get it when it is missing.
+ * Makes a verifier that needs `@noble/ed25519`, and tells the operator how to
+ * get it when an install left it out.
  */
 async function withNoble(algorithm: string, load: () => Promise<SignatureVerifier>): Promise<SignatureVerifier> {
 	try {

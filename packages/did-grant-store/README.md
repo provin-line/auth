@@ -6,4 +6,6 @@ Its one space, `did-grant-store.spent`, declares a guarantee for each need `did-
 
 Export: `./module` (default export), named `did-grant-store`, with no section; replica-safe, as it keeps the nonces on the `store`. Compose it with a `store` that offers the guarantees: auth.provider's in-memory store refuses them unless `store.accept-volatile = true`, which suits a single instance only.
 
-auth.provider's foundation and `@provin-line/auth-did-grant` are peers: the kernel finds contracts by the object itself.
+auth.provider's foundation, `@provin-line/auth-did-grant` and zod are peers: the kernel finds contracts by the object itself.
+
+Published to npm with provenance, from 0.1.0. Its `authProvider` declaration makes it a wiring of `@provin-line/auth-did-grant`, needing `@mod/store`: name it beside the grant when generating the app (`npm:@provin-line/auth-did-grant-store`).

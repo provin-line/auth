@@ -18,9 +18,9 @@ RFC 6749 §4.5 names an extension grant by an absolute URI. The token endpoint c
 | `./module` | The module (default export), named `did-grant`, with the section `did-grant`; replica-safe, as it keeps spent nonces behind `spentNonces`. |
 | `./testing` | `spentNoncesContract`, the suite an implementation of `spentNonces` passes. |
 
-auth.provider's packages and zod are peers: the kernel finds contracts by the object itself, so the app must hold one copy of each. `@noble/ed25519` is an optional peer, needed for `ed25519_raw` and `ed25519_prehash` only.
+auth.provider's packages and zod are peers: the kernel finds contracts by the object itself, so the app must hold one copy of each. `@noble/ed25519` is a dependency, loaded for `ed25519_raw` and `ed25519_prehash` only.
 
-Not published to npm: depend on it as a git-subdirectory reference at a release tag (`github:provin-line/auth#<tag>&path:/packages/did-grant`).
+Published to npm with provenance, from 0.1.0. auth.provider's generator composes it as a package outside the release, `npm:@provin-line/auth-did-grant`, which its `authProvider` declaration (a feature) lets it read; name `npm:@provin-line/auth-did-grant-store` and `npm:@provin-line/auth-dplaax-registry` beside it.
 
 ## Composing it
 

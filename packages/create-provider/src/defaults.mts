@@ -23,9 +23,9 @@
  * Upstream's own dependencies come with upstream's generator.
  */
 export const DEFAULT_DEP_VERSIONS = {
-	// The ed25519_raw DID-grant verifier resolves this from the app's root
-	// through import.meta.resolve, so it must be a DIRECT runtime dependency of
-	// the app (did-grant declares it only as an optional peer).
+	// The ed25519_raw DID-grant verifier imports it. did-grant depends on it, so
+	// this app-level pin is redundant; it goes when the generator composes the
+	// provin modules from npm instead of overlaying them.
 	"@noble/ed25519": "3.2.0",
 } as const;
 

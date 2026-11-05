@@ -31,10 +31,10 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@provin-line/did-dplaax": "workspace:*"
+		"@provin-line/did-dplaax": "workspace:^"
 	},
 	"peerDependencies": {
-		"@o3co/auth-provider-foundation": "0.19.0",
+		"@o3co/auth-provider-foundation": "^0.19.0",
 		"@provin-line/auth-did-grant": "^0.1.0",
 		"zod": "^4.6.7"
 	},
@@ -50,5 +50,17 @@
 		"typescript": "^6.0.3",
 		"vitest": "^5.0.5",
 		"zod": "^4.6.7"
+	},
+	"authProvider": {
+		"format": 1,
+		"kind": "adapter",
+		"adapts": "@provin-line/auth-did-grant",
+		"default": true,
+		"needs": [
+			"@mod/outbound"
+		]
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }

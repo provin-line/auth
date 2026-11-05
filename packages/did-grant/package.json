@@ -39,26 +39,22 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
+		"@noble/ed25519": "^3.2.0",
 		"jose": "^6.2.13"
 	},
 	"peerDependencies": {
-		"@noble/ed25519": "^3.2.0",
-		"@o3co/auth-provider-foundation": "0.19.0",
-		"@o3co/auth-provider-identity": "0.19.0",
-		"@o3co/auth-provider-oauth": "0.19.0",
+		"@o3co/auth-provider-foundation": "^0.19.0",
+		"@o3co/auth-provider-identity": "^0.19.0",
+		"@o3co/auth-provider-oauth": "^0.19.0",
 		"vitest": "^5.0.5",
 		"zod": "^4.6.7"
 	},
 	"peerDependenciesMeta": {
-		"@noble/ed25519": {
-			"optional": true
-		},
 		"vitest": {
 			"optional": true
 		}
 	},
 	"devDependencies": {
-		"@noble/ed25519": "^3.2.0",
 		"@o3co/auth-provider-foundation": "0.19.0",
 		"@o3co/auth-provider-identity": "0.19.0",
 		"@o3co/auth-provider-oauth": "0.19.0",
@@ -68,5 +64,18 @@
 		"typescript": "^6.0.3",
 		"vitest": "^5.0.5",
 		"zod": "^4.6.7"
+	},
+	"authProvider": {
+		"format": 1,
+		"kind": "feature",
+		"needs": [
+			"@mod/token-endpoint",
+			"@mod/issuer",
+			"@mod/client-allowance",
+			"@mod/tokens"
+		]
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }
