@@ -45,10 +45,10 @@ Extracting it puts the grammar where it belongs: below both frameworks.
 
 ## Distribution
 
-Not published to npm. Consumed via pnpm workspace dep
-(`workspace:*`) inside this monorepo, or via pnpm git-subdirectory dep
-(`github:provin-line/auth#<tag>&path:/packages/did-dplaax`) from
-out-of-tree consumers.
+Published to npm with provenance, from 0.1.0, as
+`@provin-line/did-dplaax`. Inside this monorepo the packages that use it
+take it through the `workspace:` protocol: `auth-dplaax-registry` at
+`workspace:^`, which packing turns into a caret range of its version.
 
 ## License
 

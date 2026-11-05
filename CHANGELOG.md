@@ -10,7 +10,37 @@ releases.
 
 ## [Unreleased]
 
+### Added
+
+- **`@provin-line/did-dplaax`, `auth-did-grant`, `auth-did-grant-store` and
+  `auth-dplaax-registry` are published to npm, with provenance, from 0.1.0.**
+  `.github/workflows/publish-packages.yml` publishes them on a version tag
+  through npm's trusted publishing. A job without the OIDC identity installs,
+  builds, tests and packs; a second job, in the `npm` environment, runs
+  `npm publish` on the tarballs alone. The workflow refuses a tag on a
+  commit main does not hold, which holds where the repository's tag ruleset
+  restricts who creates `v*` tags. A version the registry holds is skipped
+  (`scripts/publish-packages.mjs`). The packages require Node.js 24 or
+  later, as auth.provider 0.19 does, and ship their sources beside `dist`
+  for the declaration maps.
+- Each module package declares `authProvider`, so auth.provider 0.19's
+  generator composes it as a package outside the release
+  (`npm:<name>`): `auth-did-grant` a feature needing `@mod/token-endpoint`,
+  `@mod/issuer`, `@mod/client-allowance` and `@mod/tokens`;
+  `auth-did-grant-store` a wiring of it needing `@mod/store`;
+  `auth-dplaax-registry` its default adapter needing `@mod/outbound`. The
+  `config.example` of `auth-did-grant` and of `auth-dplaax-registry`, which
+  that generator reads as the module's fragment, holds its own section
+  alone.
+
 ### Changed
+
+- The module packages take `@o3co/auth-provider-*` as peers at `^0.19.0`,
+  and zod at `^4.6.7`, `auth-did-grant-store` included. `@noble/ed25519` is
+  a dependency of `auth-did-grant` instead of an optional peer, so an app
+  composing it from npm gets the default algorithm's verifier without adding
+  it. `auth-dplaax-registry` depends on `@provin-line/did-dplaax` at
+  `^0.1.0` once packed.
 
 - **BREAKING (`@provin-line/create-auth-provider` 0.5.0): the generated provider is an
   auth.provider 0.19.0 app**, and the DID grant, the registry resolver and the

@@ -46,7 +46,7 @@ export function patchPackageJson(text: string, opts: OverlayOptions): string {
 					gitSubdirectoryRef(opts.moduleRef, m.dir),
 				]),
 			),
-			// The ed25519_raw verifier resolves it from the app's root.
+			// Redundant with did-grant's own dependency; see DEFAULT_DEP_VERSIONS.
 			"@noble/ed25519": DEFAULT_DEP_VERSIONS["@noble/ed25519"],
 		},
 	};

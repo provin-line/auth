@@ -31,6 +31,9 @@ its own composition roots with the scaffold generators
 
 ## Packages
 
+The first four are published to npm with provenance, from 0.1.0, by
+[`publish-packages`](.github/workflows/publish-packages.yml) on a version tag.
+
 | Package | Description |
 | --- | --- |
 | [packages/did-grant](packages/did-grant/) | `@provin-line/auth-did-grant` — the DID grant as an auth.provider 0.19 module |

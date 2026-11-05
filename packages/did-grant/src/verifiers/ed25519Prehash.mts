@@ -24,7 +24,7 @@ import type {
 type VerifyAsync = (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => Promise<boolean>;
 
 export class Ed25519PrehashVerifier implements SignatureVerifier {
-	/** Verifies with \`@noble/ed25519\`, an optional peer, loaded when the verifier is made. */
+	/** Verifies with \`@noble/ed25519\`, a dependency loaded only when the verifier is made. */
 	static async load(): Promise<Ed25519PrehashVerifier> {
 		const specifier = "@noble/ed25519";
 		const mod = (await import(specifier)) as { verifyAsync: VerifyAsync };

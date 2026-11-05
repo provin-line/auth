@@ -55,7 +55,7 @@ for a listed set of modules, plus the overlay of provin modules in
 | --- | --- | --- |
 | `packages/create-provider` | Generator for an auth-provider instance: upstream's app plus the provin-module overlay (§ 3.5) | not yet — run from a repo clone |
 | `packages/create-policy-verifier` | Generator + canonical template for a policy-verifier instance | not yet — run from a repo clone |
-| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.19 modules) and the `did:dplaax` method library | not yet — consumed as git-subdirectory refs (§ 3.3) |
+| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.19 modules) and the `did:dplaax` method library | npm with provenance, from 0.1.0 ([`publish-packages`](../.github/workflows/publish-packages.yml)); the generators still compose them as git-subdirectory refs (§ 3.3) |
 | `packages/policy-verifier-dplaax-module` | dPLaaX composition module consumed by generated policy-verifier instances | not yet — consumed as git-subdirectory refs (§ 3.3) |
 | `integration/` | Private workspace package: cross-package flow tests (§ 6.2) | no |
 | `instances/` | Git-ignored output directory for locally generated dev instances (§ 5) | no |
@@ -113,10 +113,12 @@ generator **MINOR** bump.
 
 ### 3.4 Consumer-mode transitive resolution
 
-The dPLaaX module packages declare their sibling `@provin-line/*` deps as
-`workspace:*`, and none of the `@provin-line/*` packages are published to
-npm. A standalone consumer install therefore needs scaffold-side
-provisions, which the generator emits as follows.
+The dPLaaX module packages declare their sibling `@provin-line/*` deps with
+the `workspace:` protocol, which a package fetched by git ref cannot resolve
+outside this workspace. The libraries are on npm from 0.1.0, but the
+generators still compose them as git-subdirectory refs, so a standalone
+consumer install needs scaffold-side provisions, which the generator emits
+as follows.
 
 **Provider (pnpm 11).** pnpm 11 no longer reads `package.json#pnpm`, so the
 generated app carries a `pnpm-workspace.yaml`:
@@ -158,9 +160,8 @@ the verifier generator moves to pnpm 11 it emits a `pnpm-workspace.yaml` the
 same way.
 
 The transitive package lists are baked into each generator and refreshed in
-lockstep (§ 3.3). If the `@provin-line/*` libraries are later published to
-npm, these overrides can be retired in favor of exact-pin semver deps inside
-the module packages.
+lockstep (§ 3.3). The libraries are on npm from 0.1.0; these overrides go
+when the generators compose them from npm instead of git refs.
 
 Inside this repo's workspace the scaffold's own overrides and build
 allowances are inert (pnpm honors only workspace-root settings), so

@@ -225,9 +225,10 @@ function buildPackageJson(opts: FilledOptions): string {
 	};
 
 	// Consumer-mode resolution (create-app.md § 3.4): the dplaax module's own
-	// @provin-line deps are declared workspace:* in the monorepo and are not
-	// published to npm, so a standalone install can only resolve them through
-	// consumer-root pnpm.overrides pinned to the same git ref. The git-fetched
+	// @provin-line deps are declared workspace:* in the monorepo, which a
+	// package fetched by git ref cannot resolve, so a standalone install
+	// resolves them through consumer-root pnpm.overrides pinned to the same
+	// git ref. The git-fetched
 	// packages run a `prepare` build, which pnpm ≥10 blocks unless allow-listed
 	// in onlyBuiltDependencies.
 	const transitiveProvinDeps = TRANSITIVE_PROVIN_PACKAGES.map(
