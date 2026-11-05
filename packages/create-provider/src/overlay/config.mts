@@ -18,9 +18,12 @@ import { DID_GRANT_TYPE } from "../provin-modules.mjs";
 const PRIVATE_KEY_LINE = /^(\s*)private-key = \$\{\?KEYS_SIGNING_PRIVATE_KEY\}$/m;
 
 // `tokens.subject-check = none` states that no module checks subject
-// revocation, which boot requires of an app composing none.
+// revocation, which boot requires of an app composing none. The DID grant's
+// tokens live `tokens.access-token-lifetime`, which the grant holds to its
+// bounds at boot.
 const PROVIN_SECTIONS = `tokens {
 	subject-check = \${?TOKENS_SUBJECT_CHECK}
+	access-token-lifetime = \${?TOKENS_ACCESS_TOKEN_LIFETIME}
 }
 did-grant {
 	message-max-age = \${?DID_GRANT_MESSAGE_MAX_AGE}
@@ -28,7 +31,6 @@ did-grant {
 	owner-migration-ratified = \${?DID_GRANT_OWNER_MIGRATION_RATIFIED}
 	revocation-latency-bound = \${?DID_GRANT_REVOCATION_LATENCY_BOUND}
 	legacy-max-ttl = \${?DID_GRANT_LEGACY_MAX_TTL}
-	access-token-lifetime = \${?DID_GRANT_ACCESS_TOKEN_LIFETIME}
 }
 dplaax-registry {
 	url = \${?DPLAAX_REGISTRY_URL}
@@ -62,10 +64,11 @@ export function patchEnvExample(text: string, opts: OverlayOptions): string {
 		"## The dPLaaX modules (README.md). A policy-verifier sharing an HS256 secret reads it as UTF-8: set KEYS_SIGNING_ALG=HS256 and the two KEYS_SIGNING_SECRET lines, and leave KEYS_SIGNING_PRIVATE_KEY out.",
 		"## Boot requires TOKENS_SUBJECT_CHECK=none while no composed module checks subject revocation.",
 		"# TOKENS_SUBJECT_CHECK=none",
+		"## Boot requires TOKENS_ACCESS_TOKEN_LIFETIME at most DID_GRANT_REVOCATION_LATENCY_BOUND, and under LEGACY_DID_LOGIN@1 at most DID_GRANT_LEGACY_MAX_TTL. Its default, 1h, is over that one's, 15m.",
+		"# TOKENS_ACCESS_TOKEN_LIFETIME=10m",
 		"# KEYS_SIGNING_SECRET=REPLACE-SHARED-SECRET-OF-AT-LEAST-32-BYTES",
 		"# KEYS_SIGNING_SECRET_ENCODING=utf8",
 		"# DID_GRANT_REVOCATION_LATENCY_BOUND=15m",
-		"# DID_GRANT_ACCESS_TOKEN_LIFETIME=10m",
 		"# DID_GRANT_MESSAGE_MAX_AGE=5m",
 		"# DID_GRANT_AUTH_CONTRACT=LEGACY_DID_LOGIN@1",
 		"# DID_GRANT_OWNER_MIGRATION_RATIFIED=false",

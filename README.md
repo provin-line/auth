@@ -158,9 +158,8 @@ The `did-grant` section ([package README](packages/did-grant/README.md#section))
 
 | Key | Required / Default | Notes |
 | --- | --- | --- |
-| `revocation-latency-bound` | **Required, no default** | `access-token-lifetime` must be at most this bound, or boot is refused |
-| `access-token-lifetime` | **Required, no default** | The lifetime of the grant's tokens; for LEGACY also at most `legacy-max-ttl` |
-| `legacy-max-ttl` | Default `15m` | Cap for `LEGACY_DID_LOGIN@1` tokens |
+| `revocation-latency-bound` | **Required, no default** | `tokens.access-token-lifetime` must be at most this bound, or boot is refused |
+| `legacy-max-ttl` | Default `15m` | Cap for `LEGACY_DID_LOGIN@1` tokens: `tokens.access-token-lifetime` must be at most this under that contract, or boot is refused |
 | `auth-contract` | Default `LEGACY_DID_LOGIN@1` | See Contract ids above |
 | `owner-migration-ratified` | Default `false` | Must be `true` before an `OWNER_*` contract boots |
 | `supported-algorithms` | Default `["ed25519_raw"]` | Under an `OWNER_*` contract every entry must carry a JWS header (`ed25519_jws`, `es256_jws`, or a contributed one that says so) |

@@ -109,6 +109,8 @@ export interface ComposeOptions {
 	extra?: readonly Module[];
 	/** Upstream's tokens and keys, which sign a JWT, in place of the in-memory stand-in. */
 	realTokens?: boolean;
+	/** `tokens.access-token-lifetime` in seconds, 600 when left out; null leaves tokens' own default. */
+	lifetimeSeconds?: number | null;
 	stands?: Stands;
 }
 
@@ -120,11 +122,12 @@ const didGrantProbe = defineModule({ name: "did-grant-probe", replicaSafe: true,
 
 export const minimalSection = {
 	"revocation-latency-bound": "15m",
-	"access-token-lifetime": "10m",
 };
 
 export async function compose(options: ComposeOptions = {}) {
 	const s = options.stands ?? stands();
+	const lifetimeSeconds = options.lifetimeSeconds === undefined ? 600 : options.lifetimeSeconds;
+	const lifetime = lifetimeSeconds === null ? {} : { "access-token-lifetime": `${lifetimeSeconds}s` };
 	const located = options.location === undefined ? TOKEN_ENDPOINT : options.location;
 	const location = defineModule({ name: "token-endpoint-location", replicaSafe: true, takes: [] }, (m) => [
 		m.provide(tokenEndpointLocation).by(() => ({ url: located ?? undefined })),
@@ -133,7 +136,9 @@ export async function compose(options: ComposeOptions = {}) {
 		modules: [
 			location,
 			http,
-			...(options.realTokens ? [keysModule, tokensModule, senderBindingModule] : [tokensStandIn()]),
+			...(options.realTokens
+				? [keysModule, tokensModule, senderBindingModule]
+				: [tokensStandIn(lifetimeSeconds === null ? {} : { lifetimeSeconds })]),
 			issuerModule,
 			clientsModule,
 			secretHashModule,
@@ -147,7 +152,7 @@ export async function compose(options: ComposeOptions = {}) {
 		config: {
 			...kernelConfig(),
 			...httpConfig(),
-			...(options.realTokens ? { ...keysConfig(), ...tokensConfig() } : {}),
+			...(options.realTokens ? { ...keysConfig(), ...tokensConfig(lifetime) } : {}),
 			...issuerConfig({ url: ISSUER }),
 			...clientsConfig([
 				publicClient({

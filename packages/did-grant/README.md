@@ -41,6 +41,8 @@ A module contributes a signature algorithm at `signatureAlgorithms`: its name, a
 ```hocon
 did-grant {
   revocation-latency-bound = 15m
+}
+tokens {
   access-token-lifetime = 10m
 }
 ```
@@ -51,11 +53,12 @@ did-grant {
 | `message-max-age` | `5m` | How far a message's timestamp may be from this host's clock, `1s` to `1d`. |
 | `auth-contract` | `LEGACY_DID_LOGIN@1` | The dplaax.spec auth contract: `LEGACY_DID_LOGIN@1`, `OWNER_AUTHENTICATION_LOGIN@1` or `OWNER_ASSERTION_CONTROL_LOGIN@1`. |
 | `owner-migration-ratified` | `false` | The operator's opt-in an OWNER contract requires (rule `auth.migration.enable-gate`). |
-| `revocation-latency-bound` | required | The longest a token may outlive a revocation (rule `auth.token.lifetime-bound`), `1s` to `1d`. |
-| `legacy-max-ttl` | `15m` | The longest lifetime of a `LEGACY_DID_LOGIN@1` token (rule `auth.legacy.did-login`). |
-| `access-token-lifetime` | required | The lifetime of the tokens this grant issues, `2s` to `1d`: at most `revocation-latency-bound`, and for LEGACY at most `legacy-max-ttl`. |
+| `revocation-latency-bound` | required | The longest a token may outlive a revocation (rule `auth.token.lifetime-bound`), `1s` to `1d`: `tokens.access-token-lifetime` at most. |
+| `legacy-max-ttl` | `15m` | The longest lifetime of a `LEGACY_DID_LOGIN@1` token (rule `auth.legacy.did-login`): `tokens.access-token-lifetime` at most under that contract. |
 
-Boot is refused for a lifetime out of those bounds, an unknown algorithm or one whose verifier cannot be made (`@noble/ed25519` missing for `ed25519_raw` or `ed25519_prehash`), an OWNER contract that is not ratified, names an algorithm without a JWS protected header, or runs where the token endpoint has no public location, and a contributed algorithm that takes a built-in name.
+The grant gives its tokens no lifetime of its own: they live `tokens.access-token-lifetime` (`2s` to `1d`, `1h` by default), which the grant reads when it is built. That default is over the default `legacy-max-ttl`, so a LEGACY deployment sets it.
+
+Boot is refused for a `tokens.access-token-lifetime` over those bounds, an unknown algorithm or one whose verifier cannot be made (`@noble/ed25519` missing for `ed25519_raw` or `ed25519_prehash`), an OWNER contract that is not ratified, names an algorithm without a JWS protected header, or runs where the token endpoint has no public location, and a contributed algorithm that takes a built-in name.
 
 ## Requests
 
@@ -73,7 +76,7 @@ A message is used once: its nonce is spent before the client's allowance is aske
 
 ## The token
 
-The access token is for the DID (`sub`), issued to the client (`client_id`, no `azp`), for `access-token-lifetime`, and carries the six claims of rule `auth.token.signed-claims`, from the one resolution and method the decision was made on:
+The access token is for the DID (`sub`), issued to the client (`client_id`, no `azp`), for `tokens.access-token-lifetime`, and carries the six claims of rule `auth.token.signed-claims`, from the one resolution and method the decision was made on:
 
 | Claim | Value |
 | --- | --- |

@@ -267,10 +267,11 @@ describe("patchApplicationConf", () => {
 		expect(out).toContain(
 			"revocation-latency-bound = ${?DID_GRANT_REVOCATION_LATENCY_BOUND}",
 		);
-		expect(out).toContain(
-			"access-token-lifetime = ${?DID_GRANT_ACCESS_TOKEN_LIFETIME}",
-		);
 		expect(out).toMatch(/^did-grant \{$/m);
+	});
+
+	it("leaves the access-token lifetime to tokens, the did-grant section having none", () => {
+		expect(out).not.toContain("DID_GRANT_ACCESS_TOKEN_LIFETIME");
 	});
 
 	it("gives the dplaax-registry section its keys", () => {
@@ -278,8 +279,10 @@ describe("patchApplicationConf", () => {
 		expect(out).toContain("url = ${?DPLAAX_REGISTRY_URL}");
 	});
 
-	it("lets tokens state that no module checks subject revocation", () => {
-		expect(out).toMatch(/^tokens \{\n\tsubject-check = \$\{\?TOKENS_SUBJECT_CHECK\}\n\}$/m);
+	it("lets tokens state that no module checks subject revocation, and take the access-token lifetime", () => {
+		expect(out).toMatch(
+			/^tokens \{\n\tsubject-check = \$\{\?TOKENS_SUBJECT_CHECK\}\n\taccess-token-lifetime = \$\{\?TOKENS_ACCESS_TOKEN_LIFETIME\}\n\}$/m,
+		);
 	});
 
 	it("lets keys.signing read a shared secret and how to read it", () => {
@@ -311,11 +314,16 @@ describe("patchEnvExample", () => {
 			"KEYS_SIGNING_SECRET",
 			"KEYS_SIGNING_SECRET_ENCODING",
 			"DID_GRANT_REVOCATION_LATENCY_BOUND",
-			"DID_GRANT_ACCESS_TOKEN_LIFETIME",
+			"TOKENS_ACCESS_TOKEN_LIFETIME",
 			"DPLAAX_REGISTRY_URL",
 		]) {
 			expect(out).toMatch(new RegExp(`^# ${name}=`, "m"));
 		}
+		expect(out).not.toContain("DID_GRANT_ACCESS_TOKEN_LIFETIME");
+	});
+
+	it("lists TOKENS_ACCESS_TOKEN_LIFETIME at 10m, inside the default legacy-max-ttl tokens' own hour passes", () => {
+		expect(out).toMatch(/^# TOKENS_ACCESS_TOKEN_LIFETIME=10m$/m);
 	});
 
 	it("lists TOKENS_SUBJECT_CHECK, which boot requires while no module checks subjects", () => {
@@ -404,7 +412,9 @@ describe("patchReadme", () => {
 
 	it("names the settings the modules need", () => {
 		expect(out).toContain("did-grant.revocation-latency-bound");
-		expect(out).toContain("did-grant.access-token-lifetime");
+		expect(out).toContain("tokens.access-token-lifetime");
+		expect(out).toContain("TOKENS_ACCESS_TOKEN_LIFETIME");
+		expect(out).not.toContain("did-grant.access-token-lifetime");
 		expect(out).toContain("dplaax-registry.url");
 		expect(out).toContain("keys.signing.secret-encoding");
 		expect(out).toContain("clients.registered");

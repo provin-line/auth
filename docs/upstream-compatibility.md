@@ -54,7 +54,7 @@ This does not certify deployed registry ACLs or Web/mobile clients.
   JWTs locally, as the generated policy-verifier does (with a shared HS256
   secret by default, or against the provider's JWKS when
   `OAUTH_JWT_JWKS_URI` is set), consults neither store; for it,
-  `did-grant.access-token-lifetime` is still the bound.
+  `tokens.access-token-lifetime` is still the bound.
 
 ## Moving an existing provider instance to 0.19
 
@@ -63,9 +63,19 @@ auth.provider 0.18.4 app. Generate it again with 0.5.0 and carry its local
 layer and variables over: an app generated with 0.18 lists the modules it
 composes in `src/main.ts`, so it lacks `tls-options`, which 0.19's `outbound`
 needs, and its `config/application.conf` does not read `KERNEL_ENVIRONMENT`
-(upstream U-0.19-1, U-0.19-38). The DID grant's settings keep their names;
-`did-grant.access-token-lifetime` takes `2s` to `1d`, as 0.19's `tokens`
-issues no lifetime of one second (U-0.19-50).
+(upstream U-0.19-1, U-0.19-38).
+
+- **The DID grant's tokens live `tokens.access-token-lifetime`.**
+  `did-grant.access-token-lifetime` and `DID_GRANT_ACCESS_TOKEN_LIFETIME` are
+  gone: move the value to `tokens.access-token-lifetime`, which the
+  generated app reads from `TOKENS_ACCESS_TOKEN_LIFETIME`. It takes `2s` to
+  `1d` (U-0.19-50) and defaults to `1h`. Boot is refused where it is over
+  `did-grant.revocation-latency-bound`, or under `LEGACY_DID_LOGIN@1` over
+  `did-grant.legacy-max-ttl` (`15m` by default), so a LEGACY deployment that
+  leaves it unset does not boot. A `did-grant.access-token-lifetime` left in
+  a config file refuses boot as an unknown key; the variable alone is read
+  by nothing. The lifetime is `tokens`', so it is also that of any other
+  grant an operator composes.
 
 - **Plain http needs `kernel.environment = development`.** `kernel.environment`
   is new and defaults to `production`, which refuses a plain-http `issuer.url`

@@ -18,7 +18,7 @@ import { defineModule, type Refusal, setting } from "@o3co/auth-provider-foundat
 import { grants } from "@o3co/auth-provider-oauth/grants";
 import { issuer } from "@o3co/auth-provider-oauth/issuer";
 import { tokenEndpointLocation } from "@o3co/auth-provider-oauth/token-endpoint";
-import { lifetimeSecondsRange } from "@o3co/auth-provider-oauth/tokens";
+import { tokens } from "@o3co/auth-provider-oauth/tokens";
 import { z } from "zod";
 import { didDocuments, signatureAlgorithms, spentNonces } from "./contract.mjs";
 import { didGrant } from "./grant.mjs";
@@ -48,33 +48,15 @@ const section = z
 			.prefault(false)
 			.describe("The operator's opt-in an OWNER contract requires (rule `auth.migration.enable-gate`)."),
 		"revocation-latency-bound": seconds().describe(
-			"Required. The longest an access token may outlive a revocation (rule `auth.token.lifetime-bound`).",
+			"Required. The longest an access token may outlive a revocation (rule `auth.token.lifetime-bound`): `tokens.access-token-lifetime` at most.",
 		),
 		"legacy-max-ttl": seconds()
 			.prefault("15m")
-			.describe("The longest lifetime of a `LEGACY_DID_LOGIN@1` token (rule `auth.legacy.did-login`)."),
-		// The range tokens issues a lifetime the grant asks in.
-		"access-token-lifetime": setting
-			.duration("s")
-			.pipe(z.number().int().min(lifetimeSecondsRange.min).max(lifetimeSecondsRange.max))
-			.describe("Required. The lifetime of the access tokens this grant issues, from `2s` to `1d`."),
+			.describe(
+				"The longest lifetime of a `LEGACY_DID_LOGIN@1` token (rule `auth.legacy.did-login`): `tokens.access-token-lifetime` at most under that contract.",
+			),
 	})
 	.superRefine((s, ctx) => {
-		const lifetime = s["access-token-lifetime"];
-		if (lifetime > s["revocation-latency-bound"]) {
-			ctx.addIssue({
-				code: "custom",
-				path: ["access-token-lifetime"],
-				message: `exceeds revocation-latency-bound (${s["revocation-latency-bound"]}s), rule auth.token.lifetime-bound`,
-			});
-		}
-		if (s["auth-contract"] === "LEGACY_DID_LOGIN@1" && lifetime > s["legacy-max-ttl"]) {
-			ctx.addIssue({
-				code: "custom",
-				path: ["access-token-lifetime"],
-				message: `exceeds legacy-max-ttl (${s["legacy-max-ttl"]}s) for LEGACY_DID_LOGIN@1, rule auth.legacy.did-login`,
-			});
-		}
 		if (isOwnerContract(s["auth-contract"]) && !s["owner-migration-ratified"]) {
 			ctx.addIssue({
 				code: "custom",
@@ -90,13 +72,29 @@ export default defineModule(
 		section,
 		// The spent nonces are kept behind spentNonces, which its wiring backs with the store.
 		replicaSafe: true,
-		takes: [signatureAlgorithms, tokenEndpointLocation, issuer, didDocuments, spentNonces],
+		takes: [signatureAlgorithms, tokenEndpointLocation, issuer, tokens, didDocuments, spentNonces],
 	},
 	(m) => [
 		m.contribute(grants).by(async (c) => {
 			const s = c.section;
 			const owner = isOwnerContract(s["auth-contract"]);
 			const refused: Refusal[] = [];
+
+			// The grant gives no lifetime of its own, so its tokens live the one tokens
+			// applies, fixed by the time tokens is built. Settings are named by key only.
+			const lifetime = (await c.get(tokens)).accessTokenLifetimeSeconds();
+			if (lifetime > s["revocation-latency-bound"]) {
+				refused.push({
+					where: "did-grant.revocation-latency-bound",
+					reason: "tokens.access-token-lifetime is over it: lower that, or raise this (rule auth.token.lifetime-bound)",
+				});
+			}
+			if (s["auth-contract"] === "LEGACY_DID_LOGIN@1" && lifetime > s["legacy-max-ttl"]) {
+				refused.push({
+					where: "did-grant.legacy-max-ttl",
+					reason: `tokens.access-token-lifetime is over it under ${s["auth-contract"]}: lower that, or raise this (rule auth.legacy.did-login)`,
+				});
+			}
 
 			const algorithms = new Map<string, BuiltinAlgorithm>(BUILTIN_ALGORITHMS);
 			for (const contributed of await c.collect(signatureAlgorithms)) {
@@ -150,7 +148,6 @@ export default defineModule(
 				{
 					authContract: s["auth-contract"],
 					messageMaxAgeMs: s["message-max-age"] * 1000,
-					accessTokenLifetimeSeconds: s["access-token-lifetime"],
 					issuer: (await c.get(issuer)).url,
 					tokenEndpoint,
 				},

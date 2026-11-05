@@ -165,7 +165,7 @@ export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
 			...kernelConfig(),
 			...httpConfig(),
 			...keysConfig(),
-			...tokensConfig(),
+			...tokensConfig({ "access-token-lifetime": "10m" }),
 			...issuerConfig({ url: AUDIENCE }),
 			...clientsConfig([
 				publicClient({
@@ -182,7 +182,6 @@ export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
 				"supported-algorithms": ["ed25519_raw", "ed25519_jws"],
 				"revocation-latency-bound": "15m",
 				"legacy-max-ttl": "15m",
-				"access-token-lifetime": "10m",
 				...overrides,
 			},
 		},

@@ -1,4 +1,6 @@
 did-grant {
 	revocation-latency-bound = 15m
+}
+tokens {
 	access-token-lifetime = 10m
 }

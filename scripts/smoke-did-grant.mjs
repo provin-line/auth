@@ -215,8 +215,8 @@ const settings = {
 	KEYS_SIGNING_ALG: "HS256",
 	KEYS_SIGNING_SECRET: SECRET,
 	KEYS_SIGNING_SECRET_ENCODING: "utf8",
+	TOKENS_ACCESS_TOKEN_LIFETIME: "10m",
 	DID_GRANT_REVOCATION_LATENCY_BOUND: "15m",
-	DID_GRANT_ACCESS_TOKEN_LIFETIME: "10m",
 	DPLAAX_REGISTRY_URL: `http://${registryHost}:${registryPort}`,
 };
 const containerName = `smoke-did-grant-${process.pid}`;

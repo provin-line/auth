@@ -103,7 +103,7 @@ export async function startProvider(options: ProviderOptions) {
 			...keysConfig({
 				signing: { kid: JWT_KID, alg: "HS256", secret: JWT_SECRET, "secret-encoding": "utf8" },
 			}),
-			...tokensConfig({ revocation: "denylist" }),
+			...tokensConfig({ revocation: "denylist", "access-token-lifetime": "1h" }),
 			...clientsConfig([
 				publicClient({
 					id: DID_CLIENT_ID,
@@ -136,7 +136,6 @@ export async function startProvider(options: ProviderOptions) {
 				"message-max-age": "5m",
 				"revocation-latency-bound": "1h",
 				"legacy-max-ttl": "1h",
-				"access-token-lifetime": "1h",
 			},
 		},
 		runtime: quietRuntime({ log: log.log }),

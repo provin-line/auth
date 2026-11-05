@@ -19,15 +19,20 @@ import { describe, expect, it } from "vitest";
 import { type SignatureVerifier, signatureAlgorithms } from "../contract.mjs";
 import { compose, minimalSection } from "./harness.mjs";
 
-/** The places a refused boot names, or a failure when it boots. */
-async function refusedAt(boot: Promise<unknown>): Promise<string[]> {
+/** The refusals of a refused boot, or a failure when it boots. */
+async function refusalsOf(boot: Promise<unknown>): Promise<{ where: string; reason: string }[]> {
 	try {
 		await boot;
 	} catch (err) {
-		if (BootRefused.is(err)) return err.refusals.map((r) => r.where);
+		if (BootRefused.is(err)) return err.refusals.map(({ where, reason }) => ({ where, reason }));
 		throw err;
 	}
 	throw new Error("booted");
+}
+
+/** The places a refused boot names, or a failure when it boots. */
+async function refusedAt(boot: Promise<unknown>): Promise<string[]> {
+	return (await refusalsOf(boot)).map((r) => r.where);
 }
 
 const owner = {
@@ -54,40 +59,47 @@ const customAlgorithm = (
 	]);
 
 describe("did-grant section", () => {
-	it("boots on a LEGACY section naming the two lifetimes alone", async () => {
+	it("boots on a LEGACY section naming the revocation latency bound alone", async () => {
 		await expect(compose({ section: minimalSection })).resolves.toBeDefined();
 	});
 
-	it.each([
-		["revocation-latency-bound", { "access-token-lifetime": "10m" }],
-		["access-token-lifetime", { "revocation-latency-bound": "15m" }],
-	])("refuses a section without %s, which has no default", async (key, section) => {
-		expect(await refusedAt(compose({ section }))).toEqual([expect.stringContaining(key)]);
+	it("refuses a section without revocation-latency-bound, which has no default", async () => {
+		expect(await refusedAt(compose({ section: {} }))).toEqual([expect.stringContaining("revocation-latency-bound")]);
 	});
 
-	it("refuses an access-token lifetime above the revocation latency bound", async () => {
-		const section = { "revocation-latency-bound": "5m", "access-token-lifetime": "10m" };
-		expect(await refusedAt(compose({ section }))).toEqual([expect.stringContaining("access-token-lifetime")]);
+	it("refuses access-token-lifetime, which tokens.access-token-lifetime sets", async () => {
+		const section = { ...minimalSection, "access-token-lifetime": "10m" };
+		const refusals = await refusalsOf(compose({ section }));
+		expect(refusals.map((r) => `${r.where} ${r.reason}`)).toEqual([expect.stringContaining("access-token-lifetime")]);
 	});
 
-	it("refuses a LEGACY access-token lifetime above legacy-max-ttl", async () => {
-		const section = { "revocation-latency-bound": "1h", "access-token-lifetime": "20m" };
-		expect(await refusedAt(compose({ section }))).toEqual([expect.stringContaining("access-token-lifetime")]);
+	it("takes a tokens lifetime equal to the revocation latency bound", async () => {
+		await expect(compose({ section: { "revocation-latency-bound": "10m" }, lifetimeSeconds: 600 })).resolves.toBeDefined();
 	});
 
-	it("takes an OWNER lifetime above legacy-max-ttl, which bounds LEGACY alone", async () => {
-		const section = { ...owner, "revocation-latency-bound": "1h", "access-token-lifetime": "20m" };
-		await expect(compose({ section })).resolves.toBeDefined();
+	it("refuses a tokens lifetime above the revocation latency bound, naming both settings by key", async () => {
+		const refusals = await refusalsOf(compose({ section: { "revocation-latency-bound": "5m" }, lifetimeSeconds: 600 }));
+		expect(refusals).toEqual([
+			{ where: "did-grant.revocation-latency-bound", reason: expect.stringContaining("tokens.access-token-lifetime") },
+		]);
+		expect(refusals[0]?.reason).not.toMatch(/\d/);
 	});
 
-	it("refuses a lifetime under two seconds, which tokens refuses to issue", async () => {
-		const section = { "revocation-latency-bound": "15m", "access-token-lifetime": "1s" };
-		expect(await refusedAt(compose({ section }))).toEqual([expect.stringContaining("access-token-lifetime")]);
+	it("refuses a LEGACY tokens lifetime above legacy-max-ttl", async () => {
+		const refusals = await refusalsOf(compose({ section: { "revocation-latency-bound": "1h" }, lifetimeSeconds: 1200 }));
+		expect(refusals).toEqual([
+			{ where: "did-grant.legacy-max-ttl", reason: expect.stringContaining("tokens.access-token-lifetime") },
+		]);
 	});
 
-	it("refuses a lifetime above a day", async () => {
-		const section = { "revocation-latency-bound": "2d", "access-token-lifetime": "25h" };
-		expect(await refusedAt(compose({ section }))).toContainEqual(expect.stringContaining("access-token-lifetime"));
+	it("refuses LEGACY on tokens' own default lifetime, an hour, which passes the default legacy-max-ttl", async () => {
+		const boot = compose({ section: { "revocation-latency-bound": "1h" }, lifetimeSeconds: null, realTokens: true });
+		expect(await refusedAt(boot)).toEqual(["did-grant.legacy-max-ttl"]);
+	});
+
+	it("takes an OWNER tokens lifetime above legacy-max-ttl, which bounds LEGACY alone", async () => {
+		const section = { ...owner, "revocation-latency-bound": "1h" };
+		await expect(compose({ section, lifetimeSeconds: 1200 })).resolves.toBeDefined();
 	});
 
 	it("refuses an OWNER contract the operator has not ratified", async () => {
