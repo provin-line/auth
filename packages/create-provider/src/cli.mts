@@ -19,7 +19,7 @@
 // tests can drive it without spawning a child process; the auto-invocation
 // at the bottom is skipped when this file is imported as a module.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -27,7 +27,7 @@ import { parseArgs } from "node:util";
 import { isSupportedLicense, SUPPORTED_LICENSES } from "./defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "./errors.mjs";
 import { generateAuthProviderScaffold } from "./generator.mjs";
-import { PROVIN_PACKAGES } from "./provin-modules.mjs";
+import { ofRole, PROVIN_PACKAGES } from "./provin-modules.mjs";
 
 // Read the package version from package.json at startup so `--version`
 // stays in lockstep with the manifest automatically. Works in both src/
@@ -39,11 +39,20 @@ const PACKAGE_VERSION = (
 	) as { version: string }
 ).version;
 
+/** Whether `path` is a directory; a missing path is not. */
+function isDirectory(path: string): boolean {
+	try {
+		return statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
 const HELP_TEXT = `Usage: create-auth-provider <name> [options]
 
 Generates an auth.provider 0.19 app with upstream's generator
 (@o3co/auth-provider-scaffold), which composes the dPLaaX modules from npm as
-packages outside its release: ${PROVIN_PACKAGES.filter((p) => p.module)
+packages outside its release: ${ofRole(PROVIN_PACKAGES, "module")
 	.map((p) => `${p.name}@${p.version}`)
 	.join(", ")}.
 
@@ -271,6 +280,10 @@ export async function main(
 	const outsideFrom = values["outside-from"];
 	if (outsideFrom === "") {
 		io.stderr.write(`Error: --outside-from names no directory.\n\n${HELP_TEXT}`);
+		return 2;
+	}
+	if (outsideFrom !== undefined && !isDirectory(resolve(io.cwd, outsideFrom))) {
+		io.stderr.write(`Error: --outside-from ${resolve(io.cwd, outsideFrom)}: not a directory.\n`);
 		return 2;
 	}
 

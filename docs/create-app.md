@@ -105,9 +105,9 @@ The policy-verifier generator emits exact dependency pins from
 `DEFAULT_DEP_VERSIONS`. The provider generator depends on
 `@o3co/auth-provider-scaffold` at an exact version, which is the
 auth.provider release the generated app is built on (0.19.0); the app's own
-pins are that release's. Its provin packages are `PROVIN_PACKAGES`, which a
-test holds to the versions of this repository's packages, so a release
-publishes to npm what its generator composes. Moving git refs (e.g. branch
+pins are that release's. Its provin packages are `PROVIN_PACKAGES`, at the
+generator's own version, which is the release's one version (below), and
+generation refuses a project holding them at any other. Moving git refs (e.g. branch
 names) are rejected for the verifier's `--dplaax-module-ref` in published
 releases. When the dependency baseline upgrades, refresh `defaults.mts` (and,
 for the provider, the scaffold pin) in a **minor** release of the
@@ -116,8 +116,8 @@ repository.
 Every package carries the repository's one version: the root
 `package.json`'s, which is the release tag's without its `v`
 (`integration/tests/versions.test.mts` holds them equal, and
-`publish-packages` refuses a tag whose version is not every published
-package's). A provin package takes another as a peer at the caret of that
+`publish-packages` refuses a tag whose version is not the root's and every
+workspace package's). A provin package takes another as a peer at the caret of that
 version. Before 0.6.0 each generator had its own version: 0.2.0 shipped in
 tags v0.3.x, 0.3.0 in v0.4.0 and 0.4.0 in v0.5.0, and 0.5.0 was never
 released.
@@ -162,8 +162,10 @@ workspace mode (§ 6.3.1) is unaffected.
 (`@provin-line/auth-did-grant`, `auth-did-grant-store`, `auth-dplaax-registry`)
 as packages outside its release. Upstream reads each from a project pnpm
 installed it into (`--outside-from`; without one the generator stages a
-temporary project installing `PROVIN_PACKAGES` from the registry the
-operator's npm configuration names, and removes it), composes it through its
+temporary project installing the modules of `PROVIN_PACKAGES`, `did-dplaax`
+coming with them, from the registry the operator's npm configuration names,
+the working directory's `.npmrc` included, and removes it), composes it
+through its
 `authProvider` declaration, and adds what all of them need to run (tokens,
 keys, issuer, clients, store, audit, http, rate-limit, metrics, ...). It writes
 `package.json`, `src/main.ts`, `config/application.conf` (binding every scalar

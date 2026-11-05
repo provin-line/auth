@@ -63,7 +63,14 @@ export function serveTarballs(dir, { port = 0 } = {}) {
 	return new Promise((resolve, reject) => {
 		let packages = new Map();
 		const server = createServer((req, res) => {
-			const url = decodeURIComponent(req.url ?? "/");
+			let url;
+			try {
+				url = decodeURIComponent(req.url ?? "/");
+			} catch {
+				// A malformed escape answers this request alone; the registry keeps serving.
+				res.writeHead(400).end();
+				return;
+			}
 			if (url.startsWith("/-/")) {
 				try {
 					const bytes = readFileSync(join(dir, url.slice(3).replace(/[/\\]/g, "")));

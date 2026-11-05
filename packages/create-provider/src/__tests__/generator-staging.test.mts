@@ -13,7 +13,7 @@
 // staged whatever happens. The staging is stood in for by the project the
 // test run staged, so the test needs no registry.
 
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, inject, it, vi } from "vitest";
@@ -76,6 +76,28 @@ describe("generateAuthProviderScaffold — its own staging", () => {
 		await expect(
 			generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), license: "MIT", gitInit: false }),
 		).rejects.toThrow(/Unsupported license/);
+		expect(stageProvinModules).not.toHaveBeenCalled();
+	});
+
+	it("refuses a project that resolved a provin package at another version, and leaves no app", async () => {
+		const other = join(root, "other");
+		await cp(staged, other, { recursive: true, verbatimSymlinks: true });
+		const lock = join(other, "pnpm-lock.yaml");
+		const text = await readFile(lock, "utf8");
+		const version = /'@provin-line\/did-dplaax@([^']+)'/.exec(text)?.[1];
+		expect(version).toBeDefined();
+		await writeFile(lock, text.replaceAll(`@provin-line/did-dplaax@${version}`, "@provin-line/did-dplaax@0.0.1"));
+		await expect(
+			generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), outsideFrom: other, gitInit: false }),
+		).rejects.toThrow(new RegExp(`@provin-line/did-dplaax is 0\\.0\\.1, not ${version?.replaceAll(".", "\\.")}`));
+		expect((await readdir(root)).sort()).toEqual(["other"]);
+	});
+
+	it("refuses an outsideFrom that is no directory, naming it", async () => {
+		const none = join(root, "none");
+		await expect(
+			generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), outsideFrom: none, gitInit: false }),
+		).rejects.toThrow(`outsideFrom: ${none} is not a directory`);
 		expect(stageProvinModules).not.toHaveBeenCalled();
 	});
 

@@ -9,7 +9,7 @@
  */
 
 import type { OverlayOptions } from "./index.mjs";
-import { PROVIN_PACKAGES } from "../provin-modules.mjs";
+import { ofRole, PROVIN_PACKAGES } from "../provin-modules.mjs";
 
 /**
  * Upstream's manifest under the project's name, description, license and
@@ -20,7 +20,9 @@ import { PROVIN_PACKAGES } from "../provin-modules.mjs";
 export function patchPackageJson(text: string, opts: OverlayOptions): string {
 	const upstream = JSON.parse(text) as Record<string, unknown>;
 	const dependencies = (upstream.dependencies ?? {}) as Record<string, string>;
-	const missing = PROVIN_PACKAGES.filter((p) => p.module && !(p.name in dependencies)).map((p) => p.name);
+	const missing = ofRole(PROVIN_PACKAGES, "module")
+		.filter((p) => !(p.name in dependencies))
+		.map((p) => p.name);
 	if (missing.length > 0) {
 		throw new Error(`package.json: upstream composed no ${missing.join(", ")}`);
 	}

@@ -8,9 +8,15 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PROVIN_PACKAGES } from "../provin-modules.mjs";
 import { stagingFiles } from "../staging.mjs";
+
+/** This generator's own version, which it composes every provin package at. */
+const release = (JSON.parse(await readFile(join(import.meta.dirname, "..", "..", "package.json"), "utf8")) as { version: string })
+	.version;
 
 describe("stagingFiles", () => {
 	const files = stagingFiles(PROVIN_PACKAGES);
@@ -19,10 +25,15 @@ describe("stagingFiles", () => {
 		const manifest = JSON.parse(files.get("package.json") ?? "{}");
 		expect(manifest.private).toBe(true);
 		expect(manifest.dependencies).toEqual({
-			"@provin-line/auth-did-grant": "0.1.0",
-			"@provin-line/auth-did-grant-store": "0.1.0",
-			"@provin-line/auth-dplaax-registry": "0.1.0",
+			"@provin-line/auth-did-grant": release,
+			"@provin-line/auth-did-grant-store": release,
+			"@provin-line/auth-dplaax-registry": release,
 		});
+	});
+
+	it("installs with the pnpm the generated app pins, not whichever is first on PATH", () => {
+		const manifest = JSON.parse(files.get("package.json") ?? "{}");
+		expect(manifest.packageManager).toBe("pnpm@11.28.7");
 	});
 
 	it("lets every provin package at its exact version install within its first day, as the app does", () => {

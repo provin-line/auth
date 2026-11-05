@@ -80,7 +80,10 @@ jobs:
       # loopback registry. Staged once, for make instances and the
       # regeneration below.
       - name: stage the provin packages
-        run: echo "PROVIN_STAGE=$(node scripts/stage-provin-packages.mjs --dir "$RUNNER_TEMP/stage")" >> "$GITHUB_ENV"
+        run: |
+          # Assigned first, so a failed staging fails this step.
+          stage="$(node scripts/stage-provin-packages.mjs --dir "$RUNNER_TEMP/stage")"
+          echo "PROVIN_STAGE=$stage" >> "$GITHUB_ENV"
 
       - run: make instances
 
@@ -106,12 +109,79 @@ jobs:
 
   # Consumer-mode scaffold smoke (create-app.md § 6.3): the exact external
   # consumer experience — generate OUTSIDE the workspace and install with no
-  # workspace assistance. The provider's provin packages come from a registry,
-  # as from npm: this commit's, packed and served from a loopback registry the
-  # app's .npmrc names. The verifier's deps resolve from the pinned git ref
-  # (the § 3.4 pnpm block emitted into the scaffold handles transitive
-  # resolution). Runs on push only: the commit must be fetchable from GitHub.
-  smoke-consumer:
+  # workspace assistance.
+  #
+  # The provider's provin packages come from a registry, as from npm: this
+  # commit's, packed and served from a loopback npm registry on the runner,
+  # which the app's .npmrc names. Nothing is fetched from GitHub, so it runs on
+  # pull requests too.
+  smoke-consumer-provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.22"
+          check-latest: true
+          cache: "pnpm"
+
+      # Workspace install only to build the generator CLI and pack the provin
+      # packages.
+      - run: pnpm install --frozen-lockfile
+
+      # Serves until the job ends: the app's install and its image build below
+      # fetch the provin packages from this loopback npm registry.
+      - name: stage the provin packages and serve them
+        run: |
+          nohup node scripts/stage-provin-packages.mjs --dir "$RUNNER_TEMP/stage" --serve \
+            > "$RUNNER_TEMP/stage.path" 2> "$RUNNER_TEMP/stage.log" &
+          pid=$!
+          for _ in $(seq 1 180); do
+            [ -s "$RUNNER_TEMP/stage.path" ] && exit 0
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/stage.log"
+              echo "::error::staging the provin packages failed"
+              exit 1
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/stage.log"
+          echo "::error::the provin packages were not staged within 3 minutes"
+          exit 1
+
+      - name: generate, install and run the provider outside the workspace
+        run: |
+          out="$RUNNER_TEMP/consumer"
+          node packages/create-provider/dist/cli.mjs provider \
+            --outside-from "$(cat "$RUNNER_TEMP/stage.path")" --out "$out/provider" --no-git-init
+          # The provider runs its sources: install as its README says, the
+          # lockfile held to the record of the packages outside the release.
+          (cd "$out/provider" && pnpm install --lockfile-only && node scripts/check-outside.mjs \
+            && pnpm install --frozen-lockfile --ignore-scripts)
+          # One real DID-grant round trip (assertion → /oauth/token → 200 +
+          # signed claims, tampered-signature reject), then introspection and
+          # revocation: the boot smoke alone let the PDP surface drift and the
+          # missing @noble/ed25519 through.
+          node scripts/smoke-did-grant.mjs "$out/provider" 3100
+
+      - name: docker build and run the provider's standalone Dockerfile
+        run: |
+          out="$RUNNER_TEMP/consumer"
+          # Host network: the image's install fetches the provin packages from
+          # the loopback npm registry on the runner, which the app's .npmrc names.
+          docker build --network host -t smoke/provider "$out/provider"
+          # The published image runs in production: an https issuer, no
+          # insecure origin. The smoke's own DID registry stub runs on the
+          # runner and is reached from the container as host.docker.internal.
+          node scripts/smoke-did-grant.mjs --production --image smoke/provider 3100
+
+  # The verifier's dPLaaX module resolves from the pinned git ref (the § 3.4
+  # pnpm block emitted into the scaffold handles transitive resolution). Runs
+  # on push only: the commit must be fetchable from GitHub.
+  smoke-consumer-verifier:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
@@ -125,53 +195,22 @@ jobs:
           check-latest: true
           cache: "pnpm"
 
-      # Workspace install only to build the generator CLIs and pack the
-      # provin packages.
+      # Workspace install only to build the generator CLI.
       - run: pnpm install --frozen-lockfile
-
-      # Serves until the job ends: the app's install and its image build
-      # below fetch the provin packages from it.
-      - name: stage the provin packages and serve them
-        run: |
-          nohup node scripts/stage-provin-packages.mjs --dir "$RUNNER_TEMP/stage" --serve \
-            > "$RUNNER_TEMP/stage.path" 2> "$RUNNER_TEMP/stage.log" &
-          for _ in $(seq 1 180); do
-            [ -s "$RUNNER_TEMP/stage.path" ] && exit 0
-            sleep 1
-          done
-          cat "$RUNNER_TEMP/stage.log"
-          echo "::error::the provin packages were not staged within 3 minutes"
-          exit 1
 
       - name: generate, install, build, boot outside the workspace
         run: |
           out="$RUNNER_TEMP/consumer"
-          node packages/create-provider/dist/cli.mjs provider \
-            --outside-from "$(cat "$RUNNER_TEMP/stage.path")" --out "$out/provider" --no-git-init
           node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
             --dplaax-module-ref "$GITHUB_SHA" --port 3001 --out "$out/policy-verifier" --no-git-init
-          # The provider runs its sources: install as its README says, the
-          # lockfile held to the record of the packages outside the release.
-          (cd "$out/provider" && pnpm install --lockfile-only && node scripts/check-outside.mjs \
-            && pnpm install --frozen-lockfile --ignore-scripts)
           (cd "$out/policy-verifier" && pnpm install && pnpm run build && pnpm run typecheck)
           ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck /verify
-          # One real DID-grant round trip (assertion → /oauth/token → 200 +
-          # signed claims, tampered-signature reject), then introspection and
-          # revocation: the boot smoke alone let the PDP surface drift and the
-          # missing @noble/ed25519 through.
-          node scripts/smoke-did-grant.mjs "$out/provider" 3100
 
-      # The standalone Dockerfiles, built and run: each image answers its
-      # health endpoint, the verifier refuses /verify without a token (401),
-      # and the provider image takes the DID-grant round trip (the registry
-      # runs on the runner and is reached as host.docker.internal).
-      - name: docker build and run the standalone Dockerfiles
+      # The standalone Dockerfile, built and run: the image answers its health
+      # endpoint and refuses /verify without a token (401).
+      - name: docker build and run the standalone Dockerfile
         run: |
           out="$RUNNER_TEMP/consumer"
-          # Host network: the image's install fetches the provin packages from
-          # the runner's loopback registry, which the app's .npmrc names.
-          docker build --network host -t smoke/provider "$out/provider"
           # The verifier's last stage is its test helper; the image to run is `runtime`.
           docker build --target runtime -t smoke/policy-verifier "$out/policy-verifier"
           ./scripts/smoke-image.sh smoke/policy-verifier 3001 3001 /healthcheck /verify -- \
@@ -179,5 +218,3 @@ jobs:
             -e OAUTH_JWT_SECRET=smoke.only.secret.at.least.32.bytes.long \
             -e OAUTH_JWT_ISSUER=https://smoke.invalid \
             -e OAUTH_JWT_AUDIENCE=https://smoke-api.invalid
-          # The published image runs in production: an https issuer, no insecure origin.
-          node scripts/smoke-did-grant.mjs --production --image smoke/provider 3100

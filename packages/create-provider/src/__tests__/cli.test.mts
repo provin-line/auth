@@ -119,13 +119,11 @@ describe("CLI main()", () => {
 		},
 	);
 
-	it("returns 1 when --outside-from names no project pnpm installed the modules into", async () => {
-		const code = await main(
-			["foo", "--no-git-init", "--outside-from", join(tmpRoot, "none"), "--out", join(tmpRoot, "out")],
-			io,
-		);
-		expect(code).toBe(1);
-		expect(stderr.text()).toMatch(/^Error: /);
+	it("returns 2 when --outside-from names no directory, naming the flag", async () => {
+		const none = join(tmpRoot, "none");
+		const code = await main(["foo", "--no-git-init", "--outside-from", none, "--out", join(tmpRoot, "out")], io);
+		expect(code).toBe(2);
+		expect(stderr.text()).toBe(`Error: --outside-from ${none}: not a directory.\n`);
 	});
 
 	it("returns 2 when --registry-base-url is not a URL", async () => {

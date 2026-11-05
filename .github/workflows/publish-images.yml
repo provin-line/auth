@@ -104,6 +104,35 @@ jobs:
           fi
           echo "${IMAGE}:${TAG} not yet published (HTTP $code) — proceeding."
 
+      # The provider image generates its app from npm, at the versions this
+      # ref's generator composes, and publish-packages publishes them on the
+      # same tag: wait until npm serves each, rather than build against a
+      # registry that does not hold them yet. The list is the staging script's,
+      # which a test holds to the generator's PROVIN_PACKAGES. Bounded, so a
+      # version that never publishes fails here, named.
+      - name: wait for the provin packages on npm
+        if: matrix.generator == 'provider'
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const { STAGED_PACKAGES } = await import("./scripts/stage-provin-packages.mjs");
+            for (const { dir } of STAGED_PACKAGES) {
+              const { name, version } = JSON.parse(readFileSync(`packages/${dir}/package.json`, "utf8"));
+              console.log(`${name}@${version}`);
+            }
+          ' > "$RUNNER_TEMP/provin-packages.txt"
+          deadline=$(( $(date +%s) + 1800 ))
+          while read -r spec; do
+            until [ "$(npm view "$spec" version --prefer-online 2>/dev/null)" = "${spec##*@}" ]; do
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "::error::${spec} is not on npm after 30 minutes; publish-packages publishes it on the same tag"
+                exit 1
+              fi
+              sleep 30
+            done
+            echo "${spec} is on npm"
+          done < "$RUNNER_TEMP/provin-packages.txt"
+
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:

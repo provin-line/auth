@@ -36,7 +36,8 @@ import {
 } from "./defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "./errors.mjs";
 import { applyProvinModules } from "./overlay/index.mjs";
-import { PROVIN_PACKAGES } from "./provin-modules.mjs";
+import { composedMismatches } from "./composed.mjs";
+import { ofRole, PROVIN_PACKAGES } from "./provin-modules.mjs";
 import { stageProvinModules } from "./staging.mjs";
 
 const execFileP = promisify(execFile);
@@ -71,8 +72,15 @@ export interface GenerateOptions {
 	 * A project where pnpm installed the provin modules, which upstream's
 	 * generator reads them from: their manifests, files and lockfile records,
 	 * and the registries the project installs from. Default: a temporary
-	 * project the generator stages, installing `PROVIN_PACKAGES` from the
-	 * registry the operator's npm configuration names, removed afterwards.
+	 * project the generator stages, installing the modules of
+	 * `PROVIN_PACKAGES` (did-dplaax comes with them) from the registry the
+	 * operator's npm configuration names, the working directory's `.npmrc`
+	 * included, removed afterwards.
+	 *
+	 * It allows any directory where pnpm installed the modules, from any
+	 * registry. It does not choose versions: generation refuses a project
+	 * whose modules, as upstream records them, or whose `did-dplaax`, as its
+	 * lockfile resolves it, differ from `PROVIN_PACKAGES`.
 	 */
 	readonly outsideFrom?: string;
 
@@ -153,7 +161,16 @@ export async function generateAuthProviderScaffold(
 	const outDir = resolve(opts.outDir);
 	await ensureCleanOutDir(outDir);
 
-	const modules = PROVIN_PACKAGES.filter((p) => p.module).map((p) => p.name);
+	if (opts.outsideFrom !== undefined) {
+		const given = resolve(opts.outsideFrom);
+		const isDirectory = await stat(given).then(
+			(s) => s.isDirectory(),
+			() => false,
+		);
+		if (!isDirectory) throw new Error(`outsideFrom: ${given} is not a directory`);
+	}
+
+	const modules = ofRole(PROVIN_PACKAGES, "module").map((p) => p.name);
 	const own = opts.outsideFrom === undefined ? await stageProvinModules() : undefined;
 	const from = own?.dir ?? resolve(opts.outsideFrom ?? "");
 
@@ -171,6 +188,15 @@ export async function generateAuthProviderScaffold(
 				outside: { from, names: modules, fresh: modules },
 			});
 			const generated = await readTree(building);
+			const lockfile = await readFile(join(from, "pnpm-lock.yaml"), "utf8").catch(() => {
+				throw new Error(`${from}: no pnpm-lock.yaml; the provin modules are read from a project pnpm installed`);
+			});
+			const mismatches = composedMismatches(generated.get("outside-modules.json") ?? "{}", lockfile, PROVIN_PACKAGES);
+			if (mismatches.length > 0) {
+				throw new Error(
+					`${from} holds provin packages other than this release's: ${mismatches.join("; ")}`,
+				);
+			}
 			composed = applyProvinModules(generated, {
 				name: opts.name,
 				description: opts.description ?? "dPLaaX auth.provider instance",

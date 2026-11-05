@@ -13,6 +13,8 @@
 // app composing the provin modules as packages outside its release, so an
 // upstream change that moves an anchor fails here before it fails a build.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	patchApplicationConf,
@@ -23,6 +25,10 @@ import { applyProvinModules, type OverlayOptions } from "../overlay/index.mjs";
 import { patchPackageJson } from "../overlay/package-json.mjs";
 import { patchReadme } from "../overlay/readme.mjs";
 import { patchWorkspaceYaml } from "../overlay/workspace-yaml.mjs";
+
+/** This generator's own version, which it composes every provin package at. */
+const release = (JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "package.json"), "utf8")) as { version: string })
+	.version;
 
 const options: OverlayOptions = {
 	name: "@acme/login",
@@ -39,9 +45,9 @@ const UPSTREAM_PACKAGE_JSON = `{
 	"packageManager": "pnpm@11.28.7",
 	"dependencies": {
 		"@o3co/auth-provider-foundation": "0.19.0",
-		"@provin-line/auth-did-grant": "0.1.0",
-		"@provin-line/auth-did-grant-store": "0.1.0",
-		"@provin-line/auth-dplaax-registry": "0.1.0",
+		"@provin-line/auth-did-grant": "${release}",
+		"@provin-line/auth-did-grant-store": "${release}",
+		"@provin-line/auth-dplaax-registry": "${release}",
 		"zod": "4.6.7"
 	}
 }
@@ -97,9 +103,9 @@ const UPSTREAM_WORKSPACE = `overrides:
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@o3co/auth-provider-foundation"
-  - "@provin-line/auth-did-grant-store@0.1.0"
-  - "@provin-line/auth-did-grant@0.1.0"
-  - "@provin-line/auth-dplaax-registry@0.1.0"
+  - "@provin-line/auth-did-grant-store@${release}"
+  - "@provin-line/auth-did-grant@${release}"
+  - "@provin-line/auth-dplaax-registry@${release}"
 `;
 
 const UPSTREAM_README = `# Auth provider
@@ -143,7 +149,7 @@ describe("patchPackageJson", () => {
 	});
 
 	it("refuses a manifest whose dependencies lack a provin module, which upstream did not compose", () => {
-		const without = UPSTREAM_PACKAGE_JSON.replace('\t\t"@provin-line/auth-did-grant-store": "0.1.0",\n', "");
+		const without = UPSTREAM_PACKAGE_JSON.replace(`\t\t"@provin-line/auth-did-grant-store": "${release}",\n`, "");
 		expect(() => patchPackageJson(without, options)).toThrow(/auth-did-grant-store/);
 	});
 });
@@ -239,17 +245,25 @@ describe("patchWorkspaceYaml", () => {
 	const out = patchWorkspaceYaml(UPSTREAM_WORKSPACE);
 
 	it("lets did-dplaax at its exact version install within its first day, as upstream lets the modules", () => {
-		expect(out.split("\n")).toContain('  - "@provin-line/did-dplaax@0.1.0"');
+		expect(out.split("\n")).toContain(`  - "@provin-line/did-dplaax@${release}"`);
 	});
 
 	it("adds it inside minimumReleaseAgeExclude, keeping upstream's entries", () => {
 		const list = out.slice(out.indexOf("minimumReleaseAgeExclude:"));
-		expect(list).toContain('  - "@provin-line/auth-dplaax-registry@0.1.0"\n  - "@provin-line/did-dplaax@0.1.0"\n');
+		expect(list).toContain(
+			`  - "@provin-line/auth-dplaax-registry@${release}"\n  - "@provin-line/did-dplaax@${release}"\n`,
+		);
 		expect(out.startsWith("overrides:\n")).toBe(true);
 	});
 
 	it("adds it once, though upstream names it", () => {
 		expect(patchWorkspaceYaml(out)).toBe(out);
+	});
+
+	it("refuses a list it would not keep valid YAML, such as one indented otherwise", () => {
+		const fourSpaces = UPSTREAM_WORKSPACE.replaceAll("\n  - ", "\n    - ");
+		expect(() => patchWorkspaceYaml(fourSpaces)).toThrow(/minimumReleaseAgeExclude/);
+		expect(() => patchWorkspaceYaml("minimumReleaseAgeExclude: []\n")).toThrow(/minimumReleaseAgeExclude/);
 	});
 
 	it("refuses a file without minimumReleaseAgeExclude", () => {

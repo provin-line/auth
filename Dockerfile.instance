@@ -8,9 +8,10 @@
 # Build context: repo root, with instances/<INSTANCE>/ generated. This is
 # the single workspace-flavored build artifact in the repo: it copies the
 # pnpm workspace so the instance resolves @provin-line/* from the local
-# package state (root overrides, create-app.md § 6.3.1) instead of the git
-# refs its manifest pins. The template's standalone Dockerfile — what
-# consumers get — is exercised by consumer-mode smoke in CI.
+# package state (root overrides, create-app.md § 6.3.1) instead of what its
+# manifest names: npm versions for the provider, git refs for the
+# policy-verifier. The standalone Dockerfiles — what consumers get — are
+# exercised by consumer-mode smoke in CI.
 #
 # Dev-only: the runtime stage keeps the whole workspace (and devDeps)
 # because workspace node_modules are symlink forests that don't survive

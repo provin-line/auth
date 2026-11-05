@@ -29,6 +29,6 @@ export {
 	SUPPORTED_LICENSES,
 } from "./defaults.mjs";
 
-export { PROVIN_PACKAGES, type ProvinPackage } from "./provin-modules.mjs";
+export { PROVIN_PACKAGES, type ProvinPackage, type ProvinPackageRole } from "./provin-modules.mjs";
 
 export { ExistingDirectoryNonEmptyError } from "./errors.mjs";

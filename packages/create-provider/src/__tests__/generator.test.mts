@@ -17,12 +17,17 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { parse } from "yaml";
 import { LISTED_MODULES } from "../defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "../errors.mjs";
 import { generateAuthProviderScaffold } from "../generator.mjs";
+import { STAGING_PACKAGE_MANAGER } from "../staging.mjs";
 
 /** A project where pnpm installed the provin modules, staged once for the run. */
 const staged = inject("stagedProject");
+/** This generator's own version, which it composes every provin package at. */
+const release = (JSON.parse(await readFile(join(import.meta.dirname, "..", "..", "package.json"), "utf8")) as { version: string })
+	.version;
 
 let tmpRoot: string;
 let outDir: string;
@@ -94,9 +99,9 @@ describe("generateAuthProviderScaffold", () => {
 		}
 		const record = JSON.parse(await read("outside-modules.json")) as { modules: { name: string; version: string }[] };
 		expect(record.modules.map((m) => `${m.name}@${m.version}`)).toEqual([
-			"@provin-line/auth-did-grant@0.1.0",
-			"@provin-line/auth-did-grant-store@0.1.0",
-			"@provin-line/auth-dplaax-registry@0.1.0",
+			`@provin-line/auth-did-grant@${release}`,
+			`@provin-line/auth-did-grant-store@${release}`,
+			`@provin-line/auth-dplaax-registry@${release}`,
 		]);
 	});
 
@@ -105,9 +110,10 @@ describe("generateAuthProviderScaffold", () => {
 		expect(pkg.name).toBe("@acme/login");
 		expect(pkg.author).toBe("Acme");
 		expect(pkg.license).toBe("Apache-2.0");
-		expect(pkg.packageManager).toMatch(/^pnpm@11\./);
+		// The pnpm the generator stages with is the one upstream pins the app to.
+		expect(pkg.packageManager).toBe(STAGING_PACKAGE_MANAGER);
 		expect(pkg.dependencies["@o3co/auth-provider-foundation"]).toBe("0.19.0");
-		expect(pkg.dependencies["@provin-line/auth-did-grant"]).toBe("0.1.0");
+		expect(pkg.dependencies["@provin-line/auth-did-grant"]).toBe(release);
 		expect(pkg.dependencies).not.toHaveProperty("@noble/ed25519");
 	});
 
@@ -117,8 +123,9 @@ describe("generateAuthProviderScaffold", () => {
 
 	it("lets the provin packages, did-dplaax among them, install within their first day", async () => {
 		const yaml = await read("pnpm-workspace.yaml");
+		const excluded = (parse(yaml) as { minimumReleaseAgeExclude: string[] }).minimumReleaseAgeExclude;
 		for (const name of ["auth-did-grant", "auth-did-grant-store", "auth-dplaax-registry", "did-dplaax"]) {
-			expect(yaml).toContain(`  - "@provin-line/${name}@0.1.0"`);
+			expect(excluded).toContain(`@provin-line/${name}@${release}`);
 		}
 		expect(yaml).not.toMatch(/allowBuilds|blockExoticSubdeps|github:/);
 	});

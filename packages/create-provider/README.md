@@ -27,11 +27,19 @@ This package generates an [auth.provider](https://github.com/o3co/auth.provider)
    its exact version in `minimumReleaseAgeExclude`, and the README's account of
    the modules.
 
-Each generator version composes the provin packages at the versions it was
-released with (`PROVIN_PACKAGES`, all published to npm with provenance). With
-no `--outside-from`, the generator installs them into a temporary project from
-the registry your npm configuration names, and removes it once the app is
-written.
+Each generator version composes the provin packages at its own version, the
+repository's one version (`PROVIN_PACKAGES`; npm holds them with provenance
+from 0.6.0). With no `--outside-from`, the generator installs the modules into
+a temporary project, `@provin-line/did-dplaax` coming with them, from the
+registry your npm configuration names (a `.npmrc` in the directory you run it
+from included), and removes it once the app is written.
+
+`--outside-from <dir>` names a project where pnpm already installed the
+modules: upstream's generator reads them from there, and the app records what
+it read. It does not choose versions. Generation refuses, naming each package
+and both versions, a project whose modules or `did-dplaax` are not this
+release's, so an app holds exactly the provin packages its generator was
+released with, whichever project they were read from.
 
 The repo keeps no standing reference instance: the generator is the definition
 of an instance ([create-app.md § 1.1](../../docs/create-app.md)).
@@ -72,9 +80,9 @@ Arguments:
   <name>                       Output directory + package.json name (positional, required)
 
 Options:
-  --outside-from <dir>         A project where pnpm installed the dPLaaX modules
-                               (default: the generator installs PROVIN_PACKAGES
-                               into a temporary project)
+  --outside-from <dir>         A project where pnpm installed the dPLaaX modules,
+                               at this release's versions (default: the
+                               generator installs them into a temporary project)
   --description <text>         package.json description and README opener
   --license <SPDX>             LICENSE file content + package.json field (default: Apache-2.0)
   --author <name>              package.json author field

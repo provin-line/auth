@@ -15,9 +15,15 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { STAGED_PACKAGES } from "../../../../scripts/stage-provin-packages.mjs";
 import { PROVIN_PACKAGES } from "../index.mjs";
+import { STAGING_PACKAGE_MANAGER } from "../staging.mjs";
 
 const packages = join(import.meta.dirname, "..", "..", "..");
+const repository = join(packages, "..");
+/** This generator's own version: the repository's one version, a release's. */
+const release = (JSON.parse(await readFile(join(import.meta.dirname, "..", "..", "package.json"), "utf8")) as { version: string })
+	.version;
 
 interface Manifest {
 	name: string;
@@ -36,13 +42,17 @@ for (const dir of await readdir(packages)) {
 }
 
 describe("PROVIN_PACKAGES", () => {
-	it("names the three modules and the library they depend on", () => {
-		expect(PROVIN_PACKAGES.map((p) => [p.name, p.module])).toEqual([
-			["@provin-line/auth-did-grant", true],
-			["@provin-line/auth-did-grant-store", true],
-			["@provin-line/auth-dplaax-registry", true],
-			["@provin-line/did-dplaax", false],
+	it("names the three modules and the library they depend on, each by its role", () => {
+		expect(PROVIN_PACKAGES.map((p) => [p.name, p.role])).toEqual([
+			["@provin-line/auth-did-grant", "module"],
+			["@provin-line/auth-did-grant-store", "module"],
+			["@provin-line/auth-dplaax-registry", "module"],
+			["@provin-line/did-dplaax", "dependency"],
 		]);
+	});
+
+	it("holds every package at this generator release's version", () => {
+		expect(PROVIN_PACKAGES.map((p) => p.version)).toEqual(PROVIN_PACKAGES.map(() => release));
 	});
 
 	it.each(PROVIN_PACKAGES.map((p) => [p.name, p] as const))("holds %s at the version this repository carries", (name, p) => {
@@ -54,9 +64,25 @@ describe("PROVIN_PACKAGES", () => {
 		for (const p of PROVIN_PACKAGES) {
 			expect({ name: p.name, declared: manifests.get(p.name)?.authProvider !== undefined }).toEqual({
 				name: p.name,
-				declared: p.module,
+				declared: p.role === "module",
 			});
 		}
+	});
+
+	it("is the list scripts/stage-provin-packages.mjs stages, by name and role", async () => {
+		const staged = await Promise.all(
+			STAGED_PACKAGES.map(async (p) => {
+				const manifest = JSON.parse(await readFile(join(packages, p.dir, "package.json"), "utf8")) as Manifest;
+				return [manifest.name, p.role];
+			}),
+		);
+		expect(staged.sort()).toEqual(PROVIN_PACKAGES.map((p) => [p.name, p.role]).sort());
+	});
+
+	it("is staged with the pnpm this repository installs with", async () => {
+		const root = JSON.parse(await readFile(join(repository, "package.json"), "utf8")) as { packageManager: string };
+		// The root's carries corepack's integrity hash after `+`.
+		expect(root.packageManager.split("+")[0]).toBe(STAGING_PACKAGE_MANAGER);
 	});
 
 	it("is frozen, so an importer cannot change what an app installs", () => {

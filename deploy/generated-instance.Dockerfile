@@ -13,10 +13,11 @@
 # workflow builds and pushes it to GHCR so consumers reference an image
 # instead of re-running this generation themselves.
 #
-# GITHUB ACCESS: while provin.auth is private, the clone and the instance's
-# pnpm install (git-subdir refs into this repo) need a GitHub token. Pass it
-# as a BuildKit secret `github_token` (in CI: the workflow's GITHUB_TOKEN).
-# Once the repo is public this is inert — anonymous fetch just works.
+# GITHUB ACCESS: the clone, and the policy-verifier instance's pnpm install
+# (git-subdir refs into this repo), take a GitHub token passed as the BuildKit
+# secret `github_token` (in CI: the workflow's GITHUB_TOKEN); without one they
+# fetch anonymously, which a public repository allows. The auth-provider
+# instance installs from npm alone.
 #
 # Scaffold-time parameters that are deployment-specific (e.g. the
 # auth-provider's --registry-base-url) get placeholder values here and are
@@ -29,8 +30,9 @@
 # (src/main.ts) and reads its settings from env and APP_CONFIG. Upstream's own
 # Dockerfile for that app is not used: it expects a pnpm-lock.yaml in its build
 # context, which the generator does not write, and adopting it is the
-# lockfile-first restructure the KNOWN GAP below defers. This file keeps one
-# build path for both images.
+# lockfile-first restructure the KNOWN GAP below defers. The builder installs
+# that app the way its Dockerfile and README do, through upstream's check of
+# what the generator recorded. This file keeps one build path for both images.
 
 # GENERATOR: "policy-verifier" | "provider" — the COMPONENT name. Each
 # namespace adds the prefix its own context does not supply: the directory is
@@ -111,8 +113,13 @@ RUN --mount=type=secret,id=github_token \
 FROM node:24.22-alpine AS builder
 RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 ARG ENTRY
+ARG GENERATOR
 WORKDIR /app
 COPY --from=gen /instance/ ./
+# The auth-provider installs as its README says: resolve the lockfile, let
+# scripts/check-outside.mjs hold it to what the generator recorded (the
+# outside packages' integrity and the release's held packages), then install
+# that lockfile with no lifecycle script.
 RUN --mount=type=secret,id=github_token \
     tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
     if [ -n "$tok" ]; then \
@@ -120,7 +127,13 @@ RUN --mount=type=secret,id=github_token \
         GIT_CONFIG_KEY_0="url.https://x-access-token:${tok}@github.com/.insteadOf" \
         GIT_CONFIG_VALUE_0="https://github.com/"; \
     fi; \
-    pnpm install \
+    if [ "${GENERATOR}" = provider ]; then \
+      pnpm install --lockfile-only \
+      && node scripts/check-outside.mjs \
+      && pnpm install --frozen-lockfile --ignore-scripts; \
+    else \
+      pnpm install; \
+    fi \
  && pnpm run --if-present build \
  && test -f "${ENTRY}"
 

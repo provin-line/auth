@@ -28,7 +28,7 @@ function section(): string {
 	return `
 ## The dPLaaX modules
 
-Composed beside the modules above as packages outside the release, from npm at the versions this app was generated with: \`## Packages outside this release\` records each, and each card, as installed, is the truth about its module.
+Composed beside the modules above as packages outside the release, at the versions this app was generated with, from the registry the project they were read from installed them from: \`## Packages outside this release\` records each, and each card, as installed, is the truth about its module.
 
 Settings they need, besides upstream's:
 

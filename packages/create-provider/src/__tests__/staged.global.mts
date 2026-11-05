@@ -22,6 +22,8 @@ import { stageProvinPackages } from "../../../../scripts/stage-provin-packages.m
 declare module "vitest" {
 	export interface ProvidedContext {
 		stagedProject: string;
+		/** The tarballs the project was installed from, for a test that serves them again. */
+		stagedTarballs: string;
 	}
 }
 
@@ -31,6 +33,7 @@ export default async function setup(project: TestProject) {
 	// The registry serves only the install: the generator reads the project.
 	await staged.close();
 	project.provide("stagedProject", staged.project);
+	project.provide("stagedTarballs", join(dir, "tarballs"));
 	return async () => {
 		await rm(dir, { recursive: true, force: true });
 	};
