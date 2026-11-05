@@ -20,7 +20,7 @@ RFC 6749 §4.5 names an extension grant by an absolute URI. The token endpoint c
 
 auth.provider's packages and zod are peers: the kernel finds contracts by the object itself, so the app must hold one copy of each. `@noble/ed25519` is a dependency, loaded for `ed25519_raw` and `ed25519_prehash` only.
 
-Published to npm with provenance, from 0.1.0. auth.provider's generator composes it as a package outside the release, `npm:@provin-line/auth-did-grant`, which its `authProvider` declaration (a feature) lets it read; name `npm:@provin-line/auth-did-grant-store` and `npm:@provin-line/auth-dplaax-registry` beside it.
+Published to npm with provenance, from 0.6.0. auth.provider's generator composes it as a package outside the release, `npm:@provin-line/auth-did-grant`, which its `authProvider` declaration (a feature) lets it read; name `npm:@provin-line/auth-did-grant-store` and `npm:@provin-line/auth-dplaax-registry` beside it.
 
 ## Composing it
 

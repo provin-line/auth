@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 interface Manifest {
+	version?: string;
 	authProvider?: unknown;
 	engines?: Record<string, string>;
 	files?: string[];
@@ -53,7 +54,7 @@ describe("package.json, as upstream's generator reads a package outside the rele
 	it("takes the release's bundle, the DID grant and zod as peers", () => {
 		expectPeers({
 			"@o3co/auth-provider-foundation": "^0.19.0",
-			"@provin-line/auth-did-grant": "^0.1.0",
+			"@provin-line/auth-did-grant": `^${manifest.version}`,
 			zod: "^4.6.7",
 		});
 	});

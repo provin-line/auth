@@ -8,4 +8,4 @@ Export: `./module` (default export), named `did-grant-store`, with no section; r
 
 auth.provider's foundation, `@provin-line/auth-did-grant` and zod are peers: the kernel finds contracts by the object itself.
 
-Published to npm with provenance, from 0.1.0. Its `authProvider` declaration makes it a wiring of `@provin-line/auth-did-grant`, needing `@mod/store`: name it beside the grant when generating the app (`npm:@provin-line/auth-did-grant-store`).
+Published to npm with provenance, from 0.6.0. Its `authProvider` declaration makes it a wiring of `@provin-line/auth-did-grant`, needing `@mod/store`: name it beside the grant when generating the app (`npm:@provin-line/auth-did-grant-store`).

@@ -166,12 +166,6 @@ export function buildTokens(
 }
 
 /**
- * `packages/`-dir names of the @provin-line packages the dplaax module pulls
- * in transitively via workspace:*. Baked in like DEFAULT_DEP_VERSIONS —
- * refresh in lockstep with a generator MINOR bump when the module's
- * dependency graph changes (create-app.md § 3.3).
- */
-/**
  * The @provin-line packages the dplaax module pulls in transitively via
  * workspace:*, each as the pair a consumer-root override needs: the npm NAME to
  * key the override on, and the `packages/` DIR the git spec must point at.
@@ -184,8 +178,8 @@ export function buildTokens(
  * have pointed at a `packages/` path that does not exist, so a consumer install
  * would fail rather than merely read oddly.
  *
- * Baked in like DEFAULT_DEP_VERSIONS — refresh in lockstep with a generator
- * MINOR bump when the module's dependency graph changes (create-app.md § 3.3).
+ * Baked in like DEFAULT_DEP_VERSIONS — refresh it in a minor release of the
+ * repository when the module's dependency graph changes (create-app.md § 3.3).
  */
 const TRANSITIVE_PROVIN_PACKAGES = [
 	{ name: "did-dplaax", dir: "did-dplaax" },

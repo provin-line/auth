@@ -55,7 +55,7 @@ for a listed set of modules, plus the overlay of provin modules in
 | --- | --- | --- |
 | `packages/create-provider` | Generator for an auth-provider instance: upstream's app plus the provin-module overlay (§ 3.5) | not yet — run from a repo clone |
 | `packages/create-policy-verifier` | Generator + canonical template for a policy-verifier instance | not yet — run from a repo clone |
-| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.19 modules) and the `did:dplaax` method library | npm with provenance, from 0.1.0 ([`publish-packages`](../.github/workflows/publish-packages.yml)); the generators still compose them as git-subdirectory refs (§ 3.3) |
+| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.19 modules) and the `did:dplaax` method library | npm with provenance, from 0.6.0 ([`publish-packages`](../.github/workflows/publish-packages.yml)); the generators still compose them as git-subdirectory refs (§ 3.3) |
 | `packages/policy-verifier-dplaax-module` | dPLaaX composition module consumed by generated policy-verifier instances | not yet — consumed as git-subdirectory refs (§ 3.3) |
 | `integration/` | Private workspace package: cross-package flow tests (§ 6.2) | no |
 | `instances/` | Git-ignored output directory for locally generated dev instances (§ 5) | no |
@@ -106,8 +106,17 @@ The policy-verifier generator emits exact dependency pins from
 auth.provider release the generated app is built on (0.19.0); the app's own
 pins are that release's. Moving git refs (e.g. branch names) are rejected for `--dplaax-module-ref`
 in published releases. When the dependency baseline upgrades, refresh
-`defaults.mts` (and, for the provider, the scaffold pin) in lockstep with a
-generator **MINOR** bump.
+`defaults.mts` (and, for the provider, the scaffold pin) in a **minor**
+release of the repository.
+
+Every package carries the repository's one version: the root
+`package.json`'s, which is the release tag's without its `v`
+(`integration/tests/versions.test.mts` holds them equal, and
+`publish-packages` refuses a tag whose version is not every published
+package's). A provin package takes another as a peer at the caret of that
+version. Before 0.6.0 each generator had its own version: 0.2.0 shipped in
+tags v0.3.x, 0.3.0 in v0.4.0 and 0.4.0 in v0.5.0, and 0.5.0 was never
+released.
 
 (Formerly spec § 5.3 / § 5.4 / § 8.1 — see Appendix A.)
 
@@ -115,7 +124,7 @@ generator **MINOR** bump.
 
 The dPLaaX module packages declare their sibling `@provin-line/*` deps with
 the `workspace:` protocol, which a package fetched by git ref cannot resolve
-outside this workspace. The libraries are on npm from 0.1.0, but the
+outside this workspace. The libraries are on npm from 0.6.0, but the
 generators still compose them as git-subdirectory refs, so a standalone
 consumer install needs scaffold-side provisions, which the generator emits
 as follows.
@@ -160,7 +169,7 @@ the verifier generator moves to pnpm 11 it emits a `pnpm-workspace.yaml` the
 same way.
 
 The transitive package lists are baked into each generator and refreshed in
-lockstep (§ 3.3). The libraries are on npm from 0.1.0; these overrides go
+lockstep (§ 3.3). The libraries are on npm from 0.6.0; these overrides go
 when the generators compose them from npm instead of git refs.
 
 Inside this repo's workspace the scaffold's own overrides and build

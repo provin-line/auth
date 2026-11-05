@@ -31,7 +31,7 @@ its own composition roots with the scaffold generators
 
 ## Packages
 
-The first four are published to npm with provenance, from 0.1.0, by
+The first four are published to npm with provenance, from 0.6.0, by
 [`publish-packages`](.github/workflows/publish-packages.yml) on a version tag.
 
 | Package | Description |

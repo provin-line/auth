@@ -12,11 +12,10 @@
 // literals at build time; consumers regenerate by running a newer generator
 // version if they want a newer baseline.
 //
-// These constants are the dependency baseline of the canonical template:
 // The baseline is auth.provider 0.19.0: the generator package pins
 // @o3co/auth-provider-scaffold at exactly that version, and the app it writes
 // carries upstream's own pins. When the baseline moves, bump the scaffold pin
-// and refresh this file with a generator MINOR bump (create-app.md § 3.3).
+// and refresh this file in a minor release of the repository (create-app.md § 3.3).
 
 /**
  * Exact pins of the dependencies the overlay adds to upstream's manifest.

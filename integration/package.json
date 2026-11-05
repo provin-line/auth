@@ -1,7 +1,7 @@
 {
 	"name": "@provin-line/auth-integration",
 	"description": "Cross-package integration tests: DID grant on auth.provider 0.19 → JWT → policy verification",
-	"version": "0.0.1",
+	"version": "0.6.0",
 	"private": true,
 	"license": "Apache-2.0",
 	"type": "module",

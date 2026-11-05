@@ -20,10 +20,14 @@
 // steps so that the one holding the workflow's OIDC identity installs and
 // builds nothing:
 //
-//   pack <dir>               packs into <dir> each package whose version the
+//   pack <dir> [--tag <tag>] packs into <dir> each package whose version the
 //                            registry does not hold yet. pnpm packs, turning
-//                            `workspace:` ranges into versions. In GitHub
-//                            Actions it writes `count` to the step's outputs.
+//                            `workspace:` ranges into versions. With --tag, it
+//                            refuses unless the root package.json's version,
+//                            and every workspace package's, is the tag's, `v`
+//                            dropped: the repository releases under one
+//                            version. In GitHub Actions it writes `count` to
+//                            the step's outputs.
 //   publish <dir> [--dry-run]
 //                            publishes the tarballs in <dir> with npm, in
 //                            dependency order. npm authenticates by trusted
@@ -45,11 +49,16 @@ const root = join(import.meta.dirname, "..");
 const manifestOf = (name) => JSON.parse(readFileSync(join(root, "packages", name, "package.json"), "utf8"));
 const NAMES = PACKAGES.map((name) => manifestOf(name).name);
 const [step, dir, ...flags] = process.argv.slice(2);
-const known = step === "publish" ? ["--dry-run"] : [];
-if ((step !== "pack" && step !== "publish") || dir === undefined || flags.some((f) => !known.includes(f))) {
-	console.error("usage: publish-packages.mjs pack <dir> | publish <dir> [--dry-run]");
+const usage = () => {
+	console.error("usage: publish-packages.mjs pack <dir> [--tag <tag>] | publish <dir> [--dry-run]");
 	process.exit(2);
-}
+};
+if ((step !== "pack" && step !== "publish") || dir === undefined) usage();
+let tag;
+if (step === "pack") {
+	if (flags.length === 2 && flags[0] === "--tag" && flags[1] !== "") tag = flags[1];
+	else if (flags.length !== 0) usage();
+} else if (flags.some((f) => f !== "--dry-run")) usage();
 
 /** Whether a dotted version is at least the floor. */
 function atLeast(version, floor) {
@@ -73,6 +82,25 @@ function held(name, version) {
 }
 
 function pack() {
+	if (tag !== undefined) {
+		const want = tag.replace(/^v/, "");
+		// The root, packages/* and integration: every package the repository
+		// releases its version in.
+		const read = (dir) => JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8"));
+		const workspace = [
+			".",
+			...readdirSync(join(root, "packages"), { withFileTypes: true })
+				.filter((e) => e.isDirectory())
+				.map((e) => join("packages", e.name)),
+			"integration",
+		].map(read);
+		const off = workspace.filter((m) => m.version !== want);
+		if (off.length > 0) {
+			const named = off.map((m) => `${m.name}@${m.version}`).join(", ");
+			console.error(`${tag}: the repository releases under one version, and these are not ${want}: ${named}`);
+			process.exit(1);
+		}
+	}
 	mkdirSync(dir, { recursive: true });
 	let count = 0;
 	for (const name of PACKAGES) {
