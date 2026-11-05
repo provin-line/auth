@@ -40,8 +40,13 @@
  * host-gateway address is private), and the container's port 8080 is
  * published on <port>.
  *
- * Usage: node scripts/smoke-did-grant.mjs <instance-dir> <port>
- *        node scripts/smoke-did-grant.mjs --image <image> <port>
+ * By default the instance runs in development, serving its plain-http
+ * origin. With --production it runs as the published image does: production,
+ * an https issuer and public origin that a proxy in front would serve, and
+ * the requests sent to its own plain-http port.
+ *
+ * Usage: node scripts/smoke-did-grant.mjs [--production] <instance-dir> <port>
+ *        node scripts/smoke-did-grant.mjs [--production] --image <image> <port>
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -52,12 +57,14 @@ import os from "node:os";
 import path from "node:path";
 
 const args = process.argv.slice(2);
+const production = args[0] === "--production";
+if (production) args.shift();
 const image = args[0] === "--image" ? args[1] : undefined;
 if (args[0] === "--image") args.splice(0, 2);
 const [instanceDir, portArg] = image === undefined ? args : [undefined, args[0]];
 if ((image === undefined && !instanceDir) || !portArg || args[0] === "--image") {
 	console.error(
-		"usage: smoke-did-grant.mjs <instance-dir> <port> | --image <image> <port>",
+		"usage: smoke-did-grant.mjs [--production] <instance-dir> <port> | [--production] --image <image> <port>",
 	);
 	process.exit(1);
 }
@@ -152,7 +159,9 @@ const introspectorHash = (() => {
 	return `$scrypt$ln=10,r=8,p=1$${b64(salt)}$${b64(key)}`;
 })();
 const DID_GRANT_TYPE = "https://dplaax.dev/oauth/grant-type/did";
-const origin = `http://localhost:${port}`;
+// Where the requests go, and the issuer and public origin the instance states.
+const base = `http://localhost:${port}`;
+const origin = production ? "https://auth.smoke.invalid" : base;
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "smoke-did-grant-"));
 const localConf = path.join(tmpDir, "local.conf");
 // Plain http to the registry: outbound admits the pair by name (loopback for a
@@ -195,11 +204,12 @@ clients.registered = [
 // ── boot the instance under test ─────────────────────────────────────────────
 const settings = {
 	KERNEL_DEPLOYMENT: "single",
+	// A plain-http origin and issuer boot in development alone.
+	...(production ? {} : { KERNEL_ENVIRONMENT: "development", HTTP_INSECURE_ORIGIN: "true" }),
 	STORE_ACCEPT_VOLATILE: "true",
 	TOKENS_REVOCATION: "denylist",
 	TOKENS_SUBJECT_CHECK: "none",
 	HTTP_PUBLIC_ORIGIN: origin,
-	HTTP_INSECURE_ORIGIN: "true",
 	ISSUER_URL: origin,
 	KEYS_SIGNING_KID: "smoke-1",
 	KEYS_SIGNING_ALG: "HS256",
@@ -269,7 +279,6 @@ process.on("SIGINT", () => process.exit(130));
 process.on("SIGTERM", () => process.exit(143));
 
 // ── wait for health ──────────────────────────────────────────────────────────
-const base = origin;
 let healthy = false;
 for (let i = 0; i < 30; i++) {
 	try {
@@ -451,6 +460,6 @@ if (activeAfter.status !== 200 || after.active !== false) {
 }
 
 console.log(
-	`smoke-did-grant: OK — DID grant minted a Bearer token with the six signed claims on :${port} (tampered signature rejected with HTTP ${badRes.status}; introspected active, revoked, then inactive)`,
+	`smoke-did-grant: OK (${production ? "production" : "development"}) — DID grant minted a Bearer token with the six signed claims on :${port} (tampered signature rejected with HTTP ${badRes.status}; introspected active, revoked, then inactive)`,
 );
 process.exit(0);

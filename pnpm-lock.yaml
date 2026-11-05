@@ -26,17 +26,17 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0
       '@o3co/auth-provider-foundation':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-identity':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-oauth':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-templates':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth.policy-verifier.builtins':
         specifier: ^0.18.0
         version: 0.18.0
@@ -69,7 +69,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -90,13 +90,13 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
 
   packages/create-provider:
     dependencies:
       '@o3co/auth-provider-scaffold':
-        specifier: 0.18.4
-        version: 0.18.4(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(zod@4.6.7)
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -112,7 +112,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
 
   packages/did-dplaax:
     devDependencies:
@@ -130,7 +130,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
 
   packages/did-grant:
     dependencies:
@@ -142,14 +142,14 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0
       '@o3co/auth-provider-foundation':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-identity':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-oauth':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -164,7 +164,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -172,14 +172,14 @@ importers:
   packages/did-grant-store:
     devDependencies:
       '@o3co/auth-provider-foundation':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-identity':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-oauth':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@provin-line/auth-did-grant':
         specifier: workspace:*
         version: link:../did-grant
@@ -197,7 +197,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -209,14 +209,14 @@ importers:
         version: link:../did-dplaax
     devDependencies:
       '@o3co/auth-provider-foundation':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-identity':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth-provider-oauth':
-        specifier: 0.18.4
-        version: 0.18.4(vitest@5.0.5)(zod@4.6.7)
+        specifier: 0.19.0
+        version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@provin-line/auth-did-grant':
         specifier: workspace:*
         version: link:../did-grant
@@ -237,7 +237,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -268,7 +268,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
 
 packages:
 
@@ -318,8 +318,8 @@ packages:
   '@noble/ed25519@3.2.0':
     resolution: {integrity: sha512-criDgRlnUA09hchYrTy/JUWPIEap5rZxQe6wDWzRx51oWWpDRcUpuNzlgPxDJaOK6AsW9c0wKcj3rKRv6t+bPQ==}
 
-  '@o3co/auth-provider-delegation@0.18.4':
-    resolution: {integrity: sha512-bvlQ3TkyHdKg/uPDc4CgNlmul42y5Okq9dQisbirQ+oMtPqVUUu2VRDvns5nz5kvIabq+iodYmZzO4KppST/WQ==}
+  '@o3co/auth-provider-delegation@0.19.0':
+    resolution: {integrity: sha512-9+rGo0KX5hrHsRjVgenQr3HsASEnYptQKQtQQVUBsvGFQV62c/0v8AJBEBHD2wTZq7sssqCC1XDa8StY5u+Zhg==}
     engines: {node: '>=24'}
     peerDependencies:
       vitest: 5.0.5
@@ -328,8 +328,8 @@ packages:
       vitest:
         optional: true
 
-  '@o3co/auth-provider-foundation@0.18.4':
-    resolution: {integrity: sha512-OszodJBFEWK9aDYkydW+/9ZhxTjY+LRJ0JkNUnBNKxX2+XuddY5JxoIlxY2id/8EZLA3lzfR+TTmrFXdfjMvOA==}
+  '@o3co/auth-provider-foundation@0.19.0':
+    resolution: {integrity: sha512-jrFHYSHhCQtINjPUtIQyWdHvco0y8cWJDn7wibwmeARadQjyNy6Sg2Xc7G7D+hLlsqd92vEcqil+HIZgbCuA9w==}
     engines: {node: '>=24'}
     peerDependencies:
       vitest: 5.0.5
@@ -338,8 +338,8 @@ packages:
       vitest:
         optional: true
 
-  '@o3co/auth-provider-identity@0.18.4':
-    resolution: {integrity: sha512-CSGhhHkhrrI14sEpNYNNG4cJQuk7k+BnixJrfoHhfwJu8K7A80Y7jL+0sfE1fKwJz3wKy6fo/ifUVzBCaiuoYQ==}
+  '@o3co/auth-provider-identity@0.19.0':
+    resolution: {integrity: sha512-ujgTnyhM+WRagkQULa4+f8HHd3PZsgAGi21JDivDNgfslPDazhC3bDtZKp/jH45b5Lvs38yOG8UEfowh0TyQQg==}
     engines: {node: '>=24'}
     peerDependencies:
       vitest: 5.0.5
@@ -348,8 +348,8 @@ packages:
       vitest:
         optional: true
 
-  '@o3co/auth-provider-oauth@0.18.4':
-    resolution: {integrity: sha512-ltZE8DEjiSpzLMb0ir2UC5ts2bkeXV+DtL6MmtdGjCREl2hdfuwbElb/Lj/uFvz3kreFTlD0HiZxxjGTW3l5yg==}
+  '@o3co/auth-provider-oauth@0.19.0':
+    resolution: {integrity: sha512-0VQkGbrlgrzhobpWc4Sm51KErPn0ME2hgEFia8ucALPb+3mv1DYqXlJqt+t8MOfjZgTcntpJ/wJToUw/eYyUhQ==}
     engines: {node: '>=24'}
     peerDependencies:
       vitest: 5.0.5
@@ -358,8 +358,8 @@ packages:
       vitest:
         optional: true
 
-  '@o3co/auth-provider-passkey@0.18.4':
-    resolution: {integrity: sha512-A8J89xyQ866SkPuZdXz52WQVl1LY3GWRr8T1if9jIsc+ozVfY2uK9o8/n5oBYPRnN+TccVuhxNBq4gKV//zwug==}
+  '@o3co/auth-provider-passkey@0.19.0':
+    resolution: {integrity: sha512-sqh+oeSNo49oT+yY3NOJCrFCXKrFQDfZVAbZT/sSjkiJaPNNLzqHa262O71c5OupJgbKeGKb8zep35a/RxEbog==}
     engines: {node: '>=24'}
     peerDependencies:
       vitest: 5.0.5
@@ -368,13 +368,13 @@ packages:
       vitest:
         optional: true
 
-  '@o3co/auth-provider-scaffold@0.18.4':
-    resolution: {integrity: sha512-WEjiVDBu75YUzjiGHM8i14dLOM3vZzMe/v2uTHo6mHD99h+LLlrJ9CmqJ2zn9UgOJxPHx/0A8Alz8ao1jkTW2w==}
+  '@o3co/auth-provider-scaffold@0.19.0':
+    resolution: {integrity: sha512-hfev07PoQdX1effIET84Mg+YuIVeEJQ5iNMZ75qmi1Xv6Bf5V8lXNIhl2RvIwb4NdI+neyVxRRz/zSQCEKWucA==}
     engines: {node: '>=24'}
     hasBin: true
 
-  '@o3co/auth-provider-second-factor@0.18.4':
-    resolution: {integrity: sha512-T8c+Wsn+YCzUXvjI5zvQtHbjArvwkj5h64biuNsu7YyO987baoZHqnnNomMi5eI9Gz3jf/hSByrPLzqxFQ6LCw==}
+  '@o3co/auth-provider-second-factor@0.19.0':
+    resolution: {integrity: sha512-3qGwWUiOH7ZaqkIHpWTbeoyr2j05c+ljJlfVwfSRZwaQl4zVtb3VCK0q20VhOiL3daLwh4AB4LTQhshVL4/KvA==}
     engines: {node: '>=24'}
     peerDependencies:
       vitest: 5.0.5
@@ -383,14 +383,14 @@ packages:
       vitest:
         optional: true
 
-  '@o3co/auth-provider-templates@0.18.4':
-    resolution: {integrity: sha512-NNCE+jR9/9e80N9kwOeDXMChWpJyvwKDGlk7jojsO6vvQzb5HdYkpzn4O0RDtxnFXZL3++BWnn5QdU9jrE1kag==}
+  '@o3co/auth-provider-templates@0.19.0':
+    resolution: {integrity: sha512-Di576szyirkr6hKZsSU9cbkoRFDHaAjnA56IUJpyLtmhF2NthJ76H3YtPdDndyI7Wy2/1MWFjdr/SScTG6jOag==}
     engines: {node: '>=24'}
     peerDependencies:
       zod: 4.6.7
 
-  '@o3co/auth-provider-upstream-login@0.18.4':
-    resolution: {integrity: sha512-/pmHVeEfGubcKYuPTgRI+U8Z0I+BSDy15tYcAJNr5VAFF5qDyGW/5TGXVtReKcfUshCiepATpoas5+1h7tEJ2w==}
+  '@o3co/auth-provider-upstream-login@0.19.0':
+    resolution: {integrity: sha512-DjYM4Ti8NRs6M8RNpDZ5FMF+/Cd13su16Ghl8i11uYB75v82X63+oZuaEJ5yVCGWJeHDnrLvgc1wDt0LylbCig==}
     engines: {node: '>=24'}
     peerDependencies:
       vitest: 5.0.5
@@ -851,9 +851,6 @@ packages:
   is-promise@4.0.0:
     resolution: {integrity: sha512-hvpoI6korhJMnej285dSg6nu1+e6uxs7zG3BYAm5byqDsgJNWwxzM6z6iZiAgQR4TJ30JmBTOwqZUw3WlyH3AQ==}
 
-  jose@6.2.12:
-    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
-
   jose@6.2.13:
     resolution: {integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==}
 
@@ -1072,6 +1069,11 @@ packages:
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
+  semver@7.8.5:
+    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   send@1.2.1:
     resolution: {integrity: sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==}
     engines: {node: '>= 18'}
@@ -1259,6 +1261,11 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -1298,111 +1305,113 @@ snapshots:
 
   '@noble/ed25519@3.2.0': {}
 
-  '@o3co/auth-provider-delegation@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-delegation@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/auth-provider-foundation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-identity': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-upstream-login': 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@o3co/auth-provider-foundation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-identity': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-oauth': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-upstream-login': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       zod: 4.6.7
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
     transitivePeerDependencies:
       - smol-toml
       - yaml
 
-  '@o3co/auth-provider-foundation@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-foundation@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/ts.hocon': 1.14.3(zod@4.6.7)
+      '@o3co/ts.hocon': 1.14.3(yaml@2.9.1)(zod@4.6.7)
       bcryptjs: 3.0.3
-      jose: 6.2.12
+      jose: 6.2.13
       zod: 4.6.7
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
     transitivePeerDependencies:
       - smol-toml
       - yaml
 
-  '@o3co/auth-provider-identity@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-identity@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/auth-provider-foundation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@o3co/auth-provider-foundation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       zod: 4.6.7
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
     transitivePeerDependencies:
       - smol-toml
       - yaml
 
-  '@o3co/auth-provider-oauth@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-oauth@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/auth-provider-foundation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-identity': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-second-factor': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      jose: 6.2.12
+      '@o3co/auth-provider-foundation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-identity': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-second-factor': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      jose: 6.2.13
       zod: 4.6.7
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
     transitivePeerDependencies:
       - smol-toml
       - yaml
 
-  '@o3co/auth-provider-passkey@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-passkey@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/auth-provider-foundation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-identity': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-oauth': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-second-factor': 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@o3co/auth-provider-foundation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-identity': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-oauth': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-second-factor': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@simplewebauthn/server': 14.0.1
       zod: 4.6.7
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
     transitivePeerDependencies:
       - smol-toml
       - yaml
 
-  '@o3co/auth-provider-scaffold@0.18.4(zod@4.6.7)':
+  '@o3co/auth-provider-scaffold@0.19.0(zod@4.6.7)':
     dependencies:
-      '@o3co/ts.hocon': 1.14.3(zod@4.6.7)
+      '@o3co/ts.hocon': 1.14.3(yaml@2.9.1)(zod@4.6.7)
+      semver: 7.8.5
+      yaml: 2.9.1
     transitivePeerDependencies:
       - smol-toml
-      - yaml
       - zod
 
-  '@o3co/auth-provider-second-factor@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-second-factor@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/auth-provider-foundation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-identity': 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@o3co/auth-provider-foundation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-identity': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       zod: 4.6.7
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
     transitivePeerDependencies:
       - smol-toml
       - yaml
 
-  '@o3co/auth-provider-templates@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-templates@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/auth-provider-delegation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-foundation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-identity': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-oauth': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-passkey': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-second-factor': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-upstream-login': 0.18.4(vitest@5.0.5)(zod@4.6.7)
+      '@o3co/auth-provider-delegation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-foundation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-identity': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-oauth': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-passkey': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-second-factor': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-upstream-login': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       zod: 4.6.7
     transitivePeerDependencies:
       - smol-toml
       - vitest
       - yaml
 
-  '@o3co/auth-provider-upstream-login@0.18.4(vitest@5.0.5)(zod@4.6.7)':
+  '@o3co/auth-provider-upstream-login@0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)':
     dependencies:
-      '@o3co/auth-provider-foundation': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-identity': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      '@o3co/auth-provider-oauth': 0.18.4(vitest@5.0.5)(zod@4.6.7)
-      jose: 6.2.12
+      '@o3co/auth-provider-foundation': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-identity': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      '@o3co/auth-provider-oauth': 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
+      jose: 6.2.13
       zod: 4.6.7
     optionalDependencies:
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
     transitivePeerDependencies:
       - smol-toml
       - yaml
@@ -1423,8 +1432,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@o3co/ts.hocon@1.14.3(zod@4.6.7)':
+  '@o3co/ts.hocon@1.14.3(yaml@2.9.1)(zod@4.6.7)':
     optionalDependencies:
+      yaml: 2.9.1
       zod: 4.6.7
 
   '@opentelemetry/api@1.9.1': {}
@@ -1632,7 +1642,7 @@ snapshots:
       obug: 3.0.0
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
 
   '@vitest/istanbul-lib-coverage@1.0.2': {}
 
@@ -1640,14 +1650,14 @@ snapshots:
     dependencies:
       '@vitest/istanbul-lib-coverage': 1.0.2
 
-  '@vitest/mocker@5.0.5(vite@8.3.4(@types/node@26.6.5))':
+  '@vitest/mocker@5.0.5(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.0.5
       estree-walker: 3.0.3
       magic-string: 1.4.3
     optionalDependencies:
-      vite: 8.3.4(@types/node@26.6.5)
+      vite: 8.3.4(@types/node@26.6.5)(yaml@2.9.1)
 
   '@vitest/spy@5.0.5': {}
 
@@ -1872,8 +1882,6 @@ snapshots:
 
   is-promise@4.0.0: {}
 
-  jose@6.2.12: {}
-
   jose@6.2.13: {}
 
   js-tokens@10.0.0: {}
@@ -2067,6 +2075,8 @@ snapshots:
 
   safer-buffer@2.1.2: {}
 
+  semver@7.8.5: {}
+
   send@1.2.1(supports-color@7.2.0):
     dependencies:
       debug: 4.4.3(supports-color@7.2.0)
@@ -2172,7 +2182,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vite@8.3.4(@types/node@26.6.5):
+  vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -2182,11 +2192,12 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.5
       fsevents: 2.3.3
+      yaml: 2.9.1
 
-  vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)):
+  vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.5(vite@8.3.4(@types/node@26.6.5))
+      '@vitest/mocker': 5.0.5(vite@8.3.4(@types/node@26.6.5)(yaml@2.9.1))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -2197,7 +2208,7 @@ snapshots:
       tinybench: 6.2.2
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 8.3.4(@types/node@26.6.5)
+      vite: 8.3.4(@types/node@26.6.5)(yaml@2.9.1)
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
@@ -2209,5 +2220,7 @@ snapshots:
   why-is-node-running@3.2.1: {}
 
   wrappy@1.0.2: {}
+
+  yaml@2.9.1: {}
 
   zod@4.6.7: {}

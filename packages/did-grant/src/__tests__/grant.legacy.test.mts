@@ -191,7 +191,7 @@ describe("did-grant with a contributed signature algorithm", () => {
 	const section = { ...minimalSection, "supported-algorithms": ["custom_sig"] };
 	const contributing = (answer: (did: string) => VerificationResult) => {
 		const verifier: SignatureVerifier = { verify: async ({ did }) => answer(did) };
-		return defineModule({ name: "algorithm-custom" }, (m) => [
+		return defineModule({ name: "algorithm-custom", replicaSafe: true, takes: [] }, (m) => [
 			m.contribute(signatureAlgorithms).by(() => ({ algorithm: "custom_sig", create: async () => verifier })),
 		]);
 	};

@@ -1,7 +1,7 @@
 {
 	"name": "@provin-line/create-auth-provider",
 	"description": "Scaffold generator for dPLaaX auth.provider deployment instances",
-	"version": "0.4.0",
+	"version": "0.5.0",
 	"license": "Apache-2.0",
 	"type": "module",
 	"bin": {
@@ -32,7 +32,7 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@o3co/auth-provider-scaffold": "0.18.4"
+		"@o3co/auth-provider-scaffold": "0.19.0"
 	},
 	"devDependencies": {
 		"@types/node": "^26.6.5",

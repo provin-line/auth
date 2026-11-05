@@ -12,6 +12,27 @@ releases.
 
 ### Changed
 
+- **BREAKING (`@provin-line/create-auth-provider` 0.5.0): the generated provider is an
+  auth.provider 0.19.0 app**, and the DID grant, the registry resolver and the
+  nonce store require 0.19.0. An instance generated with 0.4.0 is generated
+  again: it lacks the `tls-options` module 0.19's `outbound` needs, and does
+  not read `KERNEL_ENVIRONMENT`.
+  - A plain-http `issuer.url` or `http.insecure-origin = true` boots only with
+    `kernel.environment = development`; the default, `production`, refuses
+    them. The dev composition sets `KERNEL_ENVIRONMENT=development`. The
+    DID-grant smoke runs in development, and again in production behind an
+    https origin, as the published image runs.
+  - `outbound`'s host lists are read strictly, names resolve in two helper
+    processes, and outbound TLS takes 1.2 or later with ECDHE and an AEAD
+    cipher alone.
+  - [docs/upstream-compatibility.md](docs/upstream-compatibility.md#moving-an-existing-provider-instance-to-019)
+    lists what an existing instance changes.
+- `@provin-line/auth-did-grant`, `auth-did-grant-store` and
+  `auth-dplaax-registry` declare `takes`, and the first two `replicaSafe`,
+  which 0.19's kernel requires of every module.
+- **BREAKING (`@provin-line/auth-did-grant`):** `did-grant.access-token-lifetime`
+  takes `2s` to `1d`. 0.19's `tokens` refuses a lifetime of one second, so
+  `1s` refuses boot instead of failing every request.
 - **BREAKING (verifier packages): the policy-verifier baseline is 0.18.0.**
   The dPLaaX verifier module requires `^0.18.0`, so a consumer moves its
   three verifier packages together. Workspace packages require

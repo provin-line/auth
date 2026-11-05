@@ -18,6 +18,7 @@ import { defineModule, type Refusal, setting } from "@o3co/auth-provider-foundat
 import { grants } from "@o3co/auth-provider-oauth/grants";
 import { issuer } from "@o3co/auth-provider-oauth/issuer";
 import { tokenEndpointLocation } from "@o3co/auth-provider-oauth/token-endpoint";
+import { lifetimeSecondsRange } from "@o3co/auth-provider-oauth/tokens";
 import { z } from "zod";
 import { didDocuments, signatureAlgorithms, spentNonces } from "./contract.mjs";
 import { didGrant } from "./grant.mjs";
@@ -52,9 +53,11 @@ const section = z
 		"legacy-max-ttl": seconds()
 			.prefault("15m")
 			.describe("The longest lifetime of a `LEGACY_DID_LOGIN@1` token (rule `auth.legacy.did-login`)."),
-		"access-token-lifetime": seconds().describe(
-			"Required. The lifetime of the access tokens this grant issues, from `1s` to `1d`.",
-		),
+		// The range tokens issues a lifetime the grant asks in.
+		"access-token-lifetime": setting
+			.duration("s")
+			.pipe(z.number().int().min(lifetimeSecondsRange.min).max(lifetimeSecondsRange.max))
+			.describe("Required. The lifetime of the access tokens this grant issues, from `2s` to `1d`."),
 	})
 	.superRefine((s, ctx) => {
 		const lifetime = s["access-token-lifetime"];
@@ -81,74 +84,83 @@ const section = z
 		}
 	});
 
-export default defineModule({ name: "did-grant", section }, (m) => [
-	m.contribute(grants).by(async (c) => {
-		const s = c.section;
-		const owner = isOwnerContract(s["auth-contract"]);
-		const refused: Refusal[] = [];
+export default defineModule(
+	{
+		name: "did-grant",
+		section,
+		// The spent nonces are kept behind spentNonces, which its wiring backs with the store.
+		replicaSafe: true,
+		takes: [signatureAlgorithms, tokenEndpointLocation, issuer, didDocuments, spentNonces],
+	},
+	(m) => [
+		m.contribute(grants).by(async (c) => {
+			const s = c.section;
+			const owner = isOwnerContract(s["auth-contract"]);
+			const refused: Refusal[] = [];
 
-		const algorithms = new Map<string, BuiltinAlgorithm>(BUILTIN_ALGORITHMS);
-		for (const contributed of await c.collect(signatureAlgorithms)) {
-			if (BUILTIN_ALGORITHMS.has(contributed.algorithm)) {
+			const algorithms = new Map<string, BuiltinAlgorithm>(BUILTIN_ALGORITHMS);
+			for (const contributed of await c.collect(signatureAlgorithms)) {
+				if (BUILTIN_ALGORITHMS.has(contributed.algorithm)) {
+					refused.push({
+						where: "did-grant",
+						reason: `a contributed signature algorithm takes the built-in name ${contributed.algorithm}`,
+					});
+					continue;
+				}
+				algorithms.set(contributed.algorithm, {
+					create: () => contributed.create(),
+					headerBearing: contributed.headerBearing === true,
+				});
+			}
+
+			// Each supported algorithm's verifier is made now, so a missing peer or a
+			// broken contribution refuses boot rather than every request.
+			const verifiers = new Map<string, SignatureVerifier>();
+			for (const [at, name] of s["supported-algorithms"].entries()) {
+				const where = `did-grant.supported-algorithms.${at}`;
+				const algorithm = algorithms.get(name);
+				if (!algorithm) {
+					refused.push({ where, reason: "is neither built in nor contributed at signatureAlgorithms" });
+					continue;
+				}
+				if (owner && !algorithm.headerBearing) {
+					refused.push({
+						where,
+						reason: `has no JWS protected header, which ${s["auth-contract"]} needs (rule auth.grant.kid-match)`,
+					});
+					continue;
+				}
+				try {
+					verifiers.set(name, await algorithm.create());
+				} catch (err) {
+					refused.push({ where, reason: `its verifier cannot be made: ${err instanceof Error ? err.message : String(err)}` });
+				}
+			}
+
+			const { url: tokenEndpoint } = await c.get(tokenEndpointLocation);
+			if (owner && tokenEndpoint === undefined) {
 				refused.push({
 					where: "did-grant",
-					reason: `a contributed signature algorithm takes the built-in name ${contributed.algorithm}`,
+					reason: `${s["auth-contract"]} checks the transcript's token_endpoint, and the token endpoint's location needs a public origin`,
 				});
-				continue;
 			}
-			algorithms.set(contributed.algorithm, {
-				create: () => contributed.create(),
-				headerBearing: contributed.headerBearing === true,
-			});
-		}
+			if (refused.length > 0) return c.refuseAll(refused);
 
-		// Each supported algorithm's verifier is made now, so a missing peer or a
-		// broken contribution refuses boot rather than every request.
-		const verifiers = new Map<string, SignatureVerifier>();
-		for (const [at, name] of s["supported-algorithms"].entries()) {
-			const where = `did-grant.supported-algorithms.${at}`;
-			const algorithm = algorithms.get(name);
-			if (!algorithm) {
-				refused.push({ where, reason: "is neither built in nor contributed at signatureAlgorithms" });
-				continue;
-			}
-			if (owner && !algorithm.headerBearing) {
-				refused.push({
-					where,
-					reason: `has no JWS protected header, which ${s["auth-contract"]} needs (rule auth.grant.kid-match)`,
-				});
-				continue;
-			}
-			try {
-				verifiers.set(name, await algorithm.create());
-			} catch (err) {
-				refused.push({ where, reason: `its verifier cannot be made: ${err instanceof Error ? err.message : String(err)}` });
-			}
-		}
-
-		const { url: tokenEndpoint } = await c.get(tokenEndpointLocation);
-		if (owner && tokenEndpoint === undefined) {
-			refused.push({
-				where: "did-grant",
-				reason: `${s["auth-contract"]} checks the transcript's token_endpoint, and the token endpoint's location needs a public origin`,
-			});
-		}
-		if (refused.length > 0) return c.refuseAll(refused);
-
-		return didGrant(
-			{
-				authContract: s["auth-contract"],
-				messageMaxAgeMs: s["message-max-age"] * 1000,
-				accessTokenLifetimeSeconds: s["access-token-lifetime"],
-				issuer: (await c.get(issuer)).url,
-				tokenEndpoint,
-			},
-			{
-				documents: await c.get(didDocuments),
-				nonces: await c.get(spentNonces),
-				verifiers,
-				now: () => c.clock.now(),
-			},
-		);
-	}),
-]);
+			return didGrant(
+				{
+					authContract: s["auth-contract"],
+					messageMaxAgeMs: s["message-max-age"] * 1000,
+					accessTokenLifetimeSeconds: s["access-token-lifetime"],
+					issuer: (await c.get(issuer)).url,
+					tokenEndpoint,
+				},
+				{
+					documents: await c.get(didDocuments),
+					nonces: await c.get(spentNonces),
+					verifiers,
+					now: () => c.clock.now(),
+				},
+			);
+		}),
+	],
+);

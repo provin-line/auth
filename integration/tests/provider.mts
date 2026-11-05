@@ -33,6 +33,7 @@ import outboundModule from "@o3co/auth-provider-foundation/outbound/module";
 import rateLimitModule from "@o3co/auth-provider-foundation/rate-limit/module";
 import secretHashModule from "@o3co/auth-provider-foundation/secret-hash/module";
 import storeModule from "@o3co/auth-provider-foundation/store/module";
+import tlsOptionsModule from "@o3co/auth-provider-foundation/tls-options/module";
 import { storeConfig } from "@o3co/auth-provider-foundation/store/testing";
 import clientsModule from "@o3co/auth-provider-identity/clients/module";
 import { clientsConfig, confidentialClient, publicClient } from "@o3co/auth-provider-identity/clients/testing";
@@ -77,6 +78,7 @@ export async function startProvider(options: ProviderOptions) {
 			tokenControlModule,
 			clientAllowanceModule,
 			outboundModule,
+			tlsOptionsModule,
 			auditModule,
 			clientsModule,
 			httpModule,
