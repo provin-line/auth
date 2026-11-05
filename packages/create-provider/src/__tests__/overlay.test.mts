@@ -301,7 +301,7 @@ describe("patchReadme", () => {
 		expect(out).toContain("minimumReleaseAgeExclude");
 	});
 
-	it("says nothing of git refs, which the app no longer has", () => {
+	it("says nothing of git refs, which the app has none of", () => {
 		expect(out).not.toMatch(/git-subdirectory|blockExoticSubdeps|allowBuilds/);
 	});
 

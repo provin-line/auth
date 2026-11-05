@@ -161,6 +161,7 @@ export async function generateAuthProviderScaffold(
 	const outDir = resolve(opts.outDir);
 	await ensureCleanOutDir(outDir);
 
+	if (opts.outsideFrom === "") throw new Error("outsideFrom names no directory");
 	if (opts.outsideFrom !== undefined) {
 		const given = resolve(opts.outsideFrom);
 		const isDirectory = await stat(given).then(
@@ -193,9 +194,10 @@ export async function generateAuthProviderScaffold(
 			});
 			const mismatches = composedMismatches(generated.get("outside-modules.json") ?? "{}", lockfile, PROVIN_PACKAGES);
 			if (mismatches.length > 0) {
-				throw new Error(
-					`${from} holds provin packages other than this release's: ${mismatches.join("; ")}`,
-				);
+				// The generator's own staging is gone by the time this is read: what
+				// chose those versions is the registry it installed from.
+				const source = own === undefined ? `${from} holds` : "the registry served";
+				throw new Error(`${source} provin packages other than this release's: ${mismatches.join("; ")}`);
 			}
 			composed = applyProvinModules(generated, {
 				name: opts.name,

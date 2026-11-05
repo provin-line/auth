@@ -111,13 +111,19 @@ describe("CLI main()", () => {
 	});
 
 	it.each(["--dplaax-module-ref", "--allow-unpinned-ref"])(
-		"refuses %s, which composing the modules from npm replaced",
+		"refuses %s as an option it does not have",
 		async (flag) => {
 			const code = await main(["foo", "--no-git-init", flag], io);
 			expect(code).toBe(2);
 			expect(stderr.text()).toMatch(/unknown option/i);
 		},
 	);
+
+	it("returns 2 when --outside-from is empty, naming the flag", async () => {
+		const code = await main(["foo", "--no-git-init", "--outside-from", "", "--out", join(tmpRoot, "out")], io);
+		expect(code).toBe(2);
+		expect(stderr.text()).toMatch(/^Error: --outside-from names no directory\.\n/);
+	});
 
 	it("returns 2 when --outside-from names no directory, naming the flag", async () => {
 		const none = join(tmpRoot, "none");

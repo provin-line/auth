@@ -93,6 +93,30 @@ describe("generateAuthProviderScaffold — its own staging", () => {
 		expect((await readdir(root)).sort()).toEqual(["other"]);
 	});
 
+	it("refuses what its own staging installed at another version, naming the registry, not the staging it removed", async () => {
+		const other = join(root, "other");
+		await cp(staged, other, { recursive: true, verbatimSymlinks: true });
+		const lock = join(other, "pnpm-lock.yaml");
+		const text = await readFile(lock, "utf8");
+		const version = /'@provin-line\/did-dplaax@([^']+)'/.exec(text)?.[1];
+		await writeFile(lock, text.replaceAll(`@provin-line/did-dplaax@${version}`, "@provin-line/did-dplaax@0.0.1"));
+		stageProvinModules.mockImplementationOnce(async () => ({ dir: other, remove: removed }));
+		const refused = generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), gitInit: false });
+		await expect(refused).rejects.toThrow(
+			new RegExp(`^the registry served provin packages other than this release's: @provin-line/did-dplaax is 0\\.0\\.1, not ${version?.replaceAll(".", "\\.")}$`),
+		);
+		await expect(refused).rejects.not.toThrow(other);
+		expect(removed).toHaveBeenCalledTimes(1);
+		expect((await readdir(root)).sort()).toEqual(["other"]);
+	});
+
+	it("refuses an outsideFrom that names no directory at all", async () => {
+		await expect(
+			generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), outsideFrom: "", gitInit: false }),
+		).rejects.toThrow("outsideFrom names no directory");
+		expect(stageProvinModules).not.toHaveBeenCalled();
+	});
+
 	it("refuses an outsideFrom that is no directory, naming it", async () => {
 		const none = join(root, "none");
 		await expect(

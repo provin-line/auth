@@ -27,14 +27,16 @@
 //   Prints the project's path on stdout. --dir defaults to a new temporary
 //   directory; --port to 0, a free port. With --serve the registry keeps
 //   serving until the process is stopped; without it, it stops once the
-//   project is installed.
+//   project is installed. What an earlier run left in --dir's tarballs,
+//   project and pnpm-cache is removed first, so a run stages this checkout's
+//   packages alone.
 //
 // It packs what `dist` holds and builds nothing: run `pnpm -r build` (or an
 // install, whose `prepare` builds) first. Building here would replace `dist`
 // under any test of the same checkout running beside it.
 
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,12 +96,14 @@ function assertBuilt(dir) {
 
 /**
  * Packs the packages into `<dir>/tarballs`, serves them on `port`, and
- * installs `<dir>/project`. Resolves with the project's path and the
- * registry's URL and `close`.
+ * installs `<dir>/project`, each emptied first, as is `<dir>/pnpm-cache`.
+ * Resolves with the project's path and the registry's URL and `close`.
  */
 export async function stageProvinPackages({ dir, port = 0 }) {
 	const tarballs = join(dir, "tarballs");
 	const project = join(dir, "project");
+	const cache = join(dir, "pnpm-cache");
+	for (const own of [tarballs, project, cache]) rmSync(own, { recursive: true, force: true });
 	mkdirSync(tarballs, { recursive: true });
 	mkdirSync(project, { recursive: true });
 	for (const { dir: name } of STAGED_PACKAGES) {
@@ -131,7 +135,8 @@ export async function stageProvinPackages({ dir, port = 0 }) {
 		// Asynchronously, as the registry answers from this process's event
 		// loop. A cache of its own: the registry serves the same versions with
 		// new bytes from run to run, which a shared metadata cache would not see.
-		await pnpm(["install", `--config.cache-dir=${join(dir, "pnpm-cache")}`], project, "installing the staged project");
+		// No lifecycle script runs: the generator reads the packages' files.
+		await pnpm(["install", "--ignore-scripts", `--config.cache-dir=${cache}`], project, "installing the staged project");
 		return { project, url: registry.url, close: registry.close };
 	} catch (err) {
 		await registry.close();

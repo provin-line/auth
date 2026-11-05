@@ -32,7 +32,8 @@ repository's one version (`PROVIN_PACKAGES`; npm holds them with provenance
 from 0.6.0). With no `--outside-from`, the generator installs the modules into
 a temporary project, `@provin-line/did-dplaax` coming with them, from the
 registry your npm configuration names (a `.npmrc` in the directory you run it
-from included), and removes it once the app is written.
+from included), runs none of their lifecycle scripts, and removes the project
+once the app is written, or when it is interrupted first.
 
 `--outside-from <dir>` names a project where pnpm already installed the
 modules: upstream's generator reads them from there, and the app records what
@@ -99,7 +100,8 @@ Generator mechanics are unit-tested here: each patch of the overlay
 (`overlay.test.mts`), the real upstream generator into a temporary directory
 (`generator.test.mts`, reading this checkout's packages, which the test run
 stages once), the generator's own staging (`staging.test.mts`,
-`generator-staging.test.mts`) and the CLI (`cli.test.mts`). The generated app
+`staging-real.test.mts`, `generator-staging.test.mts`), the repository's
+staging script (`stage-script.test.mts`) and the CLI (`cli.test.mts`). The generated app
 is verified by the repo-level scaffold smoke ([create-app.md § 6.3](../../docs/create-app.md)):
 every PR generates an instance, boots it against the local workspace state and
 takes a DID-grant round trip, and every push re-runs the flow as an external

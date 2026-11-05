@@ -208,7 +208,7 @@ importers:
   packages/dplaax-registry:
     dependencies:
       '@provin-line/did-dplaax':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../did-dplaax
     devDependencies:
       '@o3co/auth-provider-foundation':

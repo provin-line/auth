@@ -118,7 +118,8 @@ Every package carries the repository's one version: the root
 (`integration/tests/versions.test.mts` holds them equal, and
 `publish-packages` refuses a tag whose version is not the root's and every
 workspace package's). A provin package takes another as a peer at the caret of that
-version. Before 0.6.0 each generator had its own version: 0.2.0 shipped in
+version, and as a dependency at exactly that version (`workspace:*`), so the
+packages of a release resolve to that release. Before 0.6.0 each generator had its own version: 0.2.0 shipped in
 tags v0.3.x, 0.3.0 in v0.4.0 and 0.4.0 in v0.5.0, and 0.5.0 was never
 released.
 
@@ -164,7 +165,8 @@ as packages outside its release. Upstream reads each from a project pnpm
 installed it into (`--outside-from`; without one the generator stages a
 temporary project installing the modules of `PROVIN_PACKAGES`, `did-dplaax`
 coming with them, from the registry the operator's npm configuration names,
-the working directory's `.npmrc` included, and removes it), composes it
+the working directory's `.npmrc` included, with no lifecycle script, and
+removes it), composes it
 through its
 `authProvider` declaration, and adds what all of them need to run (tokens,
 keys, issuer, clients, store, audit, http, rate-limit, metrics, ...). It writes
@@ -370,8 +372,8 @@ this checkout's):
 Resolved 2026-06-11 (decision on open question 3): the bare consumer
 install was confirmed broken in exactly the predicted way, and the scaffold
 now ships the override and build-allowance provisions specified in § 3.4. Consumer-mode smoke is a gating CI job. The
-`@provin-line/*` libraries are on npm from 0.1.0 and the provider composes
-them from there, so its overrides retired; the verifier's retire when its
+`@provin-line/*` libraries are published to npm from 0.6.0 and the provider
+composes them from there, so its overrides retired; the verifier's retire when its
 generator does the same.
 
 ### 6.4 Round-trip test — retired

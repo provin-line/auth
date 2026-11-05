@@ -11,6 +11,12 @@ name: publish-images
 # moving minor tag (v1.2) — the provin.oss quickstart pins that so it tracks
 # patch releases without a pin bump.
 #
+# The auth-provider image is built from version tags only, a dispatch on one
+# included. It composes the provin packages from npm, which holds a ref's
+# versions only once that ref is tagged and published: built from any other
+# ref, it would carry npm's packages under that ref's sha tag. A dispatch on
+# any other ref builds the policy-verifier image alone.
+#
 # On identity (release.subject.exact-digest / release.docs.match-artifacts):
 # a sha-<sha> tag names the SOURCE commit, but it is still a registry tag — a
 # mutable pointer that this workflow itself would move if re-run on the same
@@ -63,17 +69,27 @@ jobs:
             # Placeholder only — overridden at runtime via
             # DPLAAX_REGISTRY_URL (the image stays deployment-generic).
             scaffold_args: "--registry-base-url http://localhost:8443"
+    env:
+      BUILDS: ${{ matrix.generator != 'provider' || startsWith(github.ref, 'refs/tags/v') }}
     steps:
+      - name: build the auth-provider image from version tags only
+        if: env.BUILDS != 'true'
+        run: echo "::notice::the auth-provider image is built from version tags only, and ${GITHUB_REF_NAME} is none; see this file's header"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: env.BUILDS == 'true'
 
       # Multi-arch: consumers include Apple-silicon dev machines (linux/arm64)
       # as well as amd64 CI/servers; a single-arch image fails their pull
       # outright ("no matching manifest").
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        if: env.BUILDS == 'true'
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: env.BUILDS == 'true'
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        if: env.BUILDS == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -84,9 +100,9 @@ jobs:
       # scanned and the bytes a rebuild would publish are different artifacts
       # sharing a name. Fail instead — the exit is a new version, not a
       # rebuild. Guarded to version tags only: workflow_dispatch re-publishing
-      # the moving develop/sha tags is that trigger's whole purpose.
+      # the policy-verifier's moving develop/sha tags is that trigger's purpose.
       - name: refuse to rebuild an already-published version tag
-        if: startsWith(github.ref, 'refs/tags/')
+        if: env.BUILDS == 'true' && startsWith(github.ref, 'refs/tags/')
         env:
           # Via env, not inline: a git refname may contain characters the
           # shell would expand.
@@ -104,14 +120,23 @@ jobs:
           fi
           echo "${IMAGE}:${TAG} not yet published (HTTP $code) — proceeding."
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: env.BUILDS == 'true' && matrix.generator == 'provider'
+        with:
+          node-version: "24.22"
+          check-latest: true
+
       # The provider image generates its app from npm, at the versions this
       # ref's generator composes, and publish-packages publishes them on the
       # same tag: wait until npm serves each, rather than build against a
       # registry that does not hold them yet. The list is the staging script's,
-      # which a test holds to the generator's PROVIN_PACKAGES. Bounded, so a
-      # version that never publishes fails here, named.
+      # which a test holds to the generator's PROVIN_PACKAGES. It asks for the
+      # abbreviated document pnpm installs from, which the registry serves
+      # apart from the full one and which can lag behind it. Bounded, so a
+      # version that never publishes fails here, named; an answer other than
+      # 200 or 404 is shown as it comes.
       - name: wait for the provin packages on npm
-        if: matrix.generator == 'provider'
+        if: env.BUILDS == 'true' && matrix.generator == 'provider'
         run: |
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
@@ -121,19 +146,34 @@ jobs:
               console.log(`${name}@${version}`);
             }
           ' > "$RUNNER_TEMP/provin-packages.txt"
+          mapfile -t specs < "$RUNNER_TEMP/provin-packages.txt"
+          [ "${#specs[@]}" -gt 0 ] || { echo "::error::no provin package to wait for"; exit 1; }
           deadline=$(( $(date +%s) + 1800 ))
-          while read -r spec; do
-            until [ "$(npm view "$spec" version --prefer-online 2>/dev/null)" = "${spec##*@}" ]; do
+          for spec in "${specs[@]}"; do
+            name="${spec%@*}"
+            version="${spec##*@}"
+            url="https://registry.npmjs.org/${name/\//%2f}"
+            until
+              code=$(curl -sS -o "$RUNNER_TEMP/packument.json" -w '%{http_code}' \
+                -H 'Accept: application/vnd.npm.install-v1+json' "$url") &&
+                [ "$code" = 200 ] &&
+                jq -e --arg v "$version" '.versions[$v]' "$RUNNER_TEMP/packument.json" > /dev/null
+            do
+              case "$code" in
+                200 | 404) ;;
+                *) echo "::warning::${name}: npm answered ${code:-nothing}; asking again" ;;
+              esac
               if [ "$(date +%s)" -ge "$deadline" ]; then
-                echo "::error::${spec} is not on npm after 30 minutes; publish-packages publishes it on the same tag"
+                echo "::error::${spec} is not on npm after 30 minutes (last answer: ${code:-none}); publish-packages publishes it on the same tag"
                 exit 1
               fi
               sleep 30
             done
             echo "${spec} is on npm"
-          done < "$RUNNER_TEMP/provin-packages.txt"
+          done
 
       - id: meta
+        if: env.BUILDS == 'true'
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/provin-line/auth-${{ matrix.generator }}
@@ -144,6 +184,7 @@ jobs:
             type=ref,event=tag
 
       - id: build
+        if: env.BUILDS == 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -171,6 +212,7 @@ jobs:
       # The digest is the release identity; tags are locators. Put it where a
       # human lands first when they open the run.
       - name: record the release identity
+        if: env.BUILDS == 'true'
         env:
           IMAGE: auth-${{ matrix.generator }}
           DIGEST: ${{ steps.build.outputs.digest }}

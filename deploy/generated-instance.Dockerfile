@@ -16,8 +16,10 @@
 # GITHUB ACCESS: the clone, and the policy-verifier instance's pnpm install
 # (git-subdir refs into this repo), take a GitHub token passed as the BuildKit
 # secret `github_token` (in CI: the workflow's GITHUB_TOKEN); without one they
-# fetch anonymously, which a public repository allows. The auth-provider
-# instance installs from npm alone.
+# fetch anonymously, which a public repository allows. Nothing else is given
+# the token: not the repository's install, not generation (whose staging
+# installs from npm), and not the auth-provider instance's install, which
+# reads npm alone.
 #
 # Scaffold-time parameters that are deployment-specific (e.g. the
 # auth-provider's --registry-base-url) get placeholder values here and are
@@ -64,18 +66,20 @@ WORKDIR /src
 ARG GENERATOR
 ARG AUTH_REF
 ARG SCAFFOLD_ARGS
+# The token is set for the clone alone, through `env`.
 RUN --mount=type=secret,id=github_token \
     case "${AUTH_REF}" in \
       *[!0-9a-f]*|"") echo "AUTH_REF must be a full 40-hex commit SHA, got '${AUTH_REF}'" >&2; exit 1 ;; \
     esac; \
     [ "${#AUTH_REF}" = 40 ] || { echo "AUTH_REF must be 40 hex chars, got ${#AUTH_REF}" >&2; exit 1; }; \
     tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
+    set --; \
     if [ -n "$tok" ]; then \
-      export GIT_CONFIG_COUNT=1 \
-        GIT_CONFIG_KEY_0="url.https://x-access-token:${tok}@github.com/.insteadOf" \
+      set -- env GIT_CONFIG_COUNT=1 \
+        "GIT_CONFIG_KEY_0=url.https://x-access-token:${tok}@github.com/.insteadOf" \
         GIT_CONFIG_VALUE_0="https://github.com/"; \
     fi; \
-    git clone https://github.com/provin-line/auth.git . \
+    "$@" git clone https://github.com/provin-line/auth.git . \
  && git checkout "${AUTH_REF}" \
  && pnpm install --frozen-lockfile \
  && pnpm --filter "@provin-line/create-auth-${GENERATOR}" build \
@@ -119,19 +123,20 @@ COPY --from=gen /instance/ ./
 # The auth-provider installs as its README says: resolve the lockfile, let
 # scripts/check-outside.mjs hold it to what the generator recorded (the
 # outside packages' integrity and the release's held packages), then install
-# that lockfile with no lifecycle script.
+# that lockfile with no lifecycle script. The policy-verifier's install alone
+# fetches from GitHub, and alone is given the token.
 RUN --mount=type=secret,id=github_token \
-    tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
-    if [ -n "$tok" ]; then \
-      export GIT_CONFIG_COUNT=1 \
-        GIT_CONFIG_KEY_0="url.https://x-access-token:${tok}@github.com/.insteadOf" \
-        GIT_CONFIG_VALUE_0="https://github.com/"; \
-    fi; \
     if [ "${GENERATOR}" = provider ]; then \
       pnpm install --lockfile-only \
       && node scripts/check-outside.mjs \
       && pnpm install --frozen-lockfile --ignore-scripts; \
     else \
+      tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
+      if [ -n "$tok" ]; then \
+        export GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0="url.https://x-access-token:${tok}@github.com/.insteadOf" \
+          GIT_CONFIG_VALUE_0="https://github.com/"; \
+      fi; \
       pnpm install; \
     fi \
  && pnpm run --if-present build \

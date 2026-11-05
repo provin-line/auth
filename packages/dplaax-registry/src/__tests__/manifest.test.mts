@@ -59,8 +59,8 @@ describe("package.json, as upstream's generator reads a package outside the rele
 		});
 	});
 
-	it("depends on did-dplaax at a caret range once packed", () => {
-		expect(manifest.dependencies?.["@provin-line/did-dplaax"]).toBe("workspace:^");
+	it("depends on did-dplaax at exactly its own version once packed", () => {
+		expect(manifest.dependencies?.["@provin-line/did-dplaax"]).toBe("workspace:*");
 	});
 
 	it("takes no release package nor zod as a dependency, which would give the app a second copy", () => {
