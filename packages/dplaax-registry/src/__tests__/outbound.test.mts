@@ -20,12 +20,13 @@
 import { assemble, BootRefused, kernelConfig } from "@o3co/auth-provider-foundation/kernel";
 import { quietRuntime } from "@o3co/auth-provider-foundation/kernel/testing";
 import outboundModule from "@o3co/auth-provider-foundation/outbound/module";
+import tlsOptionsModule from "@o3co/auth-provider-foundation/tls-options/module";
 import { describe, expect, it } from "vitest";
 import registry from "../module.mjs";
 
 async function boot(registryUrl: string, outbound: Record<string, unknown>) {
 	return assemble({
-		modules: [outboundModule, registry],
+		modules: [outboundModule, tlsOptionsModule, registry],
 		config: { ...kernelConfig(), outbound, "dplaax-registry": { url: registryUrl } },
 		runtime: quietRuntime({ clock: { now: () => 1_800_000_000_000 } }),
 	});

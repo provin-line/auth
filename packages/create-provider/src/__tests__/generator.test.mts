@@ -96,7 +96,7 @@ describe("generateAuthProviderScaffold", () => {
 		expect(pkg.license).toBe("Apache-2.0");
 		expect(pkg.packageManager).toMatch(/^pnpm@11\./);
 		expect(pkg.scripts.start).toContain("src/main.ts");
-		expect(pkg.dependencies["@o3co/auth-provider-foundation"]).toBe("0.18.4");
+		expect(pkg.dependencies["@o3co/auth-provider-foundation"]).toBe("0.19.0");
 		expect(pkg.dependencies["@provin-line/auth-did-grant"]).toBe(
 			`github:provin-line/auth#${REF}&path:/packages/did-grant`,
 		);

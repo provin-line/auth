@@ -26,14 +26,14 @@ its own composition roots with the scaffold generators
 
 | Generator | Generates | Default port |
 | --- | --- | --- |
-| [create-auth-provider](packages/create-provider/) | auth.provider 0.18 app with the DID grant and a `did:dplaax` registry resolver | `HTTP_PORT`, 8080 by default (the published image and the dev composition set 3000) |
+| [create-auth-provider](packages/create-provider/) | auth.provider 0.19 app with the DID grant and a `did:dplaax` registry resolver | `HTTP_PORT`, 8080 by default (the published image and the dev composition set 3000) |
 | [create-policy-verifier](packages/create-policy-verifier/) | Scope-based ABAC policy engine | 3001 |
 
 ## Packages
 
 | Package | Description |
 | --- | --- |
-| [packages/did-grant](packages/did-grant/) | `@provin-line/auth-did-grant` — the DID grant as an auth.provider 0.18 module |
+| [packages/did-grant](packages/did-grant/) | `@provin-line/auth-did-grant` — the DID grant as an auth.provider 0.19 module |
 | [packages/dplaax-registry](packages/dplaax-registry/) | `@provin-line/auth-dplaax-registry` — resolves `did:dplaax` owner DIDs against a DID registry |
 | [packages/did-grant-store](packages/did-grant-store/) | `@provin-line/auth-did-grant-store` — keeps the DID grant's spent nonces on the kernel's `store` |
 | [packages/did-dplaax](packages/did-dplaax/) | `@provin-line/did-dplaax` — the `did:dplaax` method library |

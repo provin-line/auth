@@ -45,7 +45,7 @@ const customAlgorithm = (
 	algorithm: string,
 	options: { headerBearing?: true; create?: () => Promise<SignatureVerifier> } = {},
 ) =>
-	defineModule({ name: `algorithm-${algorithm}` }, (m) => [
+	defineModule({ name: `algorithm-${algorithm}`, replicaSafe: true, takes: [] }, (m) => [
 		m.contribute(signatureAlgorithms).by(() => ({
 			algorithm,
 			create: options.create ?? (async () => refusing),
@@ -78,6 +78,11 @@ describe("did-grant section", () => {
 	it("takes an OWNER lifetime above legacy-max-ttl, which bounds LEGACY alone", async () => {
 		const section = { ...owner, "revocation-latency-bound": "1h", "access-token-lifetime": "20m" };
 		await expect(compose({ section })).resolves.toBeDefined();
+	});
+
+	it("refuses a lifetime under two seconds, which tokens refuses to issue", async () => {
+		const section = { "revocation-latency-bound": "15m", "access-token-lifetime": "1s" };
+		expect(await refusedAt(compose({ section }))).toEqual([expect.stringContaining("access-token-lifetime")]);
 	});
 
 	it("refuses a lifetime above a day", async () => {

@@ -31,7 +31,7 @@ const spent: Space = {
 	guarantees: Object.values(guaranteeFor),
 };
 
-export default defineModule({ name: "did-grant-store" }, (m) => [
+export default defineModule({ name: "did-grant-store", replicaSafe: true, takes: [store] }, (m) => [
 	m.contribute(spaces).by(() => spent),
 	m.provide(spentNonces).by(async (c) => {
 		const records = recordsIn<true>({ store: await c.get(store), space: spent, log: c.log, random: c.random });

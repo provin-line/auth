@@ -43,7 +43,7 @@ const section = z.strictObject({
 		.describe("The largest document taken, from 1B to 16MiB; outbound's own max-response-size still applies."),
 });
 
-export default defineModule({ name: "dplaax-registry", section, replicaSafe: true }, (m) => [
+export default defineModule({ name: "dplaax-registry", section, replicaSafe: true, takes: [outboundRefusals, outbound] }, (m) => [
 	m.provide(didDocuments).by(async (c) => {
 		const { url } = c.section;
 		// The operator's own URL: a registry at a private address is reached at its

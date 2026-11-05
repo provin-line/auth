@@ -1,6 +1,6 @@
 # @provin-line/auth-did-grant
 
-The dPLaaX DID grant as an [auth.provider](https://github.com/o3co/auth.provider) 0.18 module. A client presents a DID and a message the DID signed; the module resolves the DID's document, verifies the signature with the key it lists, and issues an access token for the DID, signed with the six claims dplaax.spec asks of it.
+The dPLaaX DID grant as an [auth.provider](https://github.com/o3co/auth.provider) 0.19 module. A client presents a DID and a message the DID signed; the module resolves the DID's document, verifies the signature with the key it lists, and issues an access token for the DID, signed with the six claims dplaax.spec asks of it.
 
 ## Grant type
 
@@ -15,7 +15,7 @@ RFC 6749 §4.5 names an extension grant by an absolute URI. The token endpoint c
 | Export | What it holds |
 | --- | --- |
 | `.` | The contract: `didDocuments`, `spentNonces` (with `spentNoncesNeeds`), `signatureAlgorithms`, `didGrantType`, and the types they speak. |
-| `./module` | The module (default export), named `did-grant`, with the section `did-grant`. |
+| `./module` | The module (default export), named `did-grant`, with the section `did-grant`; replica-safe, as it keeps spent nonces behind `spentNonces`. |
 | `./testing` | `spentNoncesContract`, the suite an implementation of `spentNonces` passes. |
 
 auth.provider's packages and zod are peers: the kernel finds contracts by the object itself, so the app must hold one copy of each. `@noble/ed25519` is an optional peer, needed for `ed25519_raw` and `ed25519_prehash` only.
@@ -53,7 +53,7 @@ did-grant {
 | `owner-migration-ratified` | `false` | The operator's opt-in an OWNER contract requires (rule `auth.migration.enable-gate`). |
 | `revocation-latency-bound` | required | The longest a token may outlive a revocation (rule `auth.token.lifetime-bound`), `1s` to `1d`. |
 | `legacy-max-ttl` | `15m` | The longest lifetime of a `LEGACY_DID_LOGIN@1` token (rule `auth.legacy.did-login`). |
-| `access-token-lifetime` | required | The lifetime of the tokens this grant issues, `1s` to `1d`: at most `revocation-latency-bound`, and for LEGACY at most `legacy-max-ttl`. |
+| `access-token-lifetime` | required | The lifetime of the tokens this grant issues, `2s` to `1d`: at most `revocation-latency-bound`, and for LEGACY at most `legacy-max-ttl`. |
 
 Boot is refused for a lifetime out of those bounds, an unknown algorithm or one whose verifier cannot be made (`@noble/ed25519` missing for `ed25519_raw` or `ed25519_prehash`), an OWNER contract that is not ratified, names an algorithm without a JWS protected header, or runs where the token endpoint has no public location, and a contributed algorithm that takes a built-in name.
 

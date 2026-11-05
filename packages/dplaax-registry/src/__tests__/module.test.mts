@@ -56,7 +56,7 @@ function json(document: unknown, status = 200): OutboundResponse {
 }
 
 /** An outbound that keeps each request, answers as the test says, and refuses one host by its policy. */
-const outboundAnswering = defineModule({ name: "outbound" }, (m) => [
+const outboundAnswering = defineModule({ name: "outbound", replicaSafe: true, takes: [] }, (m) => [
 	m.provide(outbound).by(() => ({
 		fetch: async (to: string, request?: OutboundRequest, narrower?: Narrower) => {
 			sent.push({ url: to, request, narrower });

@@ -83,8 +83,8 @@ function standInModules(s: Stands): Module[] {
 		},
 	};
 	return [
-		defineModule({ name: "did-documents-stand-in" }, (m) => [m.provide(didDocuments).by(() => resolver)]),
-		defineModule({ name: "spent-nonces-stand-in" }, (m) => [
+		defineModule({ name: "did-documents-stand-in", replicaSafe: true, takes: [] }, (m) => [m.provide(didDocuments).by(() => resolver)]),
+		defineModule({ name: "spent-nonces-stand-in", replicaSafe: false, takes: [] }, (m) => [
 			m.provide(spentNonces).by(() => ({
 				async save(name: string, lifetimeMs: number) {
 					if (s.nonceStoreDown) throw new Unavailable("spent nonces");
@@ -114,7 +114,7 @@ export interface ComposeOptions {
 
 /** The DID grant as composed, so a test can hand it a request the caller does not build. */
 const composedDidGrant = contract<Grant | undefined>("test.did-grant");
-const didGrantProbe = defineModule({ name: "did-grant-probe" }, (m) => [
+const didGrantProbe = defineModule({ name: "did-grant-probe", replicaSafe: true, takes: [grants] }, (m) => [
 	m.provide(composedDidGrant).by(async (c) => (await c.collect(grants)).find((g) => g.grantType === DID_GRANT_TYPE)),
 ]);
 
@@ -126,7 +126,7 @@ export const minimalSection = {
 export async function compose(options: ComposeOptions = {}) {
 	const s = options.stands ?? stands();
 	const located = options.location === undefined ? TOKEN_ENDPOINT : options.location;
-	const location = defineModule({ name: "token-endpoint-location" }, (m) => [
+	const location = defineModule({ name: "token-endpoint-location", replicaSafe: true, takes: [] }, (m) => [
 		m.provide(tokenEndpointLocation).by(() => ({ url: located ?? undefined })),
 	]);
 	const app = await assemble({
