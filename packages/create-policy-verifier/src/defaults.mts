@@ -13,7 +13,7 @@
 // version if they want a newer baseline.
 //
 // These constants are the dependency baseline of the canonical template:
-// auth.policy-verifier 0.17.0, emitted by generator 0.4.0. The toolchain pins
+// auth.policy-verifier 0.18.0, emitted by generator 0.5.0. The toolchain pins
 // are the newest releases inside the ranges upstream create-auth-policy-verifier's
 // standalone template declares for the same release. When the baseline
 // upgrades, refresh this file in lockstep with a generator MINOR bump (see
@@ -22,18 +22,22 @@
 /** Exact-pin runtime + dev dep versions emitted into generated package.json. */
 export const DEFAULT_DEP_VERSIONS = {
 	// Framework (o3co) — runtime
-	"@o3co/auth.policy-verifier.server": "0.17.0",
-	"@o3co/auth.policy-verifier.builtins": "0.17.0",
-	"@o3co/auth.policy-verifier.core": "0.17.0",
+	"@o3co/auth.policy-verifier.server": "0.18.0",
+	"@o3co/auth.policy-verifier.builtins": "0.18.0",
+	"@o3co/auth.policy-verifier.core": "0.18.0",
 	"@o3co/ts.hocon": "1.14.3",
 	// Runtime — non-o3co
 	// The scaffold's logger writes NDJSON through pino (src/logger.mts), so pino
 	// is a direct runtime dependency.
 	pino: "10.4.0",
+	// The config loader validates through @o3co/ts.hocon/zod, which imports zod
+	// and declares it only as an optional peer. Zod schema objects also cross
+	// package boundaries, so this pin is the generated pnpm.overrides entry too.
+	zod: "4.6.7",
 	// Dev
-	"@types/node": "26.6.5",
+	"@types/node": "26.6.6",
 	typescript: "5.9.3",
-	vitest: "5.0.5",
+	vitest: "5.1.0",
 } as const;
 
 /**

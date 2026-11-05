@@ -29,8 +29,8 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@o3co/auth.policy-verifier.builtins": "^0.17.0",
-		"@o3co/auth.policy-verifier.core": "^0.17.0",
+		"@o3co/auth.policy-verifier.builtins": "^0.18.0",
+		"@o3co/auth.policy-verifier.core": "^0.18.0",
 		"@provin-line/did-dplaax": "workspace:*"
 	},
 	"devDependencies": {

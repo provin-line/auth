@@ -124,6 +124,15 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		expect(pkg.dependencies["@o3co/ts.hocon"]).toBe("1.14.3");
 	});
 
+	it("emits zod 4.6.7 as a runtime dependency, which @o3co/ts.hocon/zod imports and declares only as an optional peer", async () => {
+		const outDir = join(tmpRoot, "out");
+		await generatePolicyVerifierScaffold({ name: "test-scaffold", outDir, gitInit: false });
+		const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8")) as {
+			dependencies: Record<string, string>;
+		};
+		expect(pkg.dependencies.zod).toBe("4.6.7");
+	});
+
 	it("does not emit @o3co/auth.utils — its helpers ship inside the scaffold", async () => {
 		// auth.policy-verifier's own standalone template moved logger and
 		// shutdown in-tree (#210); a generated instance follows the same shape.
@@ -189,7 +198,7 @@ describe("generatePolicyVerifierScaffold — template substitution", () => {
 		const pkg = JSON.parse(
 			await readFile(join(outDir, "package.json"), "utf8"),
 		) as { devDependencies: Record<string, string> };
-		expect(pkg.devDependencies.vitest).toBe("5.0.5");
+		expect(pkg.devDependencies.vitest).toBe("5.1.0");
 	});
 
 	it("emits git-subdir form for @provin-line/auth-policy-verifier-dplaax-module", async () => {

@@ -10,6 +10,32 @@ releases.
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (verifier packages): the policy-verifier baseline is 0.18.0.**
+  The dPLaaX verifier module requires `^0.18.0`, so a consumer moves its
+  three verifier packages together. Workspace packages require
+  `@o3co/auth.policy-verifier.{core,builtins,server}` `^0.18.0`, and
+  `create-policy-verifier` (now 0.5.0) emits the same as exact pins. The
+  bump needs no code or configuration change here: 0.18.0 raises the
+  server's zod to `^4.6.7`, which the workspace and the generated verifier
+  already pin, and moves upstream's lockfile to body-parser 2.4.0, which
+  this lockfile already resolves.
+  - The generated verifier declares zod 4.6.7 as a runtime dependency. Its
+    config loader validates through `@o3co/ts.hocon/zod`, which imports zod
+    at run time and declares it only as an optional peer.
+    `DEFAULT_DEP_VERSIONS` gains a `zod` key, which also sets the generated
+    `pnpm.overrides.zod`. Code that types an object as
+    `Record<keyof typeof DEFAULT_DEP_VERSIONS, string>` adds it.
+  - It emits vitest 5.1.0 (was 5.0.5) and `@types/node` 26.6.6 (was
+    26.6.5), the newest inside the ranges upstream's 0.18.0 template
+    declares.
+  - Upstream lists as breaking that its template's loader refuses a `+`
+    outside quotes and a key named `__proto__`, `constructor` or
+    `prototype`. Those refusals are `@o3co/ts.hocon` 1.14.3's, which
+    `create-policy-verifier` has emitted since 0.4.0; see
+    [upstream-compatibility.md](docs/upstream-compatibility.md).
+
 ### Security
 
 - qs 6.17.1 in the lockfile ([GHSA-6pq8-jhm2-2vcw](https://github.com/advisories/GHSA-6pq8-jhm2-2vcw):
