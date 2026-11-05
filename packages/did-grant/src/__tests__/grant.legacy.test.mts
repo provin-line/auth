@@ -177,9 +177,8 @@ describe("did-grant LEGACY_DID_LOGIN@1 (ed25519_raw)", () => {
 		await expect(call(rawParams(key, legacyMessage(key)))).rejects.toSatisfy(isUnavailable);
 	});
 
-	it("issues tokens that live access-token-lifetime", async () => {
-		const section = { "revocation-latency-bound": "15m", "access-token-lifetime": "90s" };
-		const { key, call } = await registered({ section });
+	it("issues tokens that live tokens.access-token-lifetime", async () => {
+		const { key, call } = await registered({ lifetimeSeconds: 90 });
 		await expect(call(rawParams(key, legacyMessage(key)))).resolves.toMatchObject({
 			kind: "issued",
 			body: { expires_in: 90 },

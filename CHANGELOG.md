@@ -30,9 +30,18 @@ releases.
 - `@provin-line/auth-did-grant`, `auth-did-grant-store` and
   `auth-dplaax-registry` declare `takes`, and the first two `replicaSafe`,
   which 0.19's kernel requires of every module.
-- **BREAKING (`@provin-line/auth-did-grant`):** `did-grant.access-token-lifetime`
-  takes `2s` to `1d`. 0.19's `tokens` refuses a lifetime of one second, so
-  `1s` refuses boot instead of failing every request.
+- **BREAKING (`@provin-line/auth-did-grant`, `@provin-line/create-auth-provider`):
+  the DID grant's tokens live `tokens.access-token-lifetime`.**
+  `did-grant.access-token-lifetime` is removed, and the grant takes `tokens`
+  to read the lifetime it applies when the grant is built. Boot is refused
+  at `did-grant.revocation-latency-bound` where that lifetime is over it,
+  and under `LEGACY_DID_LOGIN@1` at `did-grant.legacy-max-ttl`, naming both
+  settings by key. The generated provider reads it from
+  `TOKENS_ACCESS_TOKEN_LIFETIME`, which replaces
+  `DID_GRANT_ACCESS_TOKEN_LIFETIME`; the dev composition and the smoke set
+  it to `10m`. `tokens`' default, `1h`, is over the default
+  `legacy-max-ttl`, so a LEGACY deployment that sets nothing does not boot.
+  The value takes `2s` to `1d`, the range 0.19's `tokens` issues in.
 - **BREAKING (verifier packages): the policy-verifier baseline is 0.18.0.**
   The dPLaaX verifier module requires `^0.18.0`, so a consumer moves its
   three verifier packages together. Workspace packages require

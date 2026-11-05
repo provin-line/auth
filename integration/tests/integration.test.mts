@@ -89,7 +89,7 @@ let provider: Awaited<ReturnType<typeof startProvider>>;
 
 let privateKey: KeyObject;
 const testDid = `did:dplaax:${REGISTRY_NAME}:org:test-integration-001`;
-/** `did-grant.access-token-lifetime` of the provider (1h). */
+/** `tokens.access-token-lifetime` of the provider (1h). */
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 /** The account the registry answers 503 for. */
 const OUTAGE_ACCOUNT = "outage";

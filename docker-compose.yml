@@ -26,6 +26,7 @@ services:
       STORE_ACCEPT_VOLATILE: "true"
       TOKENS_REVOCATION: "denylist"
       TOKENS_SUBJECT_CHECK: "none"
+      TOKENS_ACCESS_TOKEN_LIFETIME: "10m"
       HTTP_HOST: "0.0.0.0"
       HTTP_PORT: "3000"
       HTTP_PUBLIC_ORIGIN: "http://localhost:3000"
@@ -36,7 +37,6 @@ services:
       KEYS_SIGNING_SECRET: "${JWT_SECRET:-dplaax-dev-secret-change-in-production}"
       KEYS_SIGNING_SECRET_ENCODING: "utf8"
       DID_GRANT_REVOCATION_LATENCY_BOUND: "15m"
-      DID_GRANT_ACCESS_TOKEN_LIFETIME: "10m"
       DPLAAX_REGISTRY_URL: "${DPLAAX_REGISTRY_URL:-http://host.docker.internal:3002}"
 
   policy-verifier:

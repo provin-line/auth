@@ -36,12 +36,12 @@ Composed beside the modules above, fetched from git (not npm) at the ref this ap
 
 Settings they need, besides upstream's:
 
-- \`did-grant.revocation-latency-bound\` and \`did-grant.access-token-lifetime\` (required; \`DID_GRANT_REVOCATION_LATENCY_BOUND\`, \`DID_GRANT_ACCESS_TOKEN_LIFETIME\`).
+- \`did-grant.revocation-latency-bound\` (required; \`DID_GRANT_REVOCATION_LATENCY_BOUND\`): \`tokens.access-token-lifetime\` (\`TOKENS_ACCESS_TOKEN_LIFETIME\`), the lifetime of the grant's tokens, must be at most this, and under \`LEGACY_DID_LOGIN@1\` at most \`did-grant.legacy-max-ttl\` (15m by default), or boot is refused. Its default, 1h, is over that, so set it.
 - \`dplaax-registry.url\` (required; \`DPLAAX_REGISTRY_URL\`). It is reached through outbound: list its host in \`outbound.allow\`, and name its \`host:port\` in \`outbound.plain-internal\` for plain http inside a trusted network, or list the host in \`outbound.internal-hosts\` for https at a private address.
 - \`clients.registered\`: a client uses the grant once \`sections.client-allowance.grants\` lists \`${DID_GRANT_TYPE}\`.
 - \`keys.signing.secret\` and \`keys.signing.secret-encoding\`: with HS256 shared with a policy-verifier, \`utf8\`, the verifier's reading of the same string.
 - \`tokens.subject-check = none\` (\`TOKENS_SUBJECT_CHECK\`): boot requires it, because this composition has no module that checks subject revocation.
-- \`store.accept-volatile = true\` with \`kernel.deployment = single\`: the spent nonces and the revoked tokens live in this process, so a restart forgets them. It reopens a replay window of \`did-grant.message-max-age\` (5m by default) for messages signed just before it, and a revoked token introspects active again until it expires (within \`did-grant.access-token-lifetime\`).
+- \`store.accept-volatile = true\` with \`kernel.deployment = single\`: the spent nonces and the revoked tokens live in this process, so a restart forgets them. It reopens a replay window of \`did-grant.message-max-age\` (5m by default) for messages signed just before it, and a revoked token introspects active again until it expires (within \`tokens.access-token-lifetime\`).
 - Introspection (\`POST /oauth/introspect\`) answers \`confidential\` clients only: one with \`sections.client-secret.hash\` (bcrypt or scrypt) whose \`sections.client-allowance.audiences\` covers the token's audience. A DID client with no audiences is issued tokens for the issuer URL.
 
 ## Installing from git

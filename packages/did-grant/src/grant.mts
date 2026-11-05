@@ -49,7 +49,6 @@ export const AUTHZ_SCOPE_AT_ISSUANCE = "AUTHORIZATION_AT_ISSUANCE_WITH_MAX_AGE@1
 export interface DidGrantSettings {
 	readonly authContract: AuthContractId;
 	readonly messageMaxAgeMs: number;
-	readonly accessTokenLifetimeSeconds: number;
 	/** This provider's issuer URL. */
 	readonly issuer: string;
 	/** Where the token endpoint answers; an OWNER contract's transcript must name it. */
@@ -222,7 +221,7 @@ export function didGrant(settings: DidGrantSettings, parts: DidGrantParts): Gran
 			};
 			const admitted = await input.admits(access);
 			if (admitted.kind === "refused") return admitted;
-			const issued = await input.issue(access, { lifetimeSeconds: settings.accessTokenLifetimeSeconds });
+			const issued = await input.issue(access);
 			if (issued.kind === "refused") return issued;
 			const { token, tokenType, expiresIn } = issued.access;
 			return {

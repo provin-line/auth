@@ -73,7 +73,7 @@ async function provider() {
 		modules: [
 			location,
 			http,
-			tokensStandIn(),
+			tokensStandIn({ lifetimeSeconds: 600 }),
 			issuerModule,
 			clientsModule,
 			secretHashModule,
@@ -96,7 +96,7 @@ async function provider() {
 				}),
 			]),
 			"dplaax-registry": { url: registryUrl },
-			"did-grant": { "revocation-latency-bound": "15m", "access-token-lifetime": "10m" },
+			"did-grant": { "revocation-latency-bound": "15m" },
 		},
 		// Real randomness: records marks each write with it, and a repeated mark reads as a resend.
 		runtime: quietRuntime({ clock: { now: () => now } }),
