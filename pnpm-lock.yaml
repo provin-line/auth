@@ -38,14 +38,14 @@ importers:
         specifier: 0.19.0
         version: 0.19.0(vitest@5.0.5)(yaml@2.9.1)(zod@4.6.7)
       '@o3co/auth.policy-verifier.builtins':
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@o3co/auth.policy-verifier.core':
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@o3co/auth.policy-verifier.server':
-        specifier: ^0.17.0
-        version: 0.17.0(supports-color@7.2.0)
+        specifier: ^0.18.0
+        version: 0.18.0(supports-color@7.2.0)
       '@provin-line/auth-did-grant':
         specifier: workspace:*
         version: link:../packages/did-grant
@@ -245,11 +245,11 @@ importers:
   packages/policy-verifier-dplaax-module:
     dependencies:
       '@o3co/auth.policy-verifier.builtins':
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@o3co/auth.policy-verifier.core':
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@provin-line/did-dplaax':
         specifier: workspace:*
         version: link:../did-dplaax
@@ -399,16 +399,16 @@ packages:
       vitest:
         optional: true
 
-  '@o3co/auth.policy-verifier.builtins@0.17.0':
-    resolution: {integrity: sha512-z/D+ag1x4TKbRefZDvylsy4BlauwdQz8Yn0zXD+apVBZb28A6lsZ4U6QbBeMJVIasAOCLAnUI1YbKMAM18B4jA==}
+  '@o3co/auth.policy-verifier.builtins@0.18.0':
+    resolution: {integrity: sha512-b2o1+6zwyZzCYGGshClPybhvzDcYnSfuyDhTTmIkc7mQEtjJtBWoPsnQALfjSGExxe/h2CrOivLuuGTvFf/OSg==}
     engines: {node: '>=22.0.0'}
 
-  '@o3co/auth.policy-verifier.core@0.17.0':
-    resolution: {integrity: sha512-a/uTcnbLmzUbBmDxBh5+LDUdptCU0CZQ9CbH+D92vgJdQeV3dw/tsQ07upfxRPAkOqATM63Wekwc7gJb4lN11Q==}
+  '@o3co/auth.policy-verifier.core@0.18.0':
+    resolution: {integrity: sha512-AM4qmKX02P2meGdoFZMuV6bMnQFN2Gx00NanW5sveqJaw70XxedcbaIHoqR38p0tvv8ANnmSNXBt80XkRj0LEg==}
     engines: {node: '>=22.0.0'}
 
-  '@o3co/auth.policy-verifier.server@0.17.0':
-    resolution: {integrity: sha512-HS/ovOQT1PrkunjAmXFzEgMbp/xdk+bDgXpk05CUZUj4Rw0elq52rwgTRng7e6pV19Gy197hU3s2QufdUFkZAw==}
+  '@o3co/auth.policy-verifier.server@0.18.0':
+    resolution: {integrity: sha512-rQkyhy6EvrEZrpNHOnbPHd0OQjC0A2G9WF1Kie4W9h3TU1IC2lD1UC/Csom3c22sIhHkplxuYcb1A+PIwBpf8w==}
     engines: {node: '>=22.0.0'}
 
   '@o3co/ts.hocon@1.14.3':
@@ -1416,15 +1416,15 @@ snapshots:
       - smol-toml
       - yaml
 
-  '@o3co/auth.policy-verifier.builtins@0.17.0':
+  '@o3co/auth.policy-verifier.builtins@0.18.0':
     dependencies:
-      '@o3co/auth.policy-verifier.core': 0.17.0
+      '@o3co/auth.policy-verifier.core': 0.18.0
 
-  '@o3co/auth.policy-verifier.core@0.17.0': {}
+  '@o3co/auth.policy-verifier.core@0.18.0': {}
 
-  '@o3co/auth.policy-verifier.server@0.17.0(supports-color@7.2.0)':
+  '@o3co/auth.policy-verifier.server@0.18.0(supports-color@7.2.0)':
     dependencies:
-      '@o3co/auth.policy-verifier.core': 0.17.0
+      '@o3co/auth.policy-verifier.core': 0.18.0
       express: 5.3.0(supports-color@7.2.0)
       jose: 6.2.13
       prom-client: 15.1.3
