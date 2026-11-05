@@ -33,7 +33,7 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
-		"@provin-line/did-dplaax": "workspace:^"
+		"@provin-line/did-dplaax": "workspace:*"
 	},
 	"peerDependencies": {
 		"@o3co/auth-provider-foundation": "^0.19.0",

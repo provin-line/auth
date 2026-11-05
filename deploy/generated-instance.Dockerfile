@@ -4,16 +4,22 @@
 # or auth-provider). provin.auth is a generator repo — a runnable instance is
 # not committed anywhere; it is scaffolded by the create-* CLIs. This
 # Dockerfile (1) clones provin.auth at a pinned ref, (2) builds the requested
-# generator CLI, (3) scaffolds an instance pinned to the SAME ref, and
-# (4) builds + runs it. It is the consumer-mode build path (git-subdir deps),
+# generator CLI, (3) scaffolds an instance, and (4) builds + runs it. The
+# policy-verifier's dPLaaX module is pinned to the SAME ref (git-subdir deps);
+# the auth-provider's provin packages come from npm, at the versions that
+# ref's generator composes (PROVIN_PACKAGES), so the image holds what npm
+# serves. It is the consumer-mode build path,
 # the same shape provin.oss's quickstart proved end to end; the publish-images
 # workflow builds and pushes it to GHCR so consumers reference an image
 # instead of re-running this generation themselves.
 #
-# GITHUB ACCESS: while provin.auth is private, the clone and the instance's
-# pnpm install (git-subdir refs into this repo) need a GitHub token. Pass it
-# as a BuildKit secret `github_token` (in CI: the workflow's GITHUB_TOKEN).
-# Once the repo is public this is inert — anonymous fetch just works.
+# GITHUB ACCESS: the clone, and the policy-verifier instance's pnpm install
+# (git-subdir refs into this repo), take a GitHub token passed as the BuildKit
+# secret `github_token` (in CI: the workflow's GITHUB_TOKEN); without one they
+# fetch anonymously, which a public repository allows. Nothing else is given
+# the token: not the repository's install, not generation (whose staging
+# installs from npm), and not the auth-provider instance's install, which
+# reads npm alone.
 #
 # Scaffold-time parameters that are deployment-specific (e.g. the
 # auth-provider's --registry-base-url) get placeholder values here and are
@@ -26,8 +32,9 @@
 # (src/main.ts) and reads its settings from env and APP_CONFIG. Upstream's own
 # Dockerfile for that app is not used: it expects a pnpm-lock.yaml in its build
 # context, which the generator does not write, and adopting it is the
-# lockfile-first restructure the KNOWN GAP below defers. This file keeps one
-# build path for both images.
+# lockfile-first restructure the KNOWN GAP below defers. The builder installs
+# that app the way its Dockerfile and README do, through upstream's check of
+# what the generator recorded. This file keeps one build path for both images.
 
 # GENERATOR: "policy-verifier" | "provider" — the COMPONENT name. Each
 # namespace adds the prefix its own context does not supply: the directory is
@@ -36,9 +43,10 @@
 # (selects the create-* CLI,
 # the instance name, and the exposed port).
 ARG GENERATOR=policy-verifier
-# No default, deliberately. This is both the ref this image is built from and
-# the pin the scaffolded instance carries for its own dependencies, so the
-# generators require a full 40-hex commit SHA here (release.pin.source-exact).
+# No default, deliberately. This is the ref this image is built from and, for
+# the policy-verifier, the pin the scaffolded instance carries for its own
+# dependencies, so a full 40-hex commit SHA is required here
+# (release.pin.source-exact).
 # A default would have to be a branch name, which is exactly the movable ref
 # that requirement exists to keep out of a published artifact.
 ARG AUTH_REF
@@ -58,34 +66,42 @@ WORKDIR /src
 ARG GENERATOR
 ARG AUTH_REF
 ARG SCAFFOLD_ARGS
+# The token is set for the clone alone, through `env`.
 RUN --mount=type=secret,id=github_token \
     case "${AUTH_REF}" in \
       *[!0-9a-f]*|"") echo "AUTH_REF must be a full 40-hex commit SHA, got '${AUTH_REF}'" >&2; exit 1 ;; \
     esac; \
     [ "${#AUTH_REF}" = 40 ] || { echo "AUTH_REF must be 40 hex chars, got ${#AUTH_REF}" >&2; exit 1; }; \
     tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
+    set --; \
     if [ -n "$tok" ]; then \
-      export GIT_CONFIG_COUNT=1 \
-        GIT_CONFIG_KEY_0="url.https://x-access-token:${tok}@github.com/.insteadOf" \
+      set -- env GIT_CONFIG_COUNT=1 \
+        "GIT_CONFIG_KEY_0=url.https://x-access-token:${tok}@github.com/.insteadOf" \
         GIT_CONFIG_VALUE_0="https://github.com/"; \
     fi; \
-    git clone https://github.com/provin-line/auth.git . \
+    "$@" git clone https://github.com/provin-line/auth.git . \
  && git checkout "${AUTH_REF}" \
  && pnpm install --frozen-lockfile \
  && pnpm --filter "@provin-line/create-auth-${GENERATOR}" build \
+ && case "${GENERATOR}" in \
+      provider) ref_args="" ;; \
+      *) ref_args="--dplaax-module-ref ${AUTH_REF}" ;; \
+    esac \
  && node "packages/create-${GENERATOR}/dist/cli.mjs" "${GENERATOR}" \
-      --dplaax-module-ref "${AUTH_REF}" \
+      ${ref_args} \
       ${SCAFFOLD_ARGS} \
       --out /instance --no-git-init
 
-# --- builder: install the instance's deps (git-subdir refs) and compile ---
+# --- builder: install the instance's deps and compile ---
 #
 # KNOWN GAP — release.lock.frozen-graph. The `pnpm install` below resolves the
 # instance's transitive graph FRESH, at image-build time. The rule forbids
 # exactly that: the published artifact's dependency graph was never the graph
 # anything tested, and it can differ between two builds of the same source.
-# --dplaax-module-ref pins the git deps to a commit (release.pin.source-exact,
-# enforced above), but their own npm dependencies are still resolved here.
+# The verifier's --dplaax-module-ref pins its git deps to a commit
+# (release.pin.source-exact, enforced above), and the provider's provin
+# packages are exact npm versions, but their own npm dependencies are still
+# resolved here.
 #
 # Not closable inside this file. `pnpm --lockfile-only` in the gen stage would
 # just move the fresh resolution a few lines earlier, still inside the release
@@ -101,16 +117,28 @@ RUN --mount=type=secret,id=github_token \
 FROM node:24.22-alpine AS builder
 RUN apk add --no-cache git && npm install -g corepack@0.35.0 --force && corepack enable
 ARG ENTRY
+ARG GENERATOR
 WORKDIR /app
 COPY --from=gen /instance/ ./
+# The auth-provider installs as its README says: resolve the lockfile, let
+# scripts/check-outside.mjs hold it to what the generator recorded (the
+# outside packages' integrity and the release's held packages), then install
+# that lockfile with no lifecycle script. The policy-verifier's install alone
+# fetches from GitHub, and alone is given the token.
 RUN --mount=type=secret,id=github_token \
-    tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
-    if [ -n "$tok" ]; then \
-      export GIT_CONFIG_COUNT=1 \
-        GIT_CONFIG_KEY_0="url.https://x-access-token:${tok}@github.com/.insteadOf" \
-        GIT_CONFIG_VALUE_0="https://github.com/"; \
-    fi; \
-    pnpm install \
+    if [ "${GENERATOR}" = provider ]; then \
+      pnpm install --lockfile-only \
+      && node scripts/check-outside.mjs \
+      && pnpm install --frozen-lockfile --ignore-scripts; \
+    else \
+      tok="$(cat /run/secrets/github_token 2>/dev/null || true)"; \
+      if [ -n "$tok" ]; then \
+        export GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0="url.https://x-access-token:${tok}@github.com/.insteadOf" \
+          GIT_CONFIG_VALUE_0="https://github.com/"; \
+      fi; \
+      pnpm install; \
+    fi \
  && pnpm run --if-present build \
  && test -f "${ENTRY}"
 

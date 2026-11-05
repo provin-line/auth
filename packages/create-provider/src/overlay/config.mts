@@ -15,69 +15,45 @@ import { DID_GRANT_TYPE } from "../provin-modules.mjs";
 // as upstream's does. Lists and values that span sections go in the local
 // layer (config/local.conf.example).
 
-const PRIVATE_KEY_LINE = /^(\s*)private-key = \$\{\?KEYS_SIGNING_PRIVATE_KEY\}$/m;
-
-// `tokens.subject-check = none` states that no module checks subject
-// revocation, which boot requires of an app composing none. The DID grant's
-// tokens live `tokens.access-token-lifetime`, which the grant holds to its
+// Keys the composition needs bound that no module's example holds, so
+// upstream's generator writes no binding for them: the HS256 secret a
+// policy-verifier shares and how to read it, the statement that no module
+// checks subject revocation, which boot requires of an app composing none,
+// and the lifetime of the DID grant's tokens, which the grant holds to its
 // bounds at boot.
-const PROVIN_SECTIONS = `tokens {
-	subject-check = \${?TOKENS_SUBJECT_CHECK}
-	access-token-lifetime = \${?TOKENS_ACCESS_TOKEN_LIFETIME}
+const BINDINGS = [
+	"keys.signing.secret = ${?KEYS_SIGNING_SECRET}",
+	"keys.signing.secret-encoding = ${?KEYS_SIGNING_SECRET_ENCODING}",
+	"tokens.subject-check = ${?TOKENS_SUBJECT_CHECK}",
+	"tokens.access-token-lifetime = ${?TOKENS_ACCESS_TOKEN_LIFETIME}",
+];
+
+/** Binds the four keys above, after upstream's bindings, each to its variable. */
+export function patchApplicationConf(text: string): string {
+	return `${text.endsWith("\n") ? text : `${text}\n`}${BINDINGS.join("\n")}\n`;
 }
-did-grant {
-	message-max-age = \${?DID_GRANT_MESSAGE_MAX_AGE}
-	auth-contract = \${?DID_GRANT_AUTH_CONTRACT}
-	owner-migration-ratified = \${?DID_GRANT_OWNER_MIGRATION_RATIFIED}
-	revocation-latency-bound = \${?DID_GRANT_REVOCATION_LATENCY_BOUND}
-	legacy-max-ttl = \${?DID_GRANT_LEGACY_MAX_TTL}
-}
-dplaax-registry {
-	url = \${?DPLAAX_REGISTRY_URL}
-	timeout = \${?DPLAAX_REGISTRY_TIMEOUT}
-	max-document-size = \${?DPLAAX_REGISTRY_MAX_DOCUMENT_SIZE}
-}
-`;
+
+const REGISTRY_LINE = /^# DPLAAX_REGISTRY_URL=.*$/m;
 
 /**
- * Adds the did-grant and dplaax-registry sections, and the shared secret and
- * its encoding to `keys.signing`: a deployment signing HS256 with a secret its
- * policy-verifier shares sets `secret-encoding = utf8`, the verifier's reading.
+ * Upstream's example with the registry's URL defaulted to the option, and the
+ * variables the four keys above read, each commented out like upstream's.
  */
-export function patchApplicationConf(text: string): string {
-	if (!PRIVATE_KEY_LINE.test(text)) {
-		throw new Error(
-			"config/application.conf: no keys.signing.private-key line to follow",
-		);
-	}
-	const withSecret = text.replace(
-		PRIVATE_KEY_LINE,
-		(line, indent: string) =>
-			`${line}\n${indent}secret = \${?KEYS_SIGNING_SECRET}\n${indent}secret-encoding = \${?KEYS_SIGNING_SECRET_ENCODING}`,
-	);
-	return `${withSecret.endsWith("\n") ? withSecret : `${withSecret}\n`}${PROVIN_SECTIONS}`;
-}
-
-/** The variables the added keys read, each commented out like upstream's. */
 export function patchEnvExample(text: string, opts: OverlayOptions): string {
+	if (!REGISTRY_LINE.test(text)) {
+		throw new Error(".env.example: no DPLAAX_REGISTRY_URL line to default to the registry");
+	}
+	const withRegistry = text.replace(REGISTRY_LINE, () => `# DPLAAX_REGISTRY_URL=${opts.registryBaseUrl}`);
 	const lines = [
 		"## The dPLaaX modules (README.md). A policy-verifier sharing an HS256 secret reads it as UTF-8: set KEYS_SIGNING_ALG=HS256 and the two KEYS_SIGNING_SECRET lines, and leave KEYS_SIGNING_PRIVATE_KEY out.",
+		"# KEYS_SIGNING_SECRET=REPLACE-SHARED-SECRET-OF-AT-LEAST-32-BYTES",
+		"# KEYS_SIGNING_SECRET_ENCODING=utf8",
 		"## Boot requires TOKENS_SUBJECT_CHECK=none while no composed module checks subject revocation.",
 		"# TOKENS_SUBJECT_CHECK=none",
 		"## Boot requires TOKENS_ACCESS_TOKEN_LIFETIME at most DID_GRANT_REVOCATION_LATENCY_BOUND, and under LEGACY_DID_LOGIN@1 at most DID_GRANT_LEGACY_MAX_TTL. Its default, 1h, is over DID_GRANT_LEGACY_MAX_TTL's default, 15m.",
 		"# TOKENS_ACCESS_TOKEN_LIFETIME=10m",
-		"# KEYS_SIGNING_SECRET=REPLACE-SHARED-SECRET-OF-AT-LEAST-32-BYTES",
-		"# KEYS_SIGNING_SECRET_ENCODING=utf8",
-		"# DID_GRANT_REVOCATION_LATENCY_BOUND=15m",
-		"# DID_GRANT_MESSAGE_MAX_AGE=5m",
-		"# DID_GRANT_AUTH_CONTRACT=LEGACY_DID_LOGIN@1",
-		"# DID_GRANT_OWNER_MIGRATION_RATIFIED=false",
-		"# DID_GRANT_LEGACY_MAX_TTL=15m",
-		`# DPLAAX_REGISTRY_URL=${opts.registryBaseUrl}`,
-		"# DPLAAX_REGISTRY_TIMEOUT=5s",
-		"# DPLAAX_REGISTRY_MAX_DOCUMENT_SIZE=64KiB",
 	];
-	return `${text.endsWith("\n") ? text : `${text}\n`}${lines.join("\n")}\n`;
+	return `${withRegistry.endsWith("\n") ? withRegistry : `${withRegistry}\n`}${lines.join("\n")}\n`;
 }
 
 const HTTP_DEFAULT_PORT = "80";

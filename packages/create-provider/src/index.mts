@@ -22,13 +22,13 @@ export {
 } from "./generator.mjs";
 
 export {
-	DEFAULT_DEP_VERSIONS,
-	DEFAULT_DPLAAX_MODULE_REF,
 	DEFAULT_LICENSE,
 	DEFAULT_REGISTRY_BASE_URL,
 	isSupportedLicense,
 	LISTED_MODULES,
 	SUPPORTED_LICENSES,
 } from "./defaults.mjs";
+
+export { PROVIN_PACKAGES, type ProvinPackage, type ProvinPackageRole } from "./provin-modules.mjs";
 
 export { ExistingDirectoryNonEmptyError } from "./errors.mjs";

@@ -32,7 +32,8 @@ describe("config.example", () => {
 		expect(sections).toEqual(["dplaax-registry"]);
 	});
 
-	it("names the required url", () => {
-		expect(text).toMatch(/^\turl = /m);
+	it("names each scalar key an operator sets from the environment, so the generator binds it", () => {
+		const keys = [...text.matchAll(/^\t([a-z-]+) = /gm)].map((m) => m[1]);
+		expect(keys).toEqual(["url", "timeout", "max-document-size"]);
 	});
 });

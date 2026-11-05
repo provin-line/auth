@@ -17,12 +17,11 @@ import * as api from "../index.mjs";
 describe("public API of @provin-line/create-auth-provider", () => {
 	it("exports exactly these runtime identifiers", () => {
 		expect(Object.keys(api).sort()).toEqual([
-			"DEFAULT_DEP_VERSIONS",
-			"DEFAULT_DPLAAX_MODULE_REF",
 			"DEFAULT_LICENSE",
 			"DEFAULT_REGISTRY_BASE_URL",
 			"ExistingDirectoryNonEmptyError",
 			"LISTED_MODULES",
+			"PROVIN_PACKAGES",
 			"SUPPORTED_LICENSES",
 			"generateAuthProviderScaffold",
 			"isSupportedLicense",

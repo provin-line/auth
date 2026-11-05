@@ -8,22 +8,23 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-import { DEFAULT_DEP_VERSIONS } from "../defaults.mjs";
 import type { OverlayOptions } from "./index.mjs";
-import { gitSubdirectoryRef, PROVIN_MODULES } from "../provin-modules.mjs";
+import { ofRole, PROVIN_PACKAGES } from "../provin-modules.mjs";
 
 /**
- * The manifest upstream wrote, named for this project and depending on the
- * provin modules. Built as an object and serialized, so free-form values are
- * JSON-escaped.
+ * Upstream's manifest under the project's name, description, license and
+ * author. Upstream already depends on the provin modules it composed; a
+ * manifest lacking one is refused, as upstream did not compose it. Built as an
+ * object and serialized, so free-form values are JSON-escaped.
  */
 export function patchPackageJson(text: string, opts: OverlayOptions): string {
 	const upstream = JSON.parse(text) as Record<string, unknown>;
-	const dependencies = upstream.dependencies as
-		| Record<string, string>
-		| undefined;
-	if (dependencies === undefined) {
-		throw new Error("package.json: upstream wrote no dependencies");
+	const dependencies = (upstream.dependencies ?? {}) as Record<string, string>;
+	const missing = ofRole(PROVIN_PACKAGES, "module")
+		.filter((p) => !(p.name in dependencies))
+		.map((p) => p.name);
+	if (missing.length > 0) {
+		throw new Error(`package.json: upstream composed no ${missing.join(", ")}`);
 	}
 	const {
 		name: _name,
@@ -33,22 +34,11 @@ export function patchPackageJson(text: string, opts: OverlayOptions): string {
 		...rest
 	} = upstream;
 	const manifest = {
-		...rest,
 		name: opts.name,
 		description: opts.description,
 		license: opts.license,
 		...(opts.author === "" ? {} : { author: opts.author }),
-		dependencies: {
-			...dependencies,
-			...Object.fromEntries(
-				PROVIN_MODULES.map((m) => [
-					m.packageName,
-					gitSubdirectoryRef(opts.moduleRef, m.dir),
-				]),
-			),
-			// Redundant with did-grant's own dependency; see DEFAULT_DEP_VERSIONS.
-			"@noble/ed25519": DEFAULT_DEP_VERSIONS["@noble/ed25519"],
-		},
+		...rest,
 	};
 	return `${JSON.stringify(manifest, null, "\t")}\n`;
 }

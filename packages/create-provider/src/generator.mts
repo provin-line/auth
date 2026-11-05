@@ -8,9 +8,10 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-// Generation: upstream's generator writes the app, the overlay composes the
-// provin modules into it, and this file writes the result. The CLI in cli.mts
-// is a thin wrapper; tests and tooling call this function directly.
+// Generation: upstream's generator writes the app, composing the provin
+// modules as packages outside its release, the overlay patches what it does
+// not write for them, and this file writes the result. The CLI in cli.mts is a
+// thin wrapper; tests and tooling call this function directly.
 
 import { execFile } from "node:child_process";
 import {
@@ -27,7 +28,6 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { generate } from "@o3co/auth-provider-scaffold/create-app";
 import {
-	DEFAULT_DPLAAX_MODULE_REF,
 	DEFAULT_LICENSE,
 	DEFAULT_REGISTRY_BASE_URL,
 	isSupportedLicense,
@@ -36,6 +36,9 @@ import {
 } from "./defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "./errors.mjs";
 import { applyProvinModules } from "./overlay/index.mjs";
+import { composedMismatches } from "./composed.mjs";
+import { ofRole, PROVIN_PACKAGES } from "./provin-modules.mjs";
+import { stageProvinModules } from "./staging.mjs";
 
 const execFileP = promisify(execFile);
 
@@ -66,13 +69,20 @@ export interface GenerateOptions {
 	readonly gitInit?: boolean;
 
 	/**
-	 * Git ref of provin-line/auth the provin modules (`auth-did-grant`,
-	 * `auth-dplaax-registry`, `auth-did-grant-store`) are fetched at.
-	 * Library-only default: `main` — a MOVING ref, acceptable for tests and
-	 * tooling but never for shipped scaffolds; the CLI deliberately requires
-	 * the flag and accepts only a commit SHA (create-app.md § 3.3 / § 4.1).
+	 * A project where pnpm installed the provin modules, which upstream's
+	 * generator reads them from: their manifests, files and lockfile records,
+	 * and the registries the project installs from. Default: a temporary
+	 * project the generator stages, installing the modules of
+	 * `PROVIN_PACKAGES` (did-dplaax comes with them) from the registry the
+	 * operator's npm configuration names, the working directory's `.npmrc`
+	 * included, removed afterwards.
+	 *
+	 * It allows any directory where pnpm installed the modules, from any
+	 * registry. It does not choose versions: generation refuses a project
+	 * whose modules, as upstream records them, or whose `did-dplaax`, as its
+	 * lockfile resolves it, differ from `PROVIN_PACKAGES`.
 	 */
-	readonly dplaaxModuleRef?: string;
+	readonly outsideFrom?: string;
 
 	/** DID registry URL: the default of `DPLAAX_REGISTRY_URL` in `.env.example`. Default: production registry. */
 	readonly registryBaseUrl?: string;
@@ -151,33 +161,65 @@ export async function generateAuthProviderScaffold(
 	const outDir = resolve(opts.outDir);
 	await ensureCleanOutDir(outDir);
 
+	if (opts.outsideFrom === "") throw new Error("outsideFrom names no directory");
+	if (opts.outsideFrom !== undefined) {
+		const given = resolve(opts.outsideFrom);
+		const isDirectory = await stat(given).then(
+			(s) => s.isDirectory(),
+			() => false,
+		);
+		if (!isDirectory) throw new Error(`outsideFrom: ${given} is not a directory`);
+	}
+
+	const modules = ofRole(PROVIN_PACKAGES, "module").map((p) => p.name);
+	const own = opts.outsideFrom === undefined ? await stageProvinModules() : undefined;
+	const from = own?.dir ?? resolve(opts.outsideFrom ?? "");
+
 	// The app is built beside the target and moved into place once whole, so a
 	// failure leaves nothing: an app without the dPLaaX modules is not a result.
-	await mkdir(dirname(outDir), { recursive: true });
-	const staging = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}-`));
 	let composed: Map<string, string>;
 	try {
-		await generate({ target: staging, modules: LISTED_MODULES });
-		const generated = await readTree(staging);
-		composed = applyProvinModules(generated, {
-			name: opts.name,
-			description: opts.description ?? "dPLaaX auth.provider instance",
-			license,
-			author: opts.author ?? "",
-			moduleRef: opts.dplaaxModuleRef ?? DEFAULT_DPLAAX_MODULE_REF,
-			registryBaseUrl: opts.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL,
-		});
-		composed.set("LICENSE", await readFile(LICENSE_URL, "utf8"));
-		for (const [path, text] of composed) {
-			if (generated.get(path) === text) continue;
-			const full = join(staging, path);
-			await mkdir(dirname(full), { recursive: true });
-			await writeFile(full, text);
+		await mkdir(dirname(outDir), { recursive: true });
+		const building = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}-`));
+		try {
+			await generate({
+				target: building,
+				modules: [...LISTED_MODULES, ...modules],
+				// Each named fresh: the versions are this release's, which may be a day old or less.
+				outside: { from, names: modules, fresh: modules },
+			});
+			const generated = await readTree(building);
+			const lockfile = await readFile(join(from, "pnpm-lock.yaml"), "utf8").catch(() => {
+				throw new Error(`${from}: no pnpm-lock.yaml; the provin modules are read from a project pnpm installed`);
+			});
+			const mismatches = composedMismatches(generated.get("outside-modules.json") ?? "{}", lockfile, PROVIN_PACKAGES);
+			if (mismatches.length > 0) {
+				// The generator's own staging is gone by the time this is read: what
+				// chose those versions is the registry it installed from.
+				const source = own === undefined ? `${from} holds` : "the registry served";
+				throw new Error(`${source} provin packages other than this release's: ${mismatches.join("; ")}`);
+			}
+			composed = applyProvinModules(generated, {
+				name: opts.name,
+				description: opts.description ?? "dPLaaX auth.provider instance",
+				license,
+				author: opts.author ?? "",
+				registryBaseUrl: opts.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL,
+			});
+			composed.set("LICENSE", await readFile(LICENSE_URL, "utf8"));
+			for (const [path, text] of composed) {
+				if (generated.get(path) === text) continue;
+				const full = join(building, path);
+				await mkdir(dirname(full), { recursive: true });
+				await writeFile(full, text);
+			}
+			await rename(building, outDir);
+		} catch (e) {
+			await rm(building, { recursive: true, force: true });
+			throw e;
 		}
-		await rename(staging, outDir);
-	} catch (e) {
-		await rm(staging, { recursive: true, force: true });
-		throw e;
+	} finally {
+		await own?.remove();
 	}
 
 	if (opts.gitInit ?? true) {

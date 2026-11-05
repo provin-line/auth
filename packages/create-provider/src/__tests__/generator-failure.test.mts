@@ -14,7 +14,7 @@
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, inject, it, vi } from "vitest";
 
 vi.mock("../overlay/index.mjs", () => ({
 	applyProvinModules: () => {
@@ -23,6 +23,8 @@ vi.mock("../overlay/index.mjs", () => ({
 }));
 
 const { generateAuthProviderScaffold } = await import("../generator.mjs");
+
+const staged = inject("stagedProject");
 
 let root: string;
 
@@ -38,7 +40,7 @@ describe("generateAuthProviderScaffold — failed overlay", () => {
 	it("leaves no target behind and no stray files beside it", async () => {
 		const target = join(root, "app");
 		await expect(
-			generateAuthProviderScaffold({ name: "app", outDir: target, gitInit: false }),
+			generateAuthProviderScaffold({ name: "app", outDir: target, outsideFrom: staged, gitInit: false }),
 		).rejects.toThrow(/upstream moved/);
 		expect(await readdir(root)).toEqual([]);
 	});
@@ -47,7 +49,7 @@ describe("generateAuthProviderScaffold — failed overlay", () => {
 		const target = join(root, "app");
 		await mkdir(target);
 		await expect(
-			generateAuthProviderScaffold({ name: "app", outDir: target, gitInit: false }),
+			generateAuthProviderScaffold({ name: "app", outDir: target, outsideFrom: staged, gitInit: false }),
 		).rejects.toThrow(/upstream moved/);
 		expect(await readdir(target)).toEqual([]);
 		expect(await readdir(root)).toEqual(["app"]);

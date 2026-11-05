@@ -42,7 +42,8 @@ releases.
   four libraries are first released at it. Before it each generator had its
   own version: 0.3.0 shipped in v0.4.0 and 0.4.0 in v0.5.0, and 0.5.0 was
   never released. A provin package takes another
-  as a peer at its caret (`^0.6.0`). `integration/tests/versions.test.mts`
+  as a peer at its caret (`^0.6.0`), and as a dependency at exactly that
+  version. `integration/tests/versions.test.mts`
   holds the versions equal, and `publish-packages` refuses a tag whose
   version is not the root's and every workspace package's.
 - The module packages take `@o3co/auth-provider-*` as peers at `^0.19.0`,
@@ -50,7 +51,58 @@ releases.
   a dependency of `auth-did-grant` instead of an optional peer, so an app
   composing it from npm gets the default algorithm's verifier without adding
   it. `auth-dplaax-registry` depends on `@provin-line/did-dplaax` at
-  `^0.6.0` once packed.
+  exactly `0.6.0` once packed: the packages of a release resolve to that
+  release, which the generator holds an app to.
+- **BREAKING (`@provin-line/create-auth-provider` 0.6.0, CLI and exports):
+  upstream's generator composes the provin modules from npm**, as packages
+  outside its release, read from a project pnpm installed them into.
+  - The CLI takes `--outside-from <dir>`, such a project, and no longer takes
+    `--dplaax-module-ref` or `--allow-unpinned-ref`; a path that is no
+    directory exits 2, naming the flag. Without `--outside-from` the
+    generator installs the modules at the versions of its release into a
+    temporary project, with the pnpm the app pins and no lifecycle script,
+    from the registry the operator's npm configuration names (the working
+    directory's `.npmrc` included), and removes it, on an interrupt or a
+    termination too; a failed or timed-out install says why. An empty
+    `--outside-from`, or `outsideFrom: ""`, is refused.
+  - Generation composes exactly this release's provin packages: it refuses,
+    naming each package and both versions, a project whose modules (as
+    `outside-modules.json` records them) or `did-dplaax` (as its
+    `pnpm-lock.yaml` resolves it) are at another version, so
+    `--outside-from` does not choose versions. When the generator staged the
+    project itself, the refusal names the registry that served those
+    versions.
+  - Exports: `PROVIN_PACKAGES` (each provin package an app installs, at the
+    generator's own version, with its `role`, `"module"` or
+    `"dependency"`), frozen, and the `ProvinPackage` and `ProvinPackageRole`
+    types; `GenerateOptions.outsideFrom` replaces `dplaaxModuleRef`.
+    `DEFAULT_DEP_VERSIONS` and `DEFAULT_DPLAAX_MODULE_REF` are removed.
+  - The generated app depends on the modules by version, records them in
+    `outside-modules.json` with `scripts/check-outside.mjs`, and installs as
+    its README says (`--lockfile-only`, the check, `--frozen-lockfile
+    --ignore-scripts`). Its git-subdirectory refs, `overrides`,
+    `allowBuilds`, `blockExoticSubdeps: false` and `@noble/ed25519` pin are
+    gone, and so are the overlay's `src/main.ts` and `AGENTS.md` patches,
+    which upstream now writes.
+  - Upstream binds the provin sections' keys from each package's
+    `config.example`, which now names every scalar key the overlay bound
+    before, under the same variables. The overlay binds the four keys no
+    example holds (`keys.signing.secret`, `keys.signing.secret-encoding`,
+    `tokens.subject-check`, `tokens.access-token-lifetime`) and names
+    `@provin-line/did-dplaax` at its exact version in the app's
+    `minimumReleaseAgeExclude`.
+  - `make instances` and CI stage this checkout's packages
+    (`scripts/stage-provin-packages.mjs`, served by
+    `scripts/local-registry.mjs` on a free loopback port) and pass
+    `--outside-from`. CI's consumer smoke of the provider runs on pull
+    requests as well, as it fetches nothing from GitHub.
+  - The published provider image generates from npm, without
+    `--outside-from`, and is built from version tags only: `publish-images`
+    waits until npm serves each provin package of the tag's version, which
+    `publish-packages` publishes on the same tag, and the image installs
+    through the app's `scripts/check-outside.mjs`, as its README says. A
+    dispatch on another ref builds the policy-verifier image alone. The
+    GitHub token reaches the clone and the policy-verifier's install only.
 
 - **BREAKING (`@provin-line/create-auth-provider` 0.6.0): the generated provider is an
   auth.provider 0.19.0 app**, and the DID grant, the registry resolver and the

@@ -65,6 +65,15 @@ describe("the repository's one version", () => {
 		}
 	});
 
+	it("is exactly what a package depends on a provin package at once packed, so the packages of a release resolve to that release", () => {
+		for (const { manifest } of workspace) {
+			for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
+				if (!name.startsWith("@provin-line/")) continue;
+				expect({ in: manifest.name, name, range }).toEqual({ in: manifest.name, name, range: "workspace:*" });
+			}
+		}
+	});
+
 	it("is the caret range a package takes a provin package at as a peer", () => {
 		for (const { manifest } of workspace) {
 			for (const [name, range] of Object.entries(manifest.peerDependencies ?? {})) {

@@ -3,11 +3,17 @@
 # `make instances` regenerates the throwaway composition roots under
 # instances/ from the scaffold generators. instances/ is git-ignored and a
 # pnpm workspace member: the overrides in the root pnpm-workspace.yaml
-# redirect the generated git-subdirectory deps to workspace:* (create-app.md
+# redirect the generated provin dependencies (npm versions in the provider,
+# git-subdirectory refs in the policy-verifier) to workspace:* (create-app.md
 # § 6.3.1), so instances always build against the local package state. The
-# overrides and build allowances an instance carries in its own
-# pnpm-workspace.yaml (create-app.md § 3.4) are for external consumers and
-# inert inside this workspace.
+# settings an instance carries in its own pnpm-workspace.yaml are for
+# external consumers and inert inside this workspace.
+#
+# The provider generator reads the provin modules from a project pnpm
+# installed them into: scripts/stage-provin-packages.mjs packs this
+# checkout's packages and installs one, from a loopback registry, under
+# instances/.stage. PROVIN_STAGE names one already staged instead, which CI
+# reuses to regenerate.
 
 HEAD_SHA = $(shell git rev-parse HEAD)
 
@@ -15,8 +21,9 @@ HEAD_SHA = $(shell git rev-parse HEAD)
 
 instances:
 	rm -rf instances
+	stage="$${PROVIN_STAGE:-$$(node scripts/stage-provin-packages.mjs --dir instances/.stage)}" && \
 	node packages/create-provider/dist/cli.mjs provider \
-		--dplaax-module-ref $(HEAD_SHA) \
+		--outside-from "$$stage" \
 		--out instances/provider --no-git-init
 	node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
 		--dplaax-module-ref $(HEAD_SHA) --port 3001 \

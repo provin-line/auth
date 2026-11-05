@@ -1,3 +1,7 @@
 did-grant {
+	message-max-age = 5m
+	auth-contract = "LEGACY_DID_LOGIN@1"
+	owner-migration-ratified = false
 	revocation-latency-bound = 15m
+	legacy-max-ttl = 15m
 }
