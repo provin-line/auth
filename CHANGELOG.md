@@ -51,6 +51,37 @@ releases.
   composing it from npm gets the default algorithm's verifier without adding
   it. `auth-dplaax-registry` depends on `@provin-line/did-dplaax` at
   `^0.6.0` once packed.
+- **BREAKING (`@provin-line/create-auth-provider` 0.6.0, CLI and exports):
+  upstream's generator composes the provin modules from npm**, as packages
+  outside its release, read from a project pnpm installed them into.
+  - The CLI takes `--outside-from <dir>`, such a project, and no longer takes
+    `--dplaax-module-ref` or `--allow-unpinned-ref`. Without
+    `--outside-from` the generator installs the modules at the versions of
+    its release into a temporary project, from the registry the operator's
+    npm configuration names, and removes it.
+  - Exports: `PROVIN_PACKAGES` (each provin package an app installs, its
+    exact version, and whether it is a module), frozen, and the
+    `ProvinPackage` type; `GenerateOptions.outsideFrom` replaces
+    `dplaaxModuleRef`. `DEFAULT_DEP_VERSIONS` and
+    `DEFAULT_DPLAAX_MODULE_REF` are removed.
+  - The generated app depends on the modules by version, records them in
+    `outside-modules.json` with `scripts/check-outside.mjs`, and installs as
+    its README says (`--lockfile-only`, the check, `--frozen-lockfile
+    --ignore-scripts`). Its git-subdirectory refs, `overrides`,
+    `allowBuilds`, `blockExoticSubdeps: false` and `@noble/ed25519` pin are
+    gone, and so are the overlay's `src/main.ts` and `AGENTS.md` patches,
+    which upstream now writes.
+  - Upstream binds the provin sections' keys from each package's
+    `config.example`, which now names every scalar key the overlay bound
+    before, under the same variables. The overlay binds the four keys no
+    example holds (`keys.signing.secret`, `keys.signing.secret-encoding`,
+    `tokens.subject-check`, `tokens.access-token-lifetime`) and names
+    `@provin-line/did-dplaax` at its exact version in the app's
+    `minimumReleaseAgeExclude`.
+  - `make instances` and CI stage this checkout's packages
+    (`scripts/stage-provin-packages.mjs`, served by
+    `scripts/local-registry.mjs`) and pass `--outside-from`. The published
+    provider image generates from npm, without it.
 
 - **BREAKING (`@provin-line/create-auth-provider` 0.6.0): the generated provider is an
   auth.provider 0.19.0 app**, and the DID grant, the registry resolver and the

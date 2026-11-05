@@ -17,7 +17,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, inject, it } from "vitest";
 import type { CliIO } from "../cli.mjs";
 import { isValidNpmName, main, resolveGitInit } from "../cli.mjs";
 
@@ -35,6 +35,9 @@ class CaptureStream extends Writable {
 		return this.chunks.join("");
 	}
 }
+
+/** A project where pnpm installed the provin modules, staged once for the run. */
+const staged = inject("stagedProject");
 
 let tmpRoot: string;
 let stdout: CaptureStream;
@@ -107,95 +110,22 @@ describe("CLI main()", () => {
 		expect(stderr.text()).toMatch(/unknown option/i);
 	});
 
-	it("returns 2 when --dplaax-module-ref is missing", async () => {
-		const code = await main(["foo", "--no-git-init"], io);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/--dplaax-module-ref is required/);
-	});
-
-	// A pin is a full commit SHA or it is not a pin. The predecessor of these
-	// tests rejected a denylist of familiar branch names, which is the shape
-	// release.pin.source-exact names as insufficient: any branch is movable,
-	// and so is any tag.
-	it.each(["main", "DEVELOP", "trunk"])(
-		"returns 2 when --dplaax-module-ref is the branch %s",
-		async (ref) => {
-			const code = await main(
-				["foo", "--no-git-init", "--dplaax-module-ref", ref],
-				io,
-			);
+	it.each(["--dplaax-module-ref", "--allow-unpinned-ref"])(
+		"refuses %s, which composing the modules from npm replaced",
+		async (flag) => {
+			const code = await main(["foo", "--no-git-init", flag], io);
 			expect(code).toBe(2);
-			expect(stderr.text()).toMatch(/not a commit SHA/);
+			expect(stderr.text()).toMatch(/unknown option/i);
 		},
 	);
 
-	// The case the denylist could never catch: names it had never heard of.
-	it.each(["v0.1.0", "release/2026-07", "my-feature", "HEAD~1", "deadbeef"])(
-		"returns 2 for the unlisted movable ref %s",
-		async (ref) => {
-			const code = await main(
-				["foo", "--no-git-init", "--dplaax-module-ref", ref],
-				io,
-			);
-			expect(code).toBe(2);
-			expect(stderr.text()).toMatch(/not a commit SHA/);
-		},
-	);
-
-	it("names --allow-unpinned-ref as the way out", async () => {
+	it("returns 1 when --outside-from names no project pnpm installed the modules into", async () => {
 		const code = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "main"],
+			["foo", "--no-git-init", "--outside-from", join(tmpRoot, "none"), "--out", join(tmpRoot, "out")],
 			io,
 		);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/--allow-unpinned-ref/);
-	});
-
-	it("rejects a 39-hex ref: length is part of being a SHA", async () => {
-		const code = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "a".repeat(39)],
-			io,
-		);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/not a commit SHA/);
-	});
-
-	it("rejects an uppercase 40-hex ref: git resolves lowercase object ids", async () => {
-		const code = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "A".repeat(40)],
-			io,
-		);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/not a commit SHA/);
-	});
-
-	// The escape has to actually work, or the rejection above is just a wall.
-	it("accepts a branch under --allow-unpinned-ref", async () => {
-		const code = await main(
-			[
-				"@provin-line/auth-provider",
-				"--no-git-init",
-				"--dplaax-module-ref",
-				"main",
-				"--allow-unpinned-ref",
-				"--out",
-				join(tmpRoot, "unpinned"),
-			],
-			io,
-		);
-		expect(code).toBe(0);
-		expect(stderr.text()).toBe("");
-	});
-
-	// …and must not become a blanket bypass: it licenses an unpinned ref,
-	// not a missing one.
-	it("still requires the flag's value under --allow-unpinned-ref", async () => {
-		const code = await main(
-			["foo", "--no-git-init", "--allow-unpinned-ref"],
-			io,
-		);
-		expect(code).toBe(2);
-		expect(stderr.text()).toMatch(/--dplaax-module-ref is required/);
+		expect(code).toBe(1);
+		expect(stderr.text()).toMatch(/^Error: /);
 	});
 
 	it("returns 2 when --registry-base-url is not a URL", async () => {
@@ -203,8 +133,8 @@ describe("CLI main()", () => {
 			[
 				"foo",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 				"--registry-base-url",
 				"not a url",
 				"--out",
@@ -221,8 +151,8 @@ describe("CLI main()", () => {
 			[
 				"foo",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 				"--registry-base-url",
 				"ftp://example.test",
 				"--out",
@@ -239,8 +169,8 @@ describe("CLI main()", () => {
 			[
 				"foo",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 				"--registry-base-url",
 				'https://example.test/"injected"',
 				"--out",
@@ -257,8 +187,8 @@ describe("CLI main()", () => {
 			[
 				"foo",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 				"--license",
 				"MIT",
 				"--out",
@@ -275,8 +205,8 @@ describe("CLI main()", () => {
 			[
 				"@provin-line/auth-provider",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 				"--out",
 				join(tmpRoot, "out"),
 			],
@@ -285,7 +215,8 @@ describe("CLI main()", () => {
 		expect(stderr.text()).toBe("");
 		expect(code).toBe(0);
 		expect(stdout.text()).toMatch(/Scaffolded \d+ files/);
-		expect(stdout.text()).toMatch(/pnpm start/);
+		expect(stdout.text()).toContain("node scripts/check-outside.mjs");
+		expect(stdout.text()).toContain("node --env-file-if-exists=.env src/main.ts");
 	});
 
 	it("passes --registry-base-url on as the default registry URL", async () => {
@@ -294,8 +225,8 @@ describe("CLI main()", () => {
 			[
 				"foo",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 				"--registry-base-url",
 				"http://registry.internal:8443",
 				"--out",
@@ -314,8 +245,8 @@ describe("CLI main()", () => {
 			[
 				"@provin-line/auth-provider",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 			],
 			io,
 		);
@@ -328,8 +259,8 @@ describe("CLI main()", () => {
 			[
 				"../../etc/foo",
 				"--no-git-init",
-				"--dplaax-module-ref",
-				"1111111111111111111111111111111111111111",
+				"--outside-from",
+				staged,
 				"--out",
 				join(tmpRoot, "out"),
 			],
@@ -341,7 +272,7 @@ describe("CLI main()", () => {
 
 	it("returns 2 when <name> starts with a dot", async () => {
 		const code = await main(
-			[".foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111"],
+			[".foo", "--no-git-init", "--outside-from", staged],
 			io,
 		);
 		expect(code).toBe(2);
@@ -350,7 +281,7 @@ describe("CLI main()", () => {
 
 	it("returns 2 when <name> contains uppercase letters", async () => {
 		const code = await main(
-			["Foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111"],
+			["Foo", "--no-git-init", "--outside-from", staged],
 			io,
 		);
 		expect(code).toBe(2);
@@ -359,7 +290,7 @@ describe("CLI main()", () => {
 
 	it("returns 2 when <name> is a scoped name with empty pkg segment", async () => {
 		const code = await main(
-			["@scope/", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111"],
+			["@scope/", "--no-git-init", "--outside-from", staged],
 			io,
 		);
 		expect(code).toBe(2);
@@ -369,7 +300,7 @@ describe("CLI main()", () => {
 	it("returns 1 with ExistingDirectoryNonEmptyError message on populated target", async () => {
 		const out = join(tmpRoot, "scaffold");
 		const first = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111", "--out", out],
+			["foo", "--no-git-init", "--outside-from", staged, "--out", out],
 			io,
 		);
 		expect(first).toBe(0);
@@ -377,7 +308,7 @@ describe("CLI main()", () => {
 		const stdout2 = new CaptureStream();
 		const stderr2 = new CaptureStream();
 		const second = await main(
-			["foo", "--no-git-init", "--dplaax-module-ref", "1111111111111111111111111111111111111111", "--out", out],
+			["foo", "--no-git-init", "--outside-from", staged, "--out", out],
 			{ stdout: stdout2, stderr: stderr2, cwd: tmpRoot },
 		);
 		expect(second).toBe(1);

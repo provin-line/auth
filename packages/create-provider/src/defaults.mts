@@ -18,17 +18,6 @@
 // and refresh this file in a minor release of the repository (create-app.md § 3.3).
 
 /**
- * Exact pins of the dependencies the overlay adds to upstream's manifest.
- * Upstream's own dependencies come with upstream's generator.
- */
-export const DEFAULT_DEP_VERSIONS = {
-	// The ed25519_raw DID-grant verifier imports it. did-grant depends on it, so
-	// this app-level pin is redundant; it goes when the generator composes the
-	// provin modules from npm instead of overlaying them.
-	"@noble/ed25519": "3.2.0",
-} as const;
-
-/**
  * The modules upstream's generator is asked to compose: what they need to run
  * (tokens, keys, issuer, clients, store, audit, http, ...) comes with them.
  */
@@ -39,14 +28,6 @@ export const LISTED_MODULES = [
 	"@mod/discovery",
 	"@mod/token-control",
 ] as const;
-
-/**
- * Default git ref of provin-line/auth for the provin modules. Library-only
- * default: `main` is a MOVING ref, acceptable for tests and tooling but never
- * for shipped scaffolds; the CLI deliberately requires the flag and accepts
- * only a commit SHA (create-app.md § 3.3 / § 4.1).
- */
-export const DEFAULT_DPLAAX_MODULE_REF = "main";
 
 /** Default SPDX license id. */
 export const DEFAULT_LICENSE = "Apache-2.0";

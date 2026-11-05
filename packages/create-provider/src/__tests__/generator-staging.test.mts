@@ -1,0 +1,87 @@
+/*
+ * Copyright 2026 1o1 Co. Ltd.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+// Without outsideFrom the generator stages the provin modules itself, from
+// the registry the operator's configuration names, and removes what it
+// staged whatever happens. The staging is stood in for by the project the
+// test run staged, so the test needs no registry.
+
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, inject, it, vi } from "vitest";
+
+const staged = inject("stagedProject");
+const removed = vi.fn(async () => undefined);
+const stageProvinModules = vi.fn(async () => ({ dir: staged, remove: removed }));
+
+let overlayFails = false;
+vi.mock("../overlay/index.mjs", async (original) => {
+	const real = await original<typeof import("../overlay/index.mjs")>();
+	return {
+		...real,
+		applyProvinModules: (...args: Parameters<typeof real.applyProvinModules>) => {
+			if (overlayFails) throw new Error("overlay refused");
+			return real.applyProvinModules(...args);
+		},
+	};
+});
+
+vi.mock("../staging.mjs", async (original) => ({
+	...(await original<typeof import("../staging.mjs")>()),
+	stageProvinModules: () => stageProvinModules(),
+}));
+
+const { generateAuthProviderScaffold } = await import("../generator.mjs");
+
+let root: string;
+
+beforeEach(async () => {
+	root = await mkdtemp(join(tmpdir(), "create-auth-provider-staging-"));
+	removed.mockClear();
+	stageProvinModules.mockClear();
+	overlayFails = false;
+});
+
+afterEach(async () => {
+	await rm(root, { recursive: true, force: true });
+});
+
+describe("generateAuthProviderScaffold — its own staging", () => {
+	it("stages the modules when no outsideFrom is given, and removes the staging once generated", async () => {
+		const result = await generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), gitInit: false });
+		expect(result.filesWritten).toContain("outside-modules.json");
+		expect(stageProvinModules).toHaveBeenCalledTimes(1);
+		expect(removed).toHaveBeenCalledTimes(1);
+	});
+
+	it("removes the staging when generating fails, and leaves no app behind", async () => {
+		overlayFails = true;
+		await expect(
+			generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), gitInit: false }),
+		).rejects.toThrow(/overlay refused/);
+		expect(stageProvinModules).toHaveBeenCalledTimes(1);
+		expect(removed).toHaveBeenCalledTimes(1);
+		expect(await readdir(root)).toEqual([]);
+	});
+
+	it("stages nothing for a request refused before generating", async () => {
+		await expect(
+			generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), license: "MIT", gitInit: false }),
+		).rejects.toThrow(/Unsupported license/);
+		expect(stageProvinModules).not.toHaveBeenCalled();
+	});
+
+	it("stages nothing when outsideFrom names a project", async () => {
+		await generateAuthProviderScaffold({ name: "app", outDir: join(root, "app"), outsideFrom: staged, gitInit: false });
+		expect(stageProvinModules).not.toHaveBeenCalled();
+		expect(await readdir(root)).toEqual(["app"]);
+	});
+});

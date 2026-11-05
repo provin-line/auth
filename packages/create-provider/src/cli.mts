@@ -27,9 +27,7 @@ import { parseArgs } from "node:util";
 import { isSupportedLicense, SUPPORTED_LICENSES } from "./defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "./errors.mjs";
 import { generateAuthProviderScaffold } from "./generator.mjs";
-import { isExactCommitSha } from "./provin-modules.mjs";
-
-export { isExactCommitSha };
+import { PROVIN_PACKAGES } from "./provin-modules.mjs";
 
 // Read the package version from package.json at startup so `--version`
 // stays in lockstep with the manifest automatically. Works in both src/
@@ -41,31 +39,25 @@ const PACKAGE_VERSION = (
 	) as { version: string }
 ).version;
 
-const HELP_TEXT = `Usage: create-auth-provider <name> --dplaax-module-ref <sha> [options]
+const HELP_TEXT = `Usage: create-auth-provider <name> [options]
 
 Generates an auth.provider 0.19 app with upstream's generator
-(@o3co/auth-provider-scaffold) and composes the dPLaaX modules into it:
-@provin-line/auth-did-grant, auth-dplaax-registry and auth-did-grant-store.
+(@o3co/auth-provider-scaffold), which composes the dPLaaX modules from npm as
+packages outside its release: ${PROVIN_PACKAGES.filter((p) => p.module)
+	.map((p) => `${p.name}@${p.version}`)
+	.join(", ")}.
 
 Arguments:
   <name>                       Output directory + package.json name (positional, required).
                                May be a scoped package name like @org/foo;
                                the output directory uses the last segment.
 
-Required:
-  --dplaax-module-ref <sha>    Full 40-hex commit SHA of provin-line/auth the
-                               dPLaaX modules are fetched at.
-                               Branches and tags both move, so neither
-                               identifies the bytes an instance was
-                               generated from. No default: the flag is
-                               required so the pin is always a choice.
-
 Options:
-  --allow-unpinned-ref         Accept a branch or tag for
-                               --dplaax-module-ref. Local iteration only:
-                               the generated instance is not publishable,
-                               because its dependency graph can change
-                               under a name that did not.
+  --outside-from <dir>         A project where pnpm installed the dPLaaX
+                               modules, which upstream's generator reads them
+                               from. Default: the generator installs them at
+                               the versions above into a temporary project,
+                               from the registry your npm configuration names.
   --description <text>         package.json description and README opener
                                (default: "dPLaaX auth.provider instance").
   --license <SPDX>             LICENSE file content + package.json field
@@ -205,8 +197,7 @@ function parseCliArgs(argv: readonly string[]) {
 			"git-init": { type: "boolean" as const },
 			"no-git-init": { type: "boolean" as const },
 			out: { type: "string" as const },
-			"dplaax-module-ref": { type: "string" as const },
-			"allow-unpinned-ref": { type: "boolean" as const },
+			"outside-from": { type: "string" as const },
 			help: { type: "boolean" as const, short: "h" },
 			version: { type: "boolean" as const, short: "V" },
 		},
@@ -277,26 +268,9 @@ export async function main(
 		return 2;
 	}
 
-	// A published release's source dependency resolves to a commit SHA or the
-	// artifact's dependency graph is not pinned at all (release.pin.source-exact).
-	// --allow-unpinned-ref is the mode boundary: local iteration against a branch
-	// is legitimate, publishing from one is not, so the escape is explicit and
-	// says in its own name what it gives up.
-	const dplaaxModuleRef = values["dplaax-module-ref"];
-	if (dplaaxModuleRef === undefined || dplaaxModuleRef === "") {
-		io.stderr.write(
-			`Error: --dplaax-module-ref is required (a full 40-hex commit SHA).\n\n${HELP_TEXT}`,
-		);
-		return 2;
-	}
-	if (!isExactCommitSha(dplaaxModuleRef) && values["allow-unpinned-ref"] !== true) {
-		io.stderr.write(
-			`Error: --dplaax-module-ref "${dplaaxModuleRef}" is not a commit SHA.\n` +
-				`A pin must be a full 40-hex lowercase commit id; branches and tags both move, ` +
-				`so neither identifies the bytes this instance was generated from.\n` +
-				`For local iteration, pass --allow-unpinned-ref to accept it anyway — ` +
-				`the result is not publishable.\n`,
-		);
+	const outsideFrom = values["outside-from"];
+	if (outsideFrom === "") {
+		io.stderr.write(`Error: --outside-from names no directory.\n\n${HELP_TEXT}`);
 		return 2;
 	}
 
@@ -325,18 +299,20 @@ export async function main(
 			license: values.license,
 			author: values.author,
 			gitInit,
-			dplaaxModuleRef,
+			outsideFrom: outsideFrom === undefined ? undefined : resolve(io.cwd, outsideFrom),
 			registryBaseUrl: values["registry-base-url"],
 		});
 
 		io.stdout.write(
 			`Scaffolded ${result.filesWritten.length} files at ${result.outDir}\n` +
 				`\n` +
-				`Next steps:\n` +
+				`Next steps (README.md, "Packages outside this release" and "Start"):\n` +
 				`  cd ${result.outDir}\n` +
-				`  pnpm install\n` +
+				`  pnpm install --lockfile-only\n` +
+				`  node scripts/check-outside.mjs\n` +
+				`  pnpm install --frozen-lockfile --ignore-scripts\n` +
 				`  cp .env.example .env   # uncomment and fill in the keys; see README.md\n` +
-				`  pnpm start\n`,
+				`  APP_CONFIG=config/local.conf,config/application.conf node --env-file-if-exists=.env src/main.ts\n`,
 		);
 		return 0;
 	} catch (e) {

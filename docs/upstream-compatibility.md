@@ -73,6 +73,22 @@ composes in `src/main.ts`, so it lacks `tls-options`, which 0.19's `outbound`
 needs, and its `config/application.conf` does not read `KERNEL_ENVIRONMENT`
 (upstream U-0.19-1, U-0.19-38).
 
+- **The provin modules come from npm.** create-auth-provider 0.5.0 has
+  upstream's generator compose `@provin-line/auth-did-grant`,
+  `auth-did-grant-store` and `auth-dplaax-registry` 0.1.0 as packages
+  outside its release; it takes no `--dplaax-module-ref` (nor
+  `--allow-unpinned-ref`). The app depends on them by version, without the
+  git-subdirectory refs, the `overrides`, `allowBuilds` and
+  `blockExoticSubdeps: false` of a 0.4.0 app, and records them in
+  `outside-modules.json`. Install it as its README's `## Packages outside
+  this release` says: `pnpm install --lockfile-only`, then
+  `node scripts/check-outside.mjs`, then `pnpm install --frozen-lockfile
+  --ignore-scripts`. It has no `package.json` scripts, so start it with
+  `node src/main.ts` (upstream U-0.19-146).
+- **Every setting of the provin sections reads a variable**, as before:
+  upstream now binds them from each package's `config.example`, under the
+  same names (`DID_GRANT_*`, `DPLAAX_REGISTRY_*`).
+
 - **The DID grant's tokens live `tokens.access-token-lifetime`.**
   `did-grant.access-token-lifetime` and `DID_GRANT_ACCESS_TOKEN_LIFETIME` are
   gone: move the value to `tokens.access-token-lifetime`, which the

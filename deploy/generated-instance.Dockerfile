@@ -4,8 +4,11 @@
 # or auth-provider). provin.auth is a generator repo — a runnable instance is
 # not committed anywhere; it is scaffolded by the create-* CLIs. This
 # Dockerfile (1) clones provin.auth at a pinned ref, (2) builds the requested
-# generator CLI, (3) scaffolds an instance pinned to the SAME ref, and
-# (4) builds + runs it. It is the consumer-mode build path (git-subdir deps),
+# generator CLI, (3) scaffolds an instance, and (4) builds + runs it. The
+# policy-verifier's dPLaaX module is pinned to the SAME ref (git-subdir deps);
+# the auth-provider's provin packages come from npm, at the versions that
+# ref's generator composes (PROVIN_PACKAGES), so the image holds what npm
+# serves. It is the consumer-mode build path,
 # the same shape provin.oss's quickstart proved end to end; the publish-images
 # workflow builds and pushes it to GHCR so consumers reference an image
 # instead of re-running this generation themselves.
@@ -36,9 +39,10 @@
 # (selects the create-* CLI,
 # the instance name, and the exposed port).
 ARG GENERATOR=policy-verifier
-# No default, deliberately. This is both the ref this image is built from and
-# the pin the scaffolded instance carries for its own dependencies, so the
-# generators require a full 40-hex commit SHA here (release.pin.source-exact).
+# No default, deliberately. This is the ref this image is built from and, for
+# the policy-verifier, the pin the scaffolded instance carries for its own
+# dependencies, so a full 40-hex commit SHA is required here
+# (release.pin.source-exact).
 # A default would have to be a branch name, which is exactly the movable ref
 # that requirement exists to keep out of a published artifact.
 ARG AUTH_REF
@@ -73,19 +77,25 @@ RUN --mount=type=secret,id=github_token \
  && git checkout "${AUTH_REF}" \
  && pnpm install --frozen-lockfile \
  && pnpm --filter "@provin-line/create-auth-${GENERATOR}" build \
+ && case "${GENERATOR}" in \
+      provider) ref_args="" ;; \
+      *) ref_args="--dplaax-module-ref ${AUTH_REF}" ;; \
+    esac \
  && node "packages/create-${GENERATOR}/dist/cli.mjs" "${GENERATOR}" \
-      --dplaax-module-ref "${AUTH_REF}" \
+      ${ref_args} \
       ${SCAFFOLD_ARGS} \
       --out /instance --no-git-init
 
-# --- builder: install the instance's deps (git-subdir refs) and compile ---
+# --- builder: install the instance's deps and compile ---
 #
 # KNOWN GAP — release.lock.frozen-graph. The `pnpm install` below resolves the
 # instance's transitive graph FRESH, at image-build time. The rule forbids
 # exactly that: the published artifact's dependency graph was never the graph
 # anything tested, and it can differ between two builds of the same source.
-# --dplaax-module-ref pins the git deps to a commit (release.pin.source-exact,
-# enforced above), but their own npm dependencies are still resolved here.
+# The verifier's --dplaax-module-ref pins its git deps to a commit
+# (release.pin.source-exact, enforced above), and the provider's provin
+# packages are exact npm versions, but their own npm dependencies are still
+# resolved here.
 #
 # Not closable inside this file. `pnpm --lockfile-only` in the gen stage would
 # just move the fresh resolution a few lines earlier, still inside the release

@@ -75,6 +75,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # The provider generator reads the provin modules from a project pnpm
+      # installed them into: this PR's packages, packed and served from a
+      # loopback registry. Staged once, for make instances and the
+      # regeneration below.
+      - name: stage the provin packages
+        run: echo "PROVIN_STAGE=$(node scripts/stage-provin-packages.mjs --dir "$RUNNER_TEMP/stage")" >> "$GITHUB_ENV"
+
       - run: make instances
 
       # The generated manifest must stay honest (create-app.md § 6.3.1):
@@ -84,7 +91,7 @@ jobs:
         run: |
           ref="$(git rev-parse HEAD)"
           node packages/create-provider/dist/cli.mjs provider \
-            --dplaax-module-ref "$ref" --out "$RUNNER_TEMP/regen/provider" --no-git-init
+            --outside-from "$PROVIN_STAGE" --out "$RUNNER_TEMP/regen/provider" --no-git-init
           node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
             --dplaax-module-ref "$ref" --port 3001 --out "$RUNNER_TEMP/regen/policy-verifier" --no-git-init
           for inst in provider policy-verifier; do
@@ -98,10 +105,12 @@ jobs:
       - run: make smoke
 
   # Consumer-mode scaffold smoke (create-app.md § 6.3): the exact external
-  # consumer experience — generate OUTSIDE the workspace, install with no
-  # workspace assistance, deps resolve from the pinned git ref (the § 3.4
-  # pnpm block emitted into the scaffold handles transitive resolution).
-  # Runs on push only: the commit must be fetchable from GitHub.
+  # consumer experience — generate OUTSIDE the workspace and install with no
+  # workspace assistance. The provider's provin packages come from a registry,
+  # as from npm: this commit's, packed and served from a loopback registry the
+  # app's .npmrc names. The verifier's deps resolve from the pinned git ref
+  # (the § 3.4 pnpm block emitted into the scaffold handles transitive
+  # resolution). Runs on push only: the commit must be fetchable from GitHub.
   smoke-consumer:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -116,18 +125,35 @@ jobs:
           check-latest: true
           cache: "pnpm"
 
-      # Workspace install only to build the generator CLIs.
+      # Workspace install only to build the generator CLIs and pack the
+      # provin packages.
       - run: pnpm install --frozen-lockfile
+
+      # Serves until the job ends: the app's install and its image build
+      # below fetch the provin packages from it.
+      - name: stage the provin packages and serve them
+        run: |
+          nohup node scripts/stage-provin-packages.mjs --dir "$RUNNER_TEMP/stage" --serve \
+            > "$RUNNER_TEMP/stage.path" 2> "$RUNNER_TEMP/stage.log" &
+          for _ in $(seq 1 180); do
+            [ -s "$RUNNER_TEMP/stage.path" ] && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/stage.log"
+          echo "::error::the provin packages were not staged within 3 minutes"
+          exit 1
 
       - name: generate, install, build, boot outside the workspace
         run: |
           out="$RUNNER_TEMP/consumer"
           node packages/create-provider/dist/cli.mjs provider \
-            --dplaax-module-ref "$GITHUB_SHA" --out "$out/provider" --no-git-init
+            --outside-from "$(cat "$RUNNER_TEMP/stage.path")" --out "$out/provider" --no-git-init
           node packages/create-policy-verifier/dist/cli.mjs policy-verifier \
             --dplaax-module-ref "$GITHUB_SHA" --port 3001 --out "$out/policy-verifier" --no-git-init
-          # The provider runs its sources: install only.
-          (cd "$out/provider" && pnpm install)
+          # The provider runs its sources: install as its README says, the
+          # lockfile held to the record of the packages outside the release.
+          (cd "$out/provider" && pnpm install --lockfile-only && node scripts/check-outside.mjs \
+            && pnpm install --frozen-lockfile --ignore-scripts)
           (cd "$out/policy-verifier" && pnpm install && pnpm run build && pnpm run typecheck)
           ./scripts/smoke-instance.sh "$out/policy-verifier" 3001 /healthcheck /verify
           # One real DID-grant round trip (assertion → /oauth/token → 200 +
@@ -143,7 +169,9 @@ jobs:
       - name: docker build and run the standalone Dockerfiles
         run: |
           out="$RUNNER_TEMP/consumer"
-          docker build -t smoke/provider "$out/provider"
+          # Host network: the image's install fetches the provin packages from
+          # the runner's loopback registry, which the app's .npmrc names.
+          docker build --network host -t smoke/provider "$out/provider"
           # The verifier's last stage is its test helper; the image to run is `runtime`.
           docker build --target runtime -t smoke/policy-verifier "$out/policy-verifier"
           ./scripts/smoke-image.sh smoke/policy-verifier 3001 3001 /healthcheck /verify -- \

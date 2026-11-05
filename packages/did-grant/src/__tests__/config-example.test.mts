@@ -32,7 +32,14 @@ describe("config.example", () => {
 		expect(sections).toEqual(["did-grant"]);
 	});
 
-	it("names the required revocation-latency-bound", () => {
-		expect(text).toMatch(/^\trevocation-latency-bound = /m);
+	it("names each scalar key an operator sets from the environment, so the generator binds it", () => {
+		const keys = [...text.matchAll(/^\t([a-z-]+) = /gm)].map((m) => m[1]);
+		expect(keys).toEqual([
+			"message-max-age",
+			"auth-contract",
+			"owner-migration-ratified",
+			"revocation-latency-bound",
+			"legacy-max-ttl",
+		]);
 	});
 });

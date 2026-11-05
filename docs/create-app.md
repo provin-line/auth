@@ -53,9 +53,9 @@ for a listed set of modules, plus the overlay of provin modules in
 
 | Path | Role | Published |
 | --- | --- | --- |
-| `packages/create-provider` | Generator for an auth-provider instance: upstream's app plus the provin-module overlay (§ 3.5) | not yet — run from a repo clone |
+| `packages/create-provider` | Generator for an auth-provider instance: upstream's app composing the provin modules from npm, plus the overlay (§ 3.5) | not yet — run from a repo clone |
 | `packages/create-policy-verifier` | Generator + canonical template for a policy-verifier instance | not yet — run from a repo clone |
-| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.19 modules) and the `did:dplaax` method library | npm with provenance, from 0.6.0 ([`publish-packages`](../.github/workflows/publish-packages.yml)); the generators still compose them as git-subdirectory refs (§ 3.3) |
+| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.19 modules) and the `did:dplaax` method library | npm with provenance, from 0.6.0 ([`publish-packages`](../.github/workflows/publish-packages.yml)); the provider generator composes the modules from npm (§ 3.5) |
 | `packages/policy-verifier-dplaax-module` | dPLaaX composition module consumed by generated policy-verifier instances | not yet — consumed as git-subdirectory refs (§ 3.3) |
 | `integration/` | Private workspace package: cross-package flow tests (§ 6.2) | no |
 | `instances/` | Git-ignored output directory for locally generated dev instances (§ 5) | no |
@@ -69,15 +69,16 @@ for a listed set of modules, plus the overlay of provin modules in
 The policy-verifier template and the provider's generated app are stored in
 **standalone consumer form** — exactly what an external consumer receives:
 
-- dPLaaX module dependencies use the **git-subdirectory form** pinned by
-  `--dplaax-module-ref`; never `workspace:*`. The CLI requires the flag
-  explicitly (no default — a scaffold must not silently pin a moving ref);
-  `DEFAULT_DPLAAX_MODULE_REF` in `defaults.mts` is a library-only constant
-  for tooling and tests.
+- dPLaaX module dependencies: the provider's are the npm versions its
+  generator composes (`PROVIN_PACKAGES`, § 3.5); the policy-verifier's use the
+  **git-subdirectory form** pinned by `--dplaax-module-ref`. Never
+  `workspace:*`. The verifier CLI requires the flag explicitly (no default — a
+  scaffold must not silently pin a moving ref); `DEFAULT_DPLAAX_MODULE_REF` in
+  its `defaults.mts` is a library-only constant for tooling and tests.
 - All other dependency versions are **exact pins** (no `^`/`~`). The
   policy-verifier bakes them into `defaults.mts` as literals; the provider's
   come from `@o3co/auth-provider-scaffold`, which the generator pins at an
-  exact version (§ 3.3), and the overlay adds one more (`@noble/ed25519`).
+  exact version (§ 3.3).
 - No workspace-only fields. The provider's `package.json` keeps upstream's
   `private: true`, an app's mark; the policy-verifier's carries no `private`
   flag.
@@ -104,10 +105,13 @@ The policy-verifier generator emits exact dependency pins from
 `DEFAULT_DEP_VERSIONS`. The provider generator depends on
 `@o3co/auth-provider-scaffold` at an exact version, which is the
 auth.provider release the generated app is built on (0.19.0); the app's own
-pins are that release's. Moving git refs (e.g. branch names) are rejected for `--dplaax-module-ref`
-in published releases. When the dependency baseline upgrades, refresh
-`defaults.mts` (and, for the provider, the scaffold pin) in a **minor**
-release of the repository.
+pins are that release's. Its provin packages are `PROVIN_PACKAGES`, which a
+test holds to the versions of this repository's packages, so a release
+publishes to npm what its generator composes. Moving git refs (e.g. branch
+names) are rejected for the verifier's `--dplaax-module-ref` in published
+releases. When the dependency baseline upgrades, refresh `defaults.mts` (and,
+for the provider, the scaffold pin) in a **minor** release of the
+repository.
 
 Every package carries the repository's one version: the root
 `package.json`'s, which is the release tag's without its `v`
@@ -124,39 +128,11 @@ released.
 
 The dPLaaX module packages declare their sibling `@provin-line/*` deps with
 the `workspace:` protocol, which a package fetched by git ref cannot resolve
-outside this workspace. The libraries are on npm from 0.6.0, but the
-generators still compose them as git-subdirectory refs, so a standalone
-consumer install needs scaffold-side provisions, which the generator emits
-as follows.
-
-**Provider (pnpm 11).** pnpm 11 no longer reads `package.json#pnpm`, so the
-generated app carries a `pnpm-workspace.yaml`:
-
-- **`overrides`** pin the transitive `@provin-line/did-dplaax` and
-  `@provin-line/auth-did-grant` (a peer of the registry and store modules,
-  pinned so the app holds one copy of the contracts the kernel matches by
-  object) to git-subdirectory refs at the **same ref** as
-  `--dplaax-module-ref`. pnpm applies consumer-root overrides to transitive
-  resolution, the only mechanism that can reach inside a git-fetched
-  package's `workspace:*` declarations.
-- **`blockExoticSubdeps: false`**: the overridden packages are git sources
-  below the app's direct dependencies, which pnpm 11 refuses by default
-  (`ERR_PNPM_EXOTIC_SUBDEP`). This relaxes that guard for every transitive
-  dependency of the app.
-- **`allowBuilds`** allows each git-fetched `@provin-line/*` package its
-  `prepare` (a build), which pnpm blocks otherwise
-  (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). pnpm matches a git-hosted
-  package by name and the source it resolved the reference to; a bare package
-  name does not match. For a commit SHA the generator writes two keys per
-  package, one for each resolution, both scoped to the commit:
-  `<name>@https://codeload.github.com/provin-line/auth/tar.gz/<sha>#path:/packages/<dir>`
-  (anonymous fetch) and
-  `<name>@git+https://github.com/provin-line/auth.git#<sha>&path:/packages/<dir>`
-  (fetch through git, as the image build's token path does). For a branch or
-  tag (`--allow-unpinned-ref`) the commit is not known at generation, so the
-  key is scoped to the repository, `<name>@git+https://github.com/provin-line/auth.git`,
-  which pnpm 11.28.7 matches at any ref. Keys begin with `@` and are quoted in
-  the YAML.
+outside this workspace. The provider composes the modules from npm (§ 3.5),
+where packing turned those into versions, and needs no provision. The
+policy-verifier generator still composes its module as a git-subdirectory
+ref, so a standalone consumer install needs scaffold-side provisions, which
+the generator emits as follows.
 
 **Policy-verifier (pnpm 10).** Its `package.json` carries the equivalents,
 `pnpm.overrides` (`did-dplaax`) and `pnpm.onlyBuiltDependencies`
@@ -168,9 +144,10 @@ install fetches that pnpm too and needs a Node it runs on (≥ 22.13). When
 the verifier generator moves to pnpm 11 it emits a `pnpm-workspace.yaml` the
 same way.
 
-The transitive package lists are baked into each generator and refreshed in
+The transitive package list is baked into the generator and refreshed in
 lockstep (§ 3.3). The libraries are on npm from 0.6.0; these overrides go
-when the generators compose them from npm instead of git refs.
+when the verifier generator composes its module from npm instead of a git
+ref.
 
 Inside this repo's workspace the scaffold's own overrides and build
 allowances are inert (pnpm honors only workspace-root settings), so
@@ -181,41 +158,53 @@ workspace mode (§ 6.3.1) is unaffected.
 `generateAuthProviderScaffold` calls `generate` of
 `@o3co/auth-provider-scaffold/create-app` with a *listed app*
 (`@mod/token-endpoint`, `@mod/client-allowance`, `@mod/outbound`,
-`@mod/discovery`, `@mod/token-control`); upstream adds what these need to run (tokens, keys,
-issuer, clients, store, audit, http, rate-limit, metrics, ...) and writes
-`package.json`, `src/main.ts`, `config/application.conf`, the `.example`
-settings files, `Dockerfile`, `README.md` and `AGENTS.md`. The generated app
-runs its sources (`node src/main.ts`): there is no build and no compiler
+`@mod/discovery`, `@mod/token-control`) and the three provin modules
+(`@provin-line/auth-did-grant`, `auth-did-grant-store`, `auth-dplaax-registry`)
+as packages outside its release. Upstream reads each from a project pnpm
+installed it into (`--outside-from`; without one the generator stages a
+temporary project installing `PROVIN_PACKAGES` from the registry the
+operator's npm configuration names, and removes it), composes it through its
+`authProvider` declaration, and adds what all of them need to run (tokens,
+keys, issuer, clients, store, audit, http, rate-limit, metrics, ...). It writes
+`package.json`, `src/main.ts`, `config/application.conf` (binding every scalar
+key of each module's `config.example` to its variable), the `.example`
+settings files, `pnpm-workspace.yaml`, `Dockerfile`, `README.md`, `AGENTS.md`,
+and the record of the packages outside the release, `outside-modules.json`,
+with `scripts/check-outside.mjs`, which holds the lockfile to it. The generated
+app runs its sources (`node src/main.ts`): there is no build and no compiler
 configuration. It reads each setting from an environment variable through
 `config/application.conf`, the lists from a local layer, and exits 78 on a
 refused boot.
 
-Upstream's generator composes only modules its own packages index, so
-`applyProvinModules` (`packages/create-provider/src/overlay/`) patches the
-files it wrote — one pure function per file, applied in one place:
+`applyProvinModules` (`packages/create-provider/src/overlay/`) patches what
+upstream does not write for the provin modules — one pure function per file,
+applied in one place:
 
 | File | Patch |
 | --- | --- |
-| `package.json` | name, description, license, author; the three provin modules as git-subdirectory refs; `@noble/ed25519` |
-| `pnpm-workspace.yaml` (new) | `overrides`, `blockExoticSubdeps`, `allowBuilds` (§ 3.4) |
-| `src/main.ts` | imports the modules' `./module` defaults and adds them to `assemble` |
-| `config/application.conf` | `did-grant`, `dplaax-registry` and `tokens.subject-check` keys, each reading its variable; `keys.signing.secret` and `secret-encoding` |
-| `.env.example`, `config/local.conf.example` | the matching entries; the DID grant type in the example client's `client-allowance.grants`; the registry in `outbound.allow` and `outbound.plain-internal` |
-| `README.md`, `AGENTS.md` | the title and description; the section and index rows naming the provin modules |
+| `package.json` | name, description, license, author; refuses a manifest lacking a provin module |
+| `config/application.conf` | `keys.signing.secret`, `keys.signing.secret-encoding`, `tokens.subject-check` and `tokens.access-token-lifetime`, which no module's example holds, each reading its variable |
+| `.env.example` | those variables; the registry's default URL |
+| `config/local.conf.example` | the DID grant type in the example client's `client-allowance.grants`; the registry in `outbound.allow` and `outbound.plain-internal` (or `outbound.internal-hosts` for https) |
+| `pnpm-workspace.yaml` | `@provin-line/did-dplaax` at its exact version in `minimumReleaseAgeExclude`, beside the modules upstream names there |
+| `README.md` | the title and description; `## Changing the modules` for this generator; the settings the provin modules need |
 
 A patch whose anchor upstream moved throws, naming the file, instead of
-shipping an app without the modules. This directory is an interim seam: when
-upstream composes modules from outside its bundles itself, the generator
-calls it with the provin modules and the overlay goes.
+shipping an app missing what the modules need. The refusal hints `src/main.ts`
+writes (`keysRead`) name the variables of the keys upstream bound, not the
+four the overlay adds.
 
-`tokens.subject-check = none` is written because boot requires either a
-module that checks subject revocation or that statement, and this app
-composes none.
+`tokens.subject-check = none` is bound because boot requires either a module
+that checks subject revocation or that statement, and this app composes none.
+`@provin-line/did-dplaax` is named because pnpm holds a version back until it
+is a day old, upstream names only the modules it was told were fresh, and a
+library the modules depend on cannot be named to its generator.
 
 ## 4. Generator CLI contract
 
-The CLI surface (`create-auth-provider <name> --dplaax-module-ref <ref>
-[options]`, and the policy-verifier equivalent) is unchanged by this spec.
+The CLI surfaces are `create-auth-provider <name> [--outside-from <dir>]
+[options]` and `create-auth-policy-verifier <name> --dplaax-module-ref <ref>
+[options]`.
 The provider has no `--port` (the app's port is `HTTP_PORT`) and no
 `--package-manager` (upstream's app is pnpm); `--registry-base-url` is the
 default `DPLAAX_REGISTRY_URL` of its `.env.example`.
@@ -224,9 +213,11 @@ cite; subsection numbers intentionally match the lost spec's § 4.x.
 
 ### 4.1 Required arguments
 
-The `<name>` positional and `--dplaax-module-ref` are required.
-The ref MUST be exact (tag or commit SHA); known moving branch names are
-rejected (§ 3.3). The CLI deliberately has no default ref.
+The `<name>` positional is required by both. The policy-verifier also
+requires `--dplaax-module-ref`: the ref MUST be a full commit SHA, and
+moving refs are rejected (§ 3.3); the CLI deliberately has no default ref.
+The provider takes no ref: its provin packages are the npm versions of its
+release (§ 3.3).
 
 ### 4.2 `--license`
 
@@ -247,7 +238,7 @@ A repo-root Make target generates throwaway composition roots for local
 development and e2e composition:
 
 ```text
-make instances        # runs both generators → instances/provider, instances/policy-verifier
+make instances        # stages this checkout's provin packages, runs both generators → instances/provider, instances/policy-verifier
 docker compose up     # workspace-context image builds of instances/*
 ```
 
@@ -255,8 +246,9 @@ docker compose up     # workspace-context image builds of instances/*
   listed in `pnpm-workspace.yaml`, so generated instances join the workspace
   (§ 6.3.1) and reflect local package state.
 - A generated app's standalone Dockerfile (the policy-verifier template's;
-  upstream's for the provider) installs `@provin-line/*` from git
-  refs, which cannot contain local edits. Therefore `docker-compose.yml`
+  upstream's for the provider) installs `@provin-line/*` from git refs
+  (the verifier) or from the registry its `.npmrc` names (the provider),
+  neither of which holds local edits. Therefore `docker-compose.yml`
   builds dev images from a repo-root-context `Dockerfile.instance`
   (`ARG INSTANCE=provider|policy-verifier`, `ARG ENTRY` the file the instance
   starts from: `src/main.ts` for the provider, `dist/main.mjs` for the
@@ -277,7 +269,8 @@ Three layers replace the retired round-trip test.
 for the provider (each patch of § 3.5). These test generation mechanics: file
 emission, token substitution, argument validation, ref pinning. The
 provider's `generator.test.mts` runs the real upstream generator into a
-temporary directory.
+temporary directory, reading this checkout's provin packages from a project
+the test run stages once (`scripts/stage-provin-packages.mjs`).
 
 ### 6.2 Integration tests — `integration/` package
 
@@ -299,7 +292,9 @@ Two modes, verifying two different properties.
 package state:
 
 1. `make instances` (generators → `instances/*`, workspace members per
-   § 6.3.1).
+   § 6.3.1). The provider generator reads the PR's provin packages from a
+   staged project: `scripts/stage-provin-packages.mjs` packs them, serves
+   them from a loopback registry and installs the project.
 2. `pnpm install`. The policy-verifier is built, typechecked and booted, and
    its health endpoint asserted and `/verify` without a token refused with
    401. The provider runs its sources
@@ -317,12 +312,18 @@ package state:
 experience, no workspace assistance:
 
 1. Run the generator CLIs into a directory **outside** the repo.
-2. `pnpm install` / build / boot as-is — `@provin-line/*` resolve from their
-   pinned git refs (the provider is installed only: it has no build).
+2. `pnpm install` / build / boot as-is. The verifier's `@provin-line/*`
+   resolve from their pinned git refs; the provider's from a loopback
+   registry serving this commit's packed packages, which the staged project
+   and so the app's `.npmrc` name, installed as the app's README says
+   (`--lockfile-only`, `check-outside.mjs`, `--frozen-lockfile
+   --ignore-scripts`). The provider is installed only: it has no build.
 3. Additionally `docker build` each app's standalone Dockerfile (the policy-verifier template's, its `runtime` stage; upstream's for the provider) and run the images: each
    answers its health endpoint, the verifier refuses `/verify` without a
    token (401), and the provider image takes the DID-grant round trip
-   (`scripts/smoke-image.sh`, `scripts/smoke-did-grant.mjs --image`).
+   (`scripts/smoke-image.sh`, `scripts/smoke-did-grant.mjs --image`). The
+   provider's image builds on the host network, which reaches that
+   registry.
 
 Workspace mode is the load-bearing replacement for the round-trip test:
 instead of asserting "template ≈ reference modulo normalizations", it asserts
@@ -332,10 +333,11 @@ scaffold works without this repo checked out.
 
 #### 6.3.1 Workspace resolution for generated instances
 
-The scaffold declares the provin modules (`auth-did-grant`,
-`auth-dplaax-registry`, `auth-did-grant-store`; resp.
-`policy-verifier-dplaax-module`) via git-subdirectory refs. Inside this repo
-that resolution is redirected statically — no post-generation mutation:
+The provider's scaffold declares the provin modules (`auth-did-grant`,
+`auth-dplaax-registry`, `auth-did-grant-store`) at npm versions, the
+verifier's (`policy-verifier-dplaax-module`) via a git-subdirectory ref.
+Inside this repo that resolution is redirected statically — no
+post-generation mutation:
 
 - `pnpm-workspace.yaml` includes `instances/*`, so generated instances are
   workspace members;
@@ -352,7 +354,9 @@ generated `package.json` itself is byte-identical to direct generator
 output — redirection happens entirely in pnpm resolution, never by mutating
 the artifact.
 
-**Ref source rule** — which `--dplaax-module-ref` each context passes:
+**Ref source rule** — which `--dplaax-module-ref` each context passes to
+the verifier generator (the provider's packages are the staged project's,
+this checkout's):
 
 | Context | Ref |
 | --- | --- |
@@ -363,9 +367,10 @@ the artifact.
 
 Resolved 2026-06-11 (decision on open question 3): the bare consumer
 install was confirmed broken in exactly the predicted way, and the scaffold
-now ships the override and build-allowance provisions specified in § 3.4. Consumer-mode smoke is a gating CI job; npm publication
-of the `@provin-line/*` libraries remains a possible future simplification
-(tracked separately), at which point the overrides retire.
+now ships the override and build-allowance provisions specified in § 3.4. Consumer-mode smoke is a gating CI job. The
+`@provin-line/*` libraries are on npm from 0.1.0 and the provider composes
+them from there, so its overrides retired; the verifier's retire when its
+generator does the same.
 
 ### 6.4 Round-trip test — retired
 

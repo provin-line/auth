@@ -18,7 +18,7 @@ const CHANGING = /^## Changing the modules\n[\s\S]*?(?=^## |(?![\s\S]))/m;
 function changingTheModules(): string {
 	return `## Changing the modules
 
-To change which modules are composed, run \`@provin-line/create-auth-provider\` again with the dPLaaX modules' ref, and carry the configuration over. Upstream's \`create-auth-provider\` shares the name but not the modules: it composes none of the dPLaaX ones, so running it over this app would drop them, and its \`--pattern\`, \`--add\` and \`--list\` do not exist in this generator.
+To change the app, run \`@provin-line/create-auth-provider\` again from outside this directory, at the version whose dPLaaX modules you want, and carry the configuration over: each version composes the modules at the versions it was released with. Upstream's \`create-auth-provider\` shares the name but composes the dPLaaX modules only when each is named as an \`npm:\` package, so running it over this app as upstream's guide says would drop them, and its \`--pattern\`, \`--add\` and \`--list\` do not exist in this generator.
 
 Boot names what a change needs, and what cannot be composed.
 `;
@@ -28,27 +28,23 @@ function section(): string {
 	return `
 ## The dPLaaX modules
 
-Composed beside the modules above, fetched from git (not npm) at the ref this app was generated with; \`pnpm install\` builds them. Each card, as installed, is the truth about its module:
-
-- \`@provin-line/auth-did-grant\`: the DID grant, \`${DID_GRANT_TYPE}\`. \`node_modules/@provin-line/auth-did-grant/README.md\`
-- \`@provin-line/auth-dplaax-registry\`: resolves did:dplaax owner DIDs against a registry, through outbound. \`node_modules/@provin-line/auth-dplaax-registry/README.md\`
-- \`@provin-line/auth-did-grant-store\`: keeps the grant's spent nonces on the store. \`node_modules/@provin-line/auth-did-grant-store/README.md\`
+Composed beside the modules above as packages outside the release, from npm at the versions this app was generated with: \`## Packages outside this release\` records each, and each card, as installed, is the truth about its module.
 
 Settings they need, besides upstream's:
 
 - \`did-grant.revocation-latency-bound\` (required; \`DID_GRANT_REVOCATION_LATENCY_BOUND\`): \`tokens.access-token-lifetime\` (\`TOKENS_ACCESS_TOKEN_LIFETIME\`), the lifetime of the grant's tokens, must be at most this, and under \`LEGACY_DID_LOGIN@1\` at most \`did-grant.legacy-max-ttl\` (15m by default), or boot is refused. Its default, 1h, is over that, so set it.
 - \`dplaax-registry.url\` (required; \`DPLAAX_REGISTRY_URL\`). It is reached through outbound: list its host in \`outbound.allow\`, and name its \`host:port\` in \`outbound.plain-internal\` for plain http inside a trusted network, or list the host in \`outbound.internal-hosts\` for https at a private address.
 - \`clients.registered\`: a client uses the grant once \`sections.client-allowance.grants\` lists \`${DID_GRANT_TYPE}\`.
-- \`keys.signing.secret\` and \`keys.signing.secret-encoding\`: with HS256 shared with a policy-verifier, \`utf8\`, the verifier's reading of the same string.
+- \`keys.signing.secret\` and \`keys.signing.secret-encoding\` (\`KEYS_SIGNING_SECRET\`, \`KEYS_SIGNING_SECRET_ENCODING\`): with HS256 shared with a policy-verifier, \`utf8\`, the verifier's reading of the same string.
 - \`tokens.subject-check = none\` (\`TOKENS_SUBJECT_CHECK\`): boot requires it, because this composition has no module that checks subject revocation.
 - \`store.accept-volatile = true\` with \`kernel.deployment = single\`: the spent nonces and the revoked tokens live in this process, so a restart forgets them. It reopens a replay window of \`did-grant.message-max-age\` (5m by default) for messages signed just before it, and a revoked token introspects active again until it expires (within \`tokens.access-token-lifetime\`).
 - Introspection (\`POST /oauth/introspect\`) answers \`confidential\` clients only: one with \`sections.client-secret.hash\` (bcrypt or scrypt) whose \`sections.client-allowance.audiences\` covers the token's audience. A DID client with no audiences is issued tokens for the issuer URL.
 
-## Installing from git
+\`config/application.conf\` reads the four keys no module's example holds (\`keys.signing.secret\`, \`keys.signing.secret-encoding\`, \`tokens.subject-check\`, \`tokens.access-token-lifetime\`) from their variables too, but a refusal of one does not say where to write it.
 
-- \`pnpm-workspace.yaml\` pins the packages the modules reach through \`workspace:*\` to the same ref and allows the git-fetched packages their build (\`allowBuilds\`). It also sets \`blockExoticSubdeps: false\`, which turns pnpm's guard against git sources below direct dependencies off for the whole dependency graph; it goes once the provin packages are published to a registry.
-- The ref is in \`package.json\`, in the overrides and in the \`allowBuilds\` keys: regenerate the app to move it, do not edit it by hand.
-- pnpm 11 holds a release back until it is a day old. When this app pins a fresh \`@o3co\` release, the first install adds \`minimumReleaseAgeExclude\` entries to \`pnpm-workspace.yaml\`; keep them.
+## A did-dplaax release within its first day
+
+\`@provin-line/auth-dplaax-registry\` depends on \`@provin-line/did-dplaax\`, which is not among the packages outside the release. pnpm holds a version back until it is a day old, so \`pnpm-workspace.yaml\` names did-dplaax at the version this app was generated with in \`minimumReleaseAgeExclude\`, as it names the modules. A newer did-dplaax resolved within its first day is held back: add it there at its exact version (\`"@provin-line/did-dplaax@<version>"\`), or wait a day.
 `;
 }
 

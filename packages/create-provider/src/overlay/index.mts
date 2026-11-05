@@ -8,24 +8,22 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-// The seam through which provin's modules join the app upstream generates.
-//
-// Upstream's generator composes only the modules its own packages index, so
-// the files it wrote are patched here, each by a pure function over one file.
-// This directory is the whole of that: when upstream composes modules from
-// outside its bundles itself, the generator calls it with the provin modules
-// and this directory goes.
+// Upstream's generator composes the provin modules as packages outside its
+// release and writes their sections' bindings from their examples. What it
+// does not write for them is patched here, each by a pure function over one
+// generated file: the project's name and license, the keys no module's
+// example holds, the registry's default URL and how outbound reaches it, the
+// DID grant in the example client, the library the modules depend on in the
+// day-old-release exclusions, and the README's account of the modules.
 
-import { patchAgents } from "./agents.mjs";
 import {
 	patchApplicationConf,
 	patchEnvExample,
 	patchLocalConfExample,
 } from "./config.mjs";
-import { patchMainTs } from "./main-ts.mjs";
 import { patchPackageJson } from "./package-json.mjs";
 import { patchReadme } from "./readme.mjs";
-import { buildWorkspaceYaml } from "./workspace-yaml.mjs";
+import { patchWorkspaceYaml } from "./workspace-yaml.mjs";
 
 export interface OverlayOptions {
 	/** `package.json` name. */
@@ -34,8 +32,6 @@ export interface OverlayOptions {
 	readonly license: string;
 	/** Empty when none is given. */
 	readonly author: string;
-	/** Git ref of provin-line/auth the provin modules are fetched at. */
-	readonly moduleRef: string;
 	/** The registry's URL, the default of `DPLAAX_REGISTRY_URL`. */
 	readonly registryBaseUrl: string;
 }
@@ -48,30 +44,22 @@ const PATCHES: readonly (readonly [
 	patch: (text: string, opts: OverlayOptions) => string,
 ])[] = [
 	["package.json", patchPackageJson],
-	["src/main.ts", patchMainTs],
 	["config/application.conf", patchApplicationConf],
 	[".env.example", patchEnvExample],
 	["config/local.conf.example", patchLocalConfExample],
 	["README.md", patchReadme],
-	["AGENTS.md", patchAgents],
+	["pnpm-workspace.yaml", patchWorkspaceYaml],
 ];
 
-const WORKSPACE_FILE = "pnpm-workspace.yaml";
-
 /**
- * The generated files with the provin modules composed in. Throws, naming the
- * file, when upstream no longer writes one the overlay patches or already
- * writes the one it adds: a silent skip would ship an app without the modules.
+ * The generated files with the overlay's patches applied. Throws, naming the
+ * file, when upstream no longer writes one the overlay patches: a silent skip
+ * would ship an app missing what the provin modules need.
  */
 export function applyProvinModules(
 	files: GeneratedFiles,
 	opts: OverlayOptions,
 ): Map<string, string> {
-	if (files.has(WORKSPACE_FILE)) {
-		throw new Error(
-			`${WORKSPACE_FILE}: upstream wrote one; the overlay would overwrite it`,
-		);
-	}
 	const out = new Map(files);
 	for (const [path, patch] of PATCHES) {
 		const text = files.get(path);
@@ -80,6 +68,5 @@ export function applyProvinModules(
 		}
 		out.set(path, patch(text, opts));
 	}
-	out.set(WORKSPACE_FILE, buildWorkspaceYaml(opts.moduleRef));
 	return out;
 }

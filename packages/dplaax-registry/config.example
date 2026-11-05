@@ -1,3 +1,5 @@
 dplaax-registry {
 	url = "https://registry.example.invalid"
+	timeout = 5s
+	max-document-size = 64KiB
 }

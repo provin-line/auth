@@ -8,9 +8,10 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-// Generation: upstream's generator writes the app, the overlay composes the
-// provin modules into it, and this file writes the result. The CLI in cli.mts
-// is a thin wrapper; tests and tooling call this function directly.
+// Generation: upstream's generator writes the app, composing the provin
+// modules as packages outside its release, the overlay patches what it does
+// not write for them, and this file writes the result. The CLI in cli.mts is a
+// thin wrapper; tests and tooling call this function directly.
 
 import { execFile } from "node:child_process";
 import {
@@ -27,7 +28,6 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { generate } from "@o3co/auth-provider-scaffold/create-app";
 import {
-	DEFAULT_DPLAAX_MODULE_REF,
 	DEFAULT_LICENSE,
 	DEFAULT_REGISTRY_BASE_URL,
 	isSupportedLicense,
@@ -36,6 +36,8 @@ import {
 } from "./defaults.mjs";
 import { ExistingDirectoryNonEmptyError } from "./errors.mjs";
 import { applyProvinModules } from "./overlay/index.mjs";
+import { PROVIN_PACKAGES } from "./provin-modules.mjs";
+import { stageProvinModules } from "./staging.mjs";
 
 const execFileP = promisify(execFile);
 
@@ -66,13 +68,13 @@ export interface GenerateOptions {
 	readonly gitInit?: boolean;
 
 	/**
-	 * Git ref of provin-line/auth the provin modules (`auth-did-grant`,
-	 * `auth-dplaax-registry`, `auth-did-grant-store`) are fetched at.
-	 * Library-only default: `main` — a MOVING ref, acceptable for tests and
-	 * tooling but never for shipped scaffolds; the CLI deliberately requires
-	 * the flag and accepts only a commit SHA (create-app.md § 3.3 / § 4.1).
+	 * A project where pnpm installed the provin modules, which upstream's
+	 * generator reads them from: their manifests, files and lockfile records,
+	 * and the registries the project installs from. Default: a temporary
+	 * project the generator stages, installing `PROVIN_PACKAGES` from the
+	 * registry the operator's npm configuration names, removed afterwards.
 	 */
-	readonly dplaaxModuleRef?: string;
+	readonly outsideFrom?: string;
 
 	/** DID registry URL: the default of `DPLAAX_REGISTRY_URL` in `.env.example`. Default: production registry. */
 	readonly registryBaseUrl?: string;
@@ -151,33 +153,45 @@ export async function generateAuthProviderScaffold(
 	const outDir = resolve(opts.outDir);
 	await ensureCleanOutDir(outDir);
 
+	const modules = PROVIN_PACKAGES.filter((p) => p.module).map((p) => p.name);
+	const own = opts.outsideFrom === undefined ? await stageProvinModules() : undefined;
+	const from = own?.dir ?? resolve(opts.outsideFrom ?? "");
+
 	// The app is built beside the target and moved into place once whole, so a
 	// failure leaves nothing: an app without the dPLaaX modules is not a result.
-	await mkdir(dirname(outDir), { recursive: true });
-	const staging = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}-`));
 	let composed: Map<string, string>;
 	try {
-		await generate({ target: staging, modules: LISTED_MODULES });
-		const generated = await readTree(staging);
-		composed = applyProvinModules(generated, {
-			name: opts.name,
-			description: opts.description ?? "dPLaaX auth.provider instance",
-			license,
-			author: opts.author ?? "",
-			moduleRef: opts.dplaaxModuleRef ?? DEFAULT_DPLAAX_MODULE_REF,
-			registryBaseUrl: opts.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL,
-		});
-		composed.set("LICENSE", await readFile(LICENSE_URL, "utf8"));
-		for (const [path, text] of composed) {
-			if (generated.get(path) === text) continue;
-			const full = join(staging, path);
-			await mkdir(dirname(full), { recursive: true });
-			await writeFile(full, text);
+		await mkdir(dirname(outDir), { recursive: true });
+		const building = await mkdtemp(join(dirname(outDir), `.${basename(outDir)}-`));
+		try {
+			await generate({
+				target: building,
+				modules: [...LISTED_MODULES, ...modules],
+				// Each named fresh: the versions are this release's, which may be a day old or less.
+				outside: { from, names: modules, fresh: modules },
+			});
+			const generated = await readTree(building);
+			composed = applyProvinModules(generated, {
+				name: opts.name,
+				description: opts.description ?? "dPLaaX auth.provider instance",
+				license,
+				author: opts.author ?? "",
+				registryBaseUrl: opts.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL,
+			});
+			composed.set("LICENSE", await readFile(LICENSE_URL, "utf8"));
+			for (const [path, text] of composed) {
+				if (generated.get(path) === text) continue;
+				const full = join(building, path);
+				await mkdir(dirname(full), { recursive: true });
+				await writeFile(full, text);
+			}
+			await rename(building, outDir);
+		} catch (e) {
+			await rm(building, { recursive: true, force: true });
+			throw e;
 		}
-		await rename(staging, outDir);
-	} catch (e) {
-		await rm(staging, { recursive: true, force: true });
-		throw e;
+	} finally {
+		await own?.remove();
 	}
 
 	if (opts.gitInit ?? true) {
