@@ -151,4 +151,5 @@ jobs:
             -e OAUTH_JWT_SECRET=smoke.only.secret.at.least.32.bytes.long \
             -e OAUTH_JWT_ISSUER=https://smoke.invalid \
             -e OAUTH_JWT_AUDIENCE=https://smoke-api.invalid
-          node scripts/smoke-did-grant.mjs --image smoke/provider 3100
+          # The published image runs in production: an https issuer, no insecure origin.
+          node scripts/smoke-did-grant.mjs --production --image smoke/provider 3100

@@ -48,9 +48,11 @@ VERIFIER_PORT ?= 3001
 # instance is built, typechecked and booted, and its health endpoint asserted.
 # The provider instance runs its sources (`node src/main.ts`, no build): the
 # smoke boots it and drives one real DID-grant round trip (a boot alone let
-# the PDP surface drift and the missing @noble/ed25519 through).
+# the PDP surface drift and the missing @noble/ed25519 through), in development
+# and again as the published image runs, in production behind an https origin.
 smoke:
 	pnpm --filter ./instances/policy-verifier run build
 	pnpm --filter ./instances/policy-verifier run typecheck
 	./scripts/smoke-instance.sh instances/policy-verifier $(VERIFIER_PORT) /healthcheck /verify
 	node scripts/smoke-did-grant.mjs instances/provider $(PROVIDER_PORT)
+	node scripts/smoke-did-grant.mjs --production instances/provider $(PROVIDER_PORT)

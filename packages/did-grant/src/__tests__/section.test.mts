@@ -80,6 +80,11 @@ describe("did-grant section", () => {
 		await expect(compose({ section })).resolves.toBeDefined();
 	});
 
+	it("refuses a lifetime under two seconds, which tokens refuses to issue", async () => {
+		const section = { "revocation-latency-bound": "15m", "access-token-lifetime": "1s" };
+		expect(await refusedAt(compose({ section }))).toEqual([expect.stringContaining("access-token-lifetime")]);
+	});
+
 	it("refuses a lifetime above a day", async () => {
 		const section = { "revocation-latency-bound": "2d", "access-token-lifetime": "25h" };
 		expect(await refusedAt(compose({ section }))).toContainEqual(expect.stringContaining("access-token-lifetime"));

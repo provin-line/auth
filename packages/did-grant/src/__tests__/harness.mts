@@ -84,7 +84,7 @@ function standInModules(s: Stands): Module[] {
 	};
 	return [
 		defineModule({ name: "did-documents-stand-in", replicaSafe: true, takes: [] }, (m) => [m.provide(didDocuments).by(() => resolver)]),
-		defineModule({ name: "spent-nonces-stand-in", replicaSafe: true, takes: [] }, (m) => [
+		defineModule({ name: "spent-nonces-stand-in", replicaSafe: false, takes: [] }, (m) => [
 			m.provide(spentNonces).by(() => ({
 				async save(name: string, lifetimeMs: number) {
 					if (s.nonceStoreDown) throw new Unavailable("spent nonces");
