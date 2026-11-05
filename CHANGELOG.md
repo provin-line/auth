@@ -10,6 +10,25 @@ releases.
 
 ## [Unreleased]
 
+### Security
+
+- qs 6.17.1 in the lockfile ([GHSA-6pq8-jhm2-2vcw](https://github.com/advisories/GHSA-6pq8-jhm2-2vcw):
+  denial of service when `qs.stringify` with `arrayFormat: 'comma'` meets an
+  array element whose own `toString` is not callable). It is reached through
+  express under the verifier server, in the integration tests and in the dev
+  composition image (`Dockerfile.instance`), whose install starts from this
+  lockfile. The published images and a generated instance resolve their
+  graph at build time. express and body-parser call `qs.parse` only.
+- glob 14.0.3 and minimatch 11.0.4 in the lockfile, with rimraf raised to
+  `^6.1.4` in every package's devDependencies
+  ([GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4):
+  an AbortSignal does not stop the traversal;
+  [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249):
+  denial of service through amplified glob parts). They are reached through
+  rimraf in each package's `prebuild` (`rimraf dist`), which also runs when a
+  git-fetched package is prepared. rimraf globs only under `--glob`, which no
+  script passes.
+
 ## [0.5.0] - 2026-10-27
 
 A minor number, not a patch: the provider moves to auth.provider 0.18.4.
