@@ -28,6 +28,7 @@ The module contributes the grant to `grants` and takes:
 
 - `didDocuments`: resolves a DID to its document and the provenance of the bytes served. Provided by the dPLaaX registry module.
 - `spentNonces`: keeps the nonces of messages already used. Wired by the dPLaaX registry module on the kernel's `store`; it needs `spentNoncesNeeds`.
+- `tokens`: the lifetime its tokens live, `accessTokenLifetimeSeconds()`, read when the grant is built and held to the section's bounds.
 - `issuer`, `tokenEndpointLocation` and the client allowance, from auth.provider.
 
 A client may use the grant once its `client-allowance` lists the grant type (`didGrantType`). The scope is the `scope` parameter within the client's allowance, or its default scopes; none is issued when both are empty, and a client allowed scopes but given no `default-scopes` that asks none is refused `invalid_scope`. The audience is the one the message signed, when the client may be issued it, and otherwise the allowance's.

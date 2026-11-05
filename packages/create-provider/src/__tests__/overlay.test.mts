@@ -322,7 +322,7 @@ describe("patchEnvExample", () => {
 		expect(out).not.toContain("DID_GRANT_ACCESS_TOKEN_LIFETIME");
 	});
 
-	it("lists TOKENS_ACCESS_TOKEN_LIFETIME at 10m, inside the default legacy-max-ttl tokens' own hour passes", () => {
+	it("lists TOKENS_ACCESS_TOKEN_LIFETIME at 10m, within the default legacy-max-ttl, which tokens' own hour is over", () => {
 		expect(out).toMatch(/^# TOKENS_ACCESS_TOKEN_LIFETIME=10m$/m);
 	});
 

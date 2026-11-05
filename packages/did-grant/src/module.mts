@@ -92,7 +92,8 @@ export default defineModule(
 			if (s["auth-contract"] === "LEGACY_DID_LOGIN@1" && lifetime > s["legacy-max-ttl"]) {
 				refused.push({
 					where: "did-grant.legacy-max-ttl",
-					reason: `tokens.access-token-lifetime is over it under ${s["auth-contract"]}: lower that, or raise this (rule auth.legacy.did-login)`,
+					reason:
+						"tokens.access-token-lifetime is over it under LEGACY_DID_LOGIN@1: lower that, or raise this (rule auth.legacy.did-login)",
 				});
 			}
 

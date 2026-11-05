@@ -202,6 +202,8 @@ clients.registered = [
 );
 
 // ── boot the instance under test ─────────────────────────────────────────────
+/** TOKENS_ACCESS_TOKEN_LIFETIME, within the default legacy-max-ttl. */
+const LIFETIME_SECONDS = 600;
 const settings = {
 	KERNEL_DEPLOYMENT: "single",
 	// A plain-http origin and issuer boot in development alone.
@@ -215,7 +217,7 @@ const settings = {
 	KEYS_SIGNING_ALG: "HS256",
 	KEYS_SIGNING_SECRET: SECRET,
 	KEYS_SIGNING_SECRET_ENCODING: "utf8",
-	TOKENS_ACCESS_TOKEN_LIFETIME: "10m",
+	TOKENS_ACCESS_TOKEN_LIFETIME: `${LIFETIME_SECONDS}s`,
 	DID_GRANT_REVOCATION_LATENCY_BOUND: "15m",
 	DPLAAX_REGISTRY_URL: `http://${registryHost}:${registryPort}`,
 };
@@ -367,6 +369,11 @@ if (expected !== encSignature) {
 const claims = JSON.parse(Buffer.from(encPayload, "base64url").toString("utf8"));
 if (claims.sub !== DID || claims.client_id !== CLIENT_ID || claims.iss !== origin) {
 	fail(`unexpected sub/client_id/iss in ${JSON.stringify(claims)}`);
+	process.exit(1);
+}
+// The grant's tokens live tokens.access-token-lifetime, read from its variable.
+if (claims.exp - claims.iat !== LIFETIME_SECONDS) {
+	fail(`access_token lives ${claims.exp - claims.iat}s, not TOKENS_ACCESS_TOKEN_LIFETIME's ${LIFETIME_SECONDS}s`);
 	process.exit(1);
 }
 for (const name of [

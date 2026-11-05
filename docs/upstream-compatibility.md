@@ -74,8 +74,8 @@ needs, and its `config/application.conf` does not read `KERNEL_ENVIRONMENT`
   `did-grant.legacy-max-ttl` (`15m` by default), so a LEGACY deployment that
   leaves it unset does not boot. A `did-grant.access-token-lifetime` left in
   a config file refuses boot as an unknown key; the variable alone is read
-  by nothing. The lifetime is `tokens`', so it is also that of any other
-  grant an operator composes.
+  by nothing. The lifetime is `tokens`', so it is also the lifetime of any
+  other grant an operator composes that gives none of its own.
 
 - **Plain http needs `kernel.environment = development`.** `kernel.environment`
   is new and defaults to `production`, which refuses a plain-http `issuer.url`
@@ -120,7 +120,7 @@ instance is independent; move it as the sections below say.
 | `oauth.grants.did.supportedAlgorithms` | `did-grant.supported-algorithms` (`es256k_jws` is gone: jose does not verify ES256K on Node) |
 | `oauth.grants.did.messageMaxAgeSec` (seconds) | `did-grant.message-max-age` (a duration, `5m`) |
 | `oauth.grants.did.revocationLatencyBoundSec`, `legacyMaxTtlSec` | `did-grant.revocation-latency-bound`, `did-grant.legacy-max-ttl` (durations) |
-| `oauth.accessToken.expiresIn` | `did-grant.access-token-lifetime` (required; the grant's own, at most `revocation-latency-bound`) |
+| `oauth.accessToken.expiresIn` | `did-grant.access-token-lifetime` (required; the grant's own, at most `revocation-latency-bound`). From 0.19, `tokens.access-token-lifetime`: see [Moving an existing provider instance to 0.19](#moving-an-existing-provider-instance-to-019) |
 | `oauth.grants.did.authContract`, `ownerMigrationRatified` | `did-grant.auth-contract`, `did-grant.owner-migration-ratified` |
 | `oauth.grants.did.tokenEndpoint` | None: the token endpoint's location on `http.public-origin` |
 | `oauth.grants.did.allowedAudiences` | The client's allowance: `clients.registered[].sections.client-allowance.audiences`, and `grants` must list `https://dplaax.dev/oauth/grant-type/did`. Scopes are the allowance's `scopes` and `default-scopes` |

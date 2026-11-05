@@ -67,10 +67,11 @@ describe("did-grant section", () => {
 		expect(await refusedAt(compose({ section: {} }))).toEqual([expect.stringContaining("revocation-latency-bound")]);
 	});
 
-	it("refuses access-token-lifetime, which tokens.access-token-lifetime sets", async () => {
+	it("refuses access-token-lifetime as a key the section does not hold, tokens.access-token-lifetime setting it", async () => {
 		const section = { ...minimalSection, "access-token-lifetime": "10m" };
-		const refusals = await refusalsOf(compose({ section }));
-		expect(refusals.map((r) => `${r.where} ${r.reason}`)).toEqual([expect.stringContaining("access-token-lifetime")]);
+		expect(await refusalsOf(compose({ section }))).toEqual([
+			{ where: "did-grant", reason: expect.stringContaining('Unrecognized key: "access-token-lifetime"') },
+		]);
 	});
 
 	it("takes a tokens lifetime equal to the revocation latency bound", async () => {
@@ -80,19 +81,29 @@ describe("did-grant section", () => {
 	it("refuses a tokens lifetime above the revocation latency bound, naming both settings by key", async () => {
 		const refusals = await refusalsOf(compose({ section: { "revocation-latency-bound": "5m" }, lifetimeSeconds: 600 }));
 		expect(refusals).toEqual([
-			{ where: "did-grant.revocation-latency-bound", reason: expect.stringContaining("tokens.access-token-lifetime") },
+			{
+				where: "did-grant.revocation-latency-bound",
+				reason: "tokens.access-token-lifetime is over it: lower that, or raise this (rule auth.token.lifetime-bound)",
+			},
 		]);
-		expect(refusals[0]?.reason).not.toMatch(/\d/);
 	});
 
 	it("refuses a LEGACY tokens lifetime above legacy-max-ttl", async () => {
 		const refusals = await refusalsOf(compose({ section: { "revocation-latency-bound": "1h" }, lifetimeSeconds: 1200 }));
 		expect(refusals).toEqual([
-			{ where: "did-grant.legacy-max-ttl", reason: expect.stringContaining("tokens.access-token-lifetime") },
+			{
+				where: "did-grant.legacy-max-ttl",
+				reason:
+					"tokens.access-token-lifetime is over it under LEGACY_DID_LOGIN@1: lower that, or raise this (rule auth.legacy.did-login)",
+			},
 		]);
 	});
 
-	it("refuses LEGACY on tokens' own default lifetime, an hour, which passes the default legacy-max-ttl", async () => {
+	it("takes a LEGACY tokens lifetime equal to legacy-max-ttl", async () => {
+		await expect(compose({ section: { "revocation-latency-bound": "1h" }, lifetimeSeconds: 900 })).resolves.toBeDefined();
+	});
+
+	it("refuses LEGACY on tokens' own default lifetime, an hour, over the default legacy-max-ttl", async () => {
 		const boot = compose({ section: { "revocation-latency-bound": "1h" }, lifetimeSeconds: null, realTokens: true });
 		expect(await refusedAt(boot)).toEqual(["did-grant.legacy-max-ttl"]);
 	});

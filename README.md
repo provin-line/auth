@@ -173,8 +173,10 @@ the grant. The `dplaax-registry` section holds `url` (required),
 
 The generated provider ships secure-by-default settings: its
 `config/application.conf` reads each from an environment variable and holds no
-values (`.env.example` names them), and boot is refused without the two
-required lifetimes.
+values (`.env.example` names them). Boot is refused without
+`did-grant.revocation-latency-bound`, and, under `LEGACY_DID_LOGIN@1` with the
+default `legacy-max-ttl`, without `tokens.access-token-lifetime`, whose default
+(1h) is over it.
 
 **Audience-absent requests (LEGACY path only, intentional).** A LEGACY message
 may omit `audience`: the token then gets the audience the client's allowance

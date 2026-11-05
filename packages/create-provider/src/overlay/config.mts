@@ -64,7 +64,7 @@ export function patchEnvExample(text: string, opts: OverlayOptions): string {
 		"## The dPLaaX modules (README.md). A policy-verifier sharing an HS256 secret reads it as UTF-8: set KEYS_SIGNING_ALG=HS256 and the two KEYS_SIGNING_SECRET lines, and leave KEYS_SIGNING_PRIVATE_KEY out.",
 		"## Boot requires TOKENS_SUBJECT_CHECK=none while no composed module checks subject revocation.",
 		"# TOKENS_SUBJECT_CHECK=none",
-		"## Boot requires TOKENS_ACCESS_TOKEN_LIFETIME at most DID_GRANT_REVOCATION_LATENCY_BOUND, and under LEGACY_DID_LOGIN@1 at most DID_GRANT_LEGACY_MAX_TTL. Its default, 1h, is over that one's, 15m.",
+		"## Boot requires TOKENS_ACCESS_TOKEN_LIFETIME at most DID_GRANT_REVOCATION_LATENCY_BOUND, and under LEGACY_DID_LOGIN@1 at most DID_GRANT_LEGACY_MAX_TTL. Its default, 1h, is over DID_GRANT_LEGACY_MAX_TTL's default, 15m.",
 		"# TOKENS_ACCESS_TOKEN_LIFETIME=10m",
 		"# KEYS_SIGNING_SECRET=REPLACE-SHARED-SECRET-OF-AT-LEAST-32-BYTES",
 		"# KEYS_SIGNING_SECRET_ENCODING=utf8",
