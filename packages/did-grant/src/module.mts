@@ -81,7 +81,15 @@ const section = z
 		}
 	});
 
-export default defineModule({ name: "did-grant", section }, (m) => [
+export default defineModule(
+	{
+		name: "did-grant",
+		section,
+		// The spent nonces are kept behind spentNonces, which its wiring backs with the store.
+		replicaSafe: true,
+		takes: [signatureAlgorithms, tokenEndpointLocation, issuer, didDocuments, spentNonces],
+	},
+	(m) => [
 	m.contribute(grants).by(async (c) => {
 		const s = c.section;
 		const owner = isOwnerContract(s["auth-contract"]);
@@ -151,4 +159,5 @@ export default defineModule({ name: "did-grant", section }, (m) => [
 			},
 		);
 	}),
-]);
+],
+);

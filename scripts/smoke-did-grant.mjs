@@ -195,6 +195,7 @@ clients.registered = [
 // ── boot the instance under test ─────────────────────────────────────────────
 const settings = {
 	KERNEL_DEPLOYMENT: "single",
+	KERNEL_ENVIRONMENT: "development",
 	STORE_ACCEPT_VOLATILE: "true",
 	TOKENS_REVOCATION: "denylist",
 	TOKENS_SUBJECT_CHECK: "none",

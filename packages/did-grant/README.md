@@ -1,6 +1,6 @@
 # @provin-line/auth-did-grant
 
-The dPLaaX DID grant as an [auth.provider](https://github.com/o3co/auth.provider) 0.18 module. A client presents a DID and a message the DID signed; the module resolves the DID's document, verifies the signature with the key it lists, and issues an access token for the DID, signed with the six claims dplaax.spec asks of it.
+The dPLaaX DID grant as an [auth.provider](https://github.com/o3co/auth.provider) 0.19 module. A client presents a DID and a message the DID signed; the module resolves the DID's document, verifies the signature with the key it lists, and issues an access token for the DID, signed with the six claims dplaax.spec asks of it.
 
 ## Grant type
 

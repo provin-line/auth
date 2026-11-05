@@ -10,6 +10,26 @@ releases.
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (`@provin-line/create-auth-provider` 0.5.0): the generated provider is an
+  auth.provider 0.19.0 app**, and the DID grant, the registry resolver and the
+  nonce store require 0.19.0. An instance generated with 0.4.0 is generated
+  again: it lacks the `tls-options` module 0.19's `outbound` needs, and does
+  not read `KERNEL_ENVIRONMENT`.
+  - A plain-http `issuer.url` or `http.insecure-origin = true` boots only with
+    `kernel.environment = development`; the default, `production`, refuses
+    them. The dev composition and the DID-grant smoke set
+    `KERNEL_ENVIRONMENT=development`.
+  - `outbound`'s host lists are read strictly, names resolve in two helper
+    processes, and outbound TLS takes 1.2 or later with ECDHE and an AEAD
+    cipher alone.
+  - [docs/upstream-compatibility.md](docs/upstream-compatibility.md#moving-an-existing-provider-instance-to-019)
+    lists what an existing instance changes.
+- `@provin-line/auth-did-grant`, `auth-did-grant-store` and
+  `auth-dplaax-registry` declare `replicaSafe` and `takes`, which 0.19's
+  kernel requires of every module.
+
 ## [0.5.0] - 2026-10-27
 
 A minor number, not a patch: the provider moves to auth.provider 0.18.4.

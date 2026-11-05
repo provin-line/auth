@@ -55,7 +55,7 @@ const documentText = JSON.stringify({
 });
 
 /** A registry reached through outbound: it serves the owner's document and nothing else. */
-const servingRegistry = defineModule({ name: "outbound" }, (m) => [
+const servingRegistry = defineModule({ name: "outbound", replicaSafe: true, takes: [] }, (m) => [
 	m.provide(outbound).by(() => ({
 		fetch: async (url: string): Promise<OutboundResponse> =>
 			url === `${registryUrl}/did/org/acme/did.json`
@@ -66,7 +66,7 @@ const servingRegistry = defineModule({ name: "outbound" }, (m) => [
 ]);
 
 async function provider() {
-	const location = defineModule({ name: "token-endpoint-location" }, (m) => [
+	const location = defineModule({ name: "token-endpoint-location", replicaSafe: true, takes: [] }, (m) => [
 		m.provide(tokenEndpointLocation).by(() => ({ url: "https://as.example/oauth/token" })),
 	]);
 	const app = await assemble({

@@ -34,14 +34,14 @@
 		"@provin-line/did-dplaax": "workspace:*"
 	},
 	"peerDependencies": {
-		"@o3co/auth-provider-foundation": "0.18.4",
+		"@o3co/auth-provider-foundation": "0.19.0",
 		"@provin-line/auth-did-grant": "^0.1.0",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
-		"@o3co/auth-provider-foundation": "0.18.4",
-		"@o3co/auth-provider-identity": "0.18.4",
-		"@o3co/auth-provider-oauth": "0.18.4",
+		"@o3co/auth-provider-foundation": "0.19.0",
+		"@o3co/auth-provider-identity": "0.19.0",
+		"@o3co/auth-provider-oauth": "0.19.0",
 		"@provin-line/auth-did-grant": "workspace:*",
 		"@provin-line/auth-did-grant-store": "workspace:*",
 		"@types/node": "^26.6.5",

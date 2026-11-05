@@ -43,7 +43,7 @@ const PACKAGE_VERSION = (
 
 const HELP_TEXT = `Usage: create-auth-provider <name> --dplaax-module-ref <sha> [options]
 
-Generates an auth.provider 0.18 app with upstream's generator
+Generates an auth.provider 0.19 app with upstream's generator
 (@o3co/auth-provider-scaffold) and composes the dPLaaX modules into it:
 @provin-line/auth-did-grant, auth-dplaax-registry and auth-did-grant-store.
 

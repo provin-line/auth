@@ -3,10 +3,10 @@
 Scaffold generator for dPLaaX auth.provider deployment instances. Part of [dplaax.auth](../../README.md).
 
 This package generates an [auth.provider](https://github.com/o3co/auth.provider)
-0.18 app and composes the dPLaaX modules into it:
+0.19 app and composes the dPLaaX modules into it:
 
 1. It calls the generator of `@o3co/auth-provider-scaffold` (pinned at exactly
-   `0.18.4`) with a listed app of `@mod/token-endpoint`, `@mod/client-allowance`,
+   `0.19.0`) with a listed app of `@mod/token-endpoint`, `@mod/client-allowance`,
    `@mod/outbound`, `@mod/discovery` and `@mod/token-control` (revocation and
    introspection). Upstream adds what they need to run and
    writes the app: `package.json`, `src/main.ts`, `config/application.conf`, the

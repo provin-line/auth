@@ -84,7 +84,7 @@ export async function runResolveVector(v: Vector): Promise<VectorOutcome> {
 		throw new Error(`vector "${v.id}": could not extract a registry segment from did "${did}"`);
 	}
 
-	const answering = defineModule({ name: "outbound" }, (m) => [
+	const answering = defineModule({ name: "outbound", replicaSafe: true, takes: [] }, (m) => [
 		m.provide(outbound).by(() => ({
 			fetch: async (): Promise<OutboundResponse> => ({
 				status: registry_response.status,

@@ -55,7 +55,7 @@ for a listed set of modules, plus the overlay of provin modules in
 | --- | --- | --- |
 | `packages/create-provider` | Generator for an auth-provider instance: upstream's app plus the provin-module overlay (§ 3.5) | not yet — run from a repo clone |
 | `packages/create-policy-verifier` | Generator + canonical template for a policy-verifier instance | not yet — run from a repo clone |
-| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.18 modules) and the `did:dplaax` method library | not yet — consumed as git-subdirectory refs (§ 3.3) |
+| `packages/did-grant`, `packages/dplaax-registry`, `packages/did-grant-store`, `packages/did-dplaax` | The DID grant, its registry and nonce-store wiring (auth.provider 0.19 modules) and the `did:dplaax` method library | not yet — consumed as git-subdirectory refs (§ 3.3) |
 | `packages/policy-verifier-dplaax-module` | dPLaaX composition module consumed by generated policy-verifier instances | not yet — consumed as git-subdirectory refs (§ 3.3) |
 | `integration/` | Private workspace package: cross-package flow tests (§ 6.2) | no |
 | `instances/` | Git-ignored output directory for locally generated dev instances (§ 5) | no |
@@ -103,7 +103,7 @@ tokens: its files are upstream's, patched by pure functions (§ 3.5).
 The policy-verifier generator emits exact dependency pins from
 `DEFAULT_DEP_VERSIONS`. The provider generator depends on
 `@o3co/auth-provider-scaffold` at an exact version, which is the
-auth.provider release the generated app is built on (0.18.4); the app's own
+auth.provider release the generated app is built on (0.19.0); the app's own
 pins are that release's. Moving git refs (e.g. branch names) are rejected for `--dplaax-module-ref`
 in published releases. When the dependency baseline upgrades, refresh
 `defaults.mts` (and, for the provider, the scaffold pin) in lockstep with a

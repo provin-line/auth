@@ -119,7 +119,7 @@ export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
 
 	const bytes = new TextEncoder().encode(JSON.stringify(did_document));
 	const digest = `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
-	const registry = defineModule({ name: "conformance-registry" }, (m) => [
+	const registry = defineModule({ name: "conformance-registry", replicaSafe: true, takes: [] }, (m) => [
 		m.provide(didDocuments).by(() => ({
 			async resolve(requested) {
 				if (requested !== did) {
@@ -140,7 +140,7 @@ export async function runGrantVector(v: Vector): Promise<VectorOutcome> {
 			},
 		})),
 	]);
-	const location = defineModule({ name: "token-endpoint-location" }, (m) => [
+	const location = defineModule({ name: "token-endpoint-location", replicaSafe: true, takes: [] }, (m) => [
 		m.provide(tokenEndpointLocation).by(() => ({ url: `${AUDIENCE}/oauth/token` })),
 	]);
 

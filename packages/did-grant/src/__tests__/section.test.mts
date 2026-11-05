@@ -45,7 +45,7 @@ const customAlgorithm = (
 	algorithm: string,
 	options: { headerBearing?: true; create?: () => Promise<SignatureVerifier> } = {},
 ) =>
-	defineModule({ name: `algorithm-${algorithm}` }, (m) => [
+	defineModule({ name: `algorithm-${algorithm}`, replicaSafe: true, takes: [] }, (m) => [
 		m.contribute(signatureAlgorithms).by(() => ({
 			algorithm,
 			create: options.create ?? (async () => refusing),
